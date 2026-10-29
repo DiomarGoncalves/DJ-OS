@@ -192,6 +192,7 @@ pub enum Action {
     AmbientVol,
     AmbientDuck,
     LightMode,
+    FourDecks,
 }
 
 pub enum Row {
@@ -324,6 +325,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Info(format!("Controladora: {}", app.midi_status)));
         }
         Tab::Screen => {
+            v.push(Row::Item { label: "Decks embaixo da tela".into(), value: if s.four_decks { "OS 4" } else { "SÓ OS 2 DA FRENTE" }.into(), action: Action::FourDecks });
             v.push(Row::Item { label: "Cores da waveform".into(), value: PALETTES[s.palette].into(), action: Action::Palette });
             v.push(Row::Item { label: "Tamanho da tela".into(), value: format!("{:.0}%", SCALES[s.scale] * 100.0), action: Action::Scale });
             let auto_on = crate::ui::weak_gpu(&app.gpu);
@@ -469,6 +471,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::AmbientVol => a.settings.ambient_vol = next(a.settings.ambient_vol, AMBIENT_VOLS.len()),
         Action::AmbientDuck => a.settings.ambient_duck = !a.settings.ambient_duck,
         Action::LightMode => a.settings.light_mode = next(a.settings.light_mode, LIGHT_MODES.len()),
+        Action::FourDecks => a.settings.four_decks = !a.settings.four_decks,
         Action::AutoGain => a.settings.auto_gain = !a.settings.auto_gain,
         Action::RecTarget => a.settings.rec_target = next(a.settings.rec_target, crate::record::TARGETS.len()),
         Action::PhoneIn => {
