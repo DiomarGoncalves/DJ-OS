@@ -11,6 +11,7 @@ mod audio_out;
 mod bluetooth;
 mod engine;
 mod firmware;
+mod history;
 mod import;
 mod key;
 mod library;

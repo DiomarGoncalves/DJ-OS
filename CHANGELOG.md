@@ -43,6 +43,8 @@ Primeira versão funcional, em teste com a Pioneer DDJ-REV1.
 - Gravar o set (botão GRAVAR ou Ctrl+R): WAV do master na pasta "records", no aparelho ou direto
   no pendrive (CONFIG → ÁUDIO → Gravar em); protegido contra falta de luz; copiar do aparelho
   para o pendrive pelo browser.
+- Histórico da noite: música que toca 30 s com o fader aberto entra em "🕘 Tocadas hoje" (com a
+  hora), ganha ✓ nas listas e vai para uma playlist M3U8 em ~/DJOS/historico.
 
 ### Correções
 - Eco na caixa Bluetooth (o master ia duas vezes para ela).

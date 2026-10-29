@@ -83,6 +83,7 @@ pub struct AppState {
     pub phone_status: String,
     pub fw: crate::firmware::FwState,
     pub rec: crate::record::RecState,
+    pub history: crate::history::Tracker,
     /// Última aba das configurações (abre nela de novo).
     pub settings_tab: usize,
     /// Nome da placa de vídeo (para o modo leve automático).
@@ -126,6 +127,7 @@ impl AppState {
             phone_status: "desligado".into(),
             fw: Default::default(),
             rec: Default::default(),
+            history: Default::default(),
             settings_tab: 0,
             gpu: String::new(),
             bt_delay_ms: std::env::var("DJOS_BT_ATRASO_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(settings.bt_delay_ms),

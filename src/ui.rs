@@ -3,7 +3,7 @@
 
 use crate::app::{Loader, SharedApp};
 use crate::engine::fx::{beats_label, step_beats, FxKind};
-use crate::library::{Focus, NodeKind};
+use crate::library::Focus;
 use crate::search;
 use crate::shared::{Cmd, CmdTx, DeckSnap, SharedSnap, Snapshot};
 use crate::track::{Track, BINS_PER_SEC};
@@ -87,6 +87,8 @@ pub struct DjOsApp {
     /// Pads da tela apertados (por deck), para mandar o "soltar".
     pad_touch: [[bool; 8]; 4],
     last_frame: std::time::Instant,
+    /// Último quadro contado no histórico (tempo no ar de cada música).
+    history_at: std::time::Instant,
     /// Até quando mostrar "LIM" (o limitador do master trabalhou há pouco).
     lim_until: std::time::Instant,
     /// Roda do mouse nas configurações: pixels acumulados até virar um passo.
@@ -159,7 +161,7 @@ impl DjOsApp {
             eprintln!("[djos] placa de vídeo: {renderer}{}", if weak_gpu(&renderer) { " (modo leve automático)" } else { "" });
             app.lock().gpu = renderer;
         }
-        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), pad_touch: [[false; 8]; 4], last_frame: std::time::Instant::now(), lim_until: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
+        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), pad_touch: [[false; 8]; 4], last_frame: std::time::Instant::now(), lim_until: std::time::Instant::now(), history_at: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
     }
 
     /// Atalhos para testar sem a controladora.
@@ -899,7 +901,7 @@ impl DjOsApp {
             if e.has_children {
                 mono(&fp, pos2(x, rr.center().y), Align2::LEFT_CENTER, if e.expanded { "-" } else { "+" }, 14.0, DIM);
             }
-            let col = if e.kind == NodeKind::Search { ACCENT } else { TEXT };
+            let col = if e.kind.is_virtual() { ACCENT } else { TEXT };
             text(&fp, pos2(x + 14.0, rr.center().y), Align2::LEFT_CENTER, &e.name, 14.0, col);
             let resp = ui.interact(rr, ui.id().with(("pasta", i)), egui::Sense::click());
             if resp.clicked() || resp.double_clicked() {
@@ -968,7 +970,10 @@ impl DjOsApp {
                 tp.rect_filled(rr, 4.0, if lib.focus == Focus::Tracks { ACCENT.gamma_multiply(0.25) } else { PANEL2 });
             }
             let cp = tp.with_clip_rect(Rect::from_min_max(rr.min, pos2(artist_x - 10.0, rr.bottom())));
-            text(&cp, rr.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, &e.title, 14.0, TEXT);
+            // Já tocou nesta noite: ✓ e apagadinha (fora das "Tocadas hoje", onde todas tocaram).
+            let played = e.when.is_none() && lib.played.contains(&e.path);
+            let title = if played { format!("✓ {}", e.title) } else { e.title.clone() };
+            text(&cp, rr.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, title, 14.0, if played { DIM } else { TEXT });
             let ap = tp.with_clip_rect(Rect::from_min_max(pos2(artist_x, rr.top()), pos2(rr.right() - 150.0, rr.bottom())));
             text(&ap, pos2(artist_x, rr.center().y), Align2::LEFT_CENTER, &e.artist, 14.0, DIM);
             if let Some(k) = e.key {
@@ -976,7 +981,11 @@ impl DjOsApp {
             }
             let bpm = e.bpm.filter(|b| *b > 0.0).map_or("--".to_string(), |b| format!("{b:.1}"));
             mono(&tp, rr.right_center() - vec2(52.0, 0.0), Align2::RIGHT_CENTER, bpm, 13.0, if e.bpm.is_some() { ACCENT } else { DIM });
-            text(&tp, rr.right_center() - vec2(8.0, 0.0), Align2::RIGHT_CENTER, &e.ext, 11.0, DIM);
+            // Nas "Tocadas hoje", a hora em que tocou no lugar do tipo do arquivo.
+            match &e.when {
+                Some(w) => mono(&tp, rr.right_center() - vec2(4.0, 0.0), Align2::RIGHT_CENTER, w.clone(), 12.0, ACCENT),
+                None => text(&tp, rr.right_center() - vec2(8.0, 0.0), Align2::RIGHT_CENTER, &e.ext, 11.0, DIM),
+            };
             if ui.interact(rr, ui.id().with(("musica", i)), egui::Sense::click()).clicked() {
                 lib.focus = Focus::Tracks;
                 lib.track_sel = i;
@@ -1267,6 +1276,9 @@ impl eframe::App for DjOsApp {
             let (side, fx_pick, zoom_idx, big, tracks, loading, midi, audio, toast, sampler_names, scratch_names) = {
                 let mut a = self.app.lock();
                 a.lib.tick();
+                let dt = self.history_at.elapsed().as_secs_f32();
+                self.history_at = std::time::Instant::now();
+                crate::history::tick(&mut a, &snap, dt);
                 a.commit_fx_picks(&self.cmd);
                 a.tick_browse_hold();
                 if a.toast.as_ref().is_some_and(|(_, t)| t.elapsed() > Duration::from_secs(3)) {

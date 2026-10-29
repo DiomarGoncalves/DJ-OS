@@ -23,6 +23,15 @@ pub enum NodeKind {
     Source,
     Dir,
     Search,
+    /// "Tocadas hoje": o histórico da noite (nó virtual, sem pasta).
+    History,
+}
+
+impl NodeKind {
+    /// Nó sem pasta de verdade por trás (pesquisa, histórico).
+    pub fn is_virtual(self) -> bool {
+        matches!(self, NodeKind::Search | NodeKind::History)
+    }
 }
 
 /// Uma linha da árvore de pastas.
@@ -46,13 +55,15 @@ pub struct TrackEntry {
     pub bpm: Option<f64>,
     /// Tom já analisado (0-23, veja `key`), se houver.
     pub key: Option<u8>,
+    /// Hora em que tocou (só nas "Tocadas hoje").
+    pub when: Option<String>,
 }
 
 impl TrackEntry {
-    fn from_path(p: &Path) -> Self {
+    pub fn from_path(p: &Path) -> Self {
         let (title, artist) = names_from_path(p);
         let ext = p.extension().map(|e| e.to_string_lossy().to_uppercase()).unwrap_or_default();
-        Self { path: p.to_path_buf(), title, artist, ext, bpm: None, key: None }
+        Self { path: p.to_path_buf(), title, artist, ext, bpm: None, key: None, when: None }
     }
 
     /// Completa com o BPM e o tom guardados na memória da música (se já analisada).
@@ -232,6 +243,9 @@ pub struct Library {
     scan_gen: Arc<AtomicU64>,
     last_check: Instant,
     sources_sig: Vec<PathBuf>,
+    /// Músicas tocadas nesta noite (em ordem) e o conjunto para marcar com ✓ nas listas.
+    pub history: Vec<TrackEntry>,
+    pub played: std::collections::HashSet<PathBuf>,
 }
 
 impl Library {
@@ -252,13 +266,15 @@ impl Library {
             scan_gen: Arc::new(AtomicU64::new(0)),
             last_check: Instant::now(),
             sources_sig: Vec::new(),
+            history: Vec::new(),
+            played: Default::default(),
         };
         lib.reload_sources();
         lib
     }
 
     fn node(name: String, path: PathBuf, depth: usize, kind: NodeKind) -> Node {
-        let has_children = kind != NodeKind::Search && !list_dirs(&path).is_empty();
+        let has_children = !kind.is_virtual() && !list_dirs(&path).is_empty();
         Node { name, path, depth, kind, expanded: false, has_children }
     }
 
@@ -266,8 +282,8 @@ impl Library {
     fn reload_sources(&mut self) {
         let src = sources();
         self.sources_sig = src.iter().map(|(_, p)| p.clone()).collect();
-        let search = self.folders.iter().find(|n| n.kind == NodeKind::Search).cloned();
-        self.folders = search.into_iter().chain(src.into_iter().map(|(n, p)| Self::node(n, p, 0, NodeKind::Source))).collect();
+        let virtuals: Vec<Node> = self.folders.iter().filter(|n| n.kind.is_virtual()).cloned().collect();
+        self.folders = virtuals.into_iter().chain(src.into_iter().map(|(n, p)| Self::node(n, p, 0, NodeKind::Source))).collect();
         self.folder_sel = self.folder_sel.min(self.folders.len().saturating_sub(1));
         self.tracks_for = None;
         self.refresh_tracks();
@@ -293,6 +309,8 @@ impl Library {
         }
         self.tracks = match n.kind {
             NodeKind::Search => self.results.as_ref().map(|(_, r)| r.clone()).unwrap_or_default(),
+            // A mais recente em cima.
+            NodeKind::History => self.history.iter().rev().cloned().collect(),
             _ => list_tracks(&n.path),
         };
         self.track_sel = 0;
@@ -311,7 +329,7 @@ impl Library {
     /// Música ou pasta selecionada no painel em foco (para apagar/importar).
     pub fn selected_path(&self) -> Option<PathBuf> {
         match self.focus {
-            Focus::Folders => self.folders.get(self.folder_sel).filter(|n| n.kind != NodeKind::Search).map(|n| n.path.clone()),
+            Focus::Folders => self.folders.get(self.folder_sel).filter(|n| !n.kind.is_virtual()).map(|n| n.path.clone()),
             _ => self.selected_track().map(|t| t.path),
         }
     }
@@ -396,7 +414,7 @@ impl Library {
                 .folders
                 .iter()
                 .enumerate()
-                .filter(|(_, n)| n.kind != NodeKind::Search && !n.path.as_os_str().is_empty() && target.starts_with(&n.path))
+                .filter(|(_, n)| !n.kind.is_virtual() && !n.path.as_os_str().is_empty() && target.starts_with(&n.path))
                 .max_by_key(|(_, n)| n.depth)
                 .map(|(i, _)| i)
             else {
@@ -411,6 +429,28 @@ impl Library {
                 return;
             }
             self.open_selected();
+        }
+    }
+
+    /// Uma música tocou (entra nas "Tocadas hoje" e ganha o ✓ nas listas).
+    pub fn add_played(&mut self, entry: TrackEntry) {
+        self.played.insert(entry.path.clone());
+        self.history.push(entry.with_saved());
+        let label = format!("🕘 Tocadas hoje ({})", self.history.len());
+        match self.folders.iter_mut().find(|n| n.kind == NodeKind::History) {
+            Some(n) => n.name = label,
+            None => {
+                // Logo depois da pesquisa (se houver), antes das unidades.
+                let at = self.folders.iter().take_while(|n| n.kind == NodeKind::Search).count();
+                self.folders.insert(at, Node { name: label, path: PathBuf::new(), depth: 0, kind: NodeKind::History, expanded: false, has_children: false });
+                if self.folder_sel >= at && self.folders.len() > 1 {
+                    self.folder_sel += 1;
+                }
+            }
+        }
+        if self.folders.get(self.folder_sel).is_some_and(|n| n.kind == NodeKind::History) {
+            self.tracks_for = None;
+            self.refresh_tracks();
         }
     }
 
