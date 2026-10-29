@@ -33,10 +33,10 @@ pub struct Track {
     /// Amostras estéreo intercaladas (L, R, L, R...).
     pub data: Vec<f32>,
     pub wave: Waveform,
-    /// 0 quando não foi possível detectar.
-    pub bpm: f64,
-    /// Posição (em frames) da primeira batida da grade.
-    pub first_beat: f64,
+    /// Grade de batidas: BPM (0 quando não foi possível detectar) e posição (em frames) da primeira
+    /// batida. Atômicos: o ajuste da grade muda com a música tocando, sem travar o áudio.
+    bpm: AtomicU64,
+    first_beat: AtomicU64,
     /// Tom guardado como em `key::to_raw` (0 = não analisado).
     pub key: u8,
     /// Volume percebido (LUFS) para o ganho automático: NaN = não analisado, -inf = silêncio.
@@ -75,9 +75,24 @@ impl Track {
         (hermite(am, a0, a1, a2, t), hermite(bm, b0, b1, b2, t))
     }
 
+    pub fn bpm(&self) -> f64 {
+        f64::from_bits(self.bpm.load(Ordering::Relaxed))
+    }
+
+    pub fn first_beat(&self) -> f64 {
+        f64::from_bits(self.first_beat.load(Ordering::Relaxed))
+    }
+
+    /// Ajuste da grade (BPM e primeira batida), valendo na hora para o motor e a tela.
+    pub fn set_grid(&self, bpm: f64, first_beat: f64) {
+        self.bpm.store(bpm.to_bits(), Ordering::Relaxed);
+        self.first_beat.store(first_beat.to_bits(), Ordering::Relaxed);
+    }
+
     pub fn bpm_or_default(&self) -> f64 {
-        if self.bpm > 0.0 {
-            self.bpm
+        let bpm = self.bpm();
+        if bpm > 0.0 {
+            bpm
         } else {
             120.0
         }
@@ -89,11 +104,11 @@ impl Track {
     }
 
     pub fn beats_at(&self, pos: f64) -> f64 {
-        (pos - self.first_beat) / self.beat_len()
+        (pos - self.first_beat()) / self.beat_len()
     }
 
     pub fn pos_of_beat(&self, b: f64) -> f64 {
-        self.first_beat + b * self.beat_len()
+        self.first_beat() + b * self.beat_len()
     }
 
     pub fn duration_secs(&self) -> f64 {
@@ -318,8 +333,8 @@ pub fn load_cached(path: &Path, analyze: bool, cached: Option<Cached>) -> Result
         frames,
         data,
         wave,
-        bpm,
-        first_beat,
+        bpm: AtomicU64::new(bpm.to_bits()),
+        first_beat: AtomicU64::new(first_beat.to_bits()),
         key,
         loudness,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
@@ -456,8 +471,8 @@ pub fn synthetic(secs: f64, sr: f64, bpm: f64, first_beat_secs: f64) -> Track {
         frames,
         data,
         wave: Waveform { low: Vec::new(), mid: Vec::new(), high: Vec::new() },
-        bpm,
-        first_beat: first_beat_secs * sr,
+        bpm: AtomicU64::new(bpm.to_bits()),
+        first_beat: AtomicU64::new((first_beat_secs * sr).to_bits()),
         key: crate::key::RAW_UNKNOWN,
         loudness: f32::NAN,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),

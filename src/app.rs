@@ -84,6 +84,8 @@ pub struct AppState {
     pub fw: crate::firmware::FwState,
     pub rec: crate::record::RecState,
     pub history: crate::history::Tracker,
+    /// Ajuste da grade aberto (tocar no BPM do deck).
+    pub grid_edit: Option<crate::grid::GridEdit>,
     /// Última aba das configurações (abre nela de novo).
     pub settings_tab: usize,
     /// Nome da placa de vídeo (para o modo leve automático).
@@ -128,6 +130,7 @@ impl AppState {
             fw: Default::default(),
             rec: Default::default(),
             history: Default::default(),
+            grid_edit: None,
             settings_tab: 0,
             gpu: String::new(),
             bt_delay_ms: std::env::var("DJOS_BT_ATRASO_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(settings.bt_delay_ms),
@@ -295,7 +298,7 @@ fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path) 
                 "[djos] deck {}: {} ({:.1} BPM, {:.0} ms)",
                 deck + 1,
                 t.display_name(),
-                t.bpm,
+                t.bpm(),
                 started.elapsed().as_secs_f64() * 1000.0
             );
             let mut a = app.lock();

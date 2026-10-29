@@ -45,6 +45,8 @@ Primeira versão funcional, em teste com a Pioneer DDJ-REV1.
   para o pendrive pelo browser.
 - Histórico da noite: música que toca 30 s com o fader aberto entra em "🕘 Tocadas hoje" (com a
   hora), ganha ✓ nas listas e vai para uma playlist M3U8 em ~/DJOS/historico.
+- Ajuste da grade de batidas (tocar no BPM do deck): BPM ÷2/×2/±1/±0,1/±0,01, TAP, deslocar a
+  grade (±1 ms, ±10 ms, ±½ batida) e "BATIDA AQUI"; vale na hora e fica salvo na música.
 
 ### Correções
 - Eco na caixa Bluetooth (o master ia duas vezes para ela).

@@ -102,6 +102,15 @@ direita.
 | Toque / clique | Na aba abre a aba; no item aciona; "X FECHAR" fecha |
 | Teclado | F10 abre/fecha · ↑↓ andam · ← abas · → itens · Enter aciona · Esc fecha |
 
+## Na tela (toque ou mouse)
+
+| Onde | Função |
+|---|---|
+| BPM do deck | Abre o ajuste da grade de batidas (BPM, TAP, deslocar, "BATIDA AQUI") |
+| Waveform | Troca o zoom |
+| GRAVAR (barra de cima) | Grava / para a gravação do set (também Ctrl+R) |
+| Pads | Mesmas funções dos pads da REV1 no modo atual |
+
 ## Teclado do computador (para testar sem a REV1)
 
 B browser · Ctrl+F pesquisa · Ctrl+R grava o set · setas navegam · Tab pastas/músicas · Enter abre pasta · 1-4 carregam ·

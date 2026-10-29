@@ -36,10 +36,10 @@ impl Saved {
     /// Só a análise (sem cues), para a primeira vez que a música é aberta.
     pub fn from_track(t: &crate::track::Track) -> Self {
         Saved {
-            bpm: t.bpm,
+            bpm: t.bpm(),
             key: t.key,
             loudness: t.loudness,
-            first_beat: t.first_beat,
+            first_beat: t.first_beat(),
             low: t.wave.low.clone(),
             mid: t.wave.mid.clone(),
             high: t.wave.high.clone(),

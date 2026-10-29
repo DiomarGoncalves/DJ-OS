@@ -299,7 +299,7 @@ impl Engine {
         }
         let Some(m) = self.sync_master(d) else { return };
         let mb = self.decks[m].bpm_eff();
-        let tb = self.decks[d].track.as_ref().map_or(0.0, |t| t.bpm);
+        let tb = self.decks[d].track.as_ref().map_or(0.0, |t| t.bpm());
         if mb <= 0.0 || tb <= 0.0 {
             return;
         }

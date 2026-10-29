@@ -395,6 +395,10 @@ impl DjOsApp {
                 u.go_to("ENTER");
             }
         }
+        // DJOS_DEMO_GRADE: abre o ajuste da grade do deck 1 (teste da tela).
+        if self.frame == 100 && std::env::var_os("DJOS_DEMO_GRADE").is_some() {
+            self.app.lock().grid_edit = Some(crate::grid::GridEdit::new(0));
+        }
         // DJOS_DEMO_GRAVAR=<segundos>: grava o set por esse tempo (teste da gravação).
         if let Some(secs) = std::env::var("DJOS_DEMO_GRAVAR").ok().and_then(|v| v.parse::<u64>().ok()) {
             if self.frame == 60 {
@@ -570,9 +574,9 @@ fn draw_wave(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap, lo
     p.add(Shape::mesh(mesh));
 
     // Grade de batidas (a cada 4, mais forte).
-    if t.bpm > 0.0 {
+    if t.bpm() > 0.0 {
         let bl = t.beat_len() / t.sr;
-        let fb = t.first_beat / t.sr;
+        let fb = t.first_beat() / t.sr;
         let k0 = ((t_of(r.left()) - fb) / bl).ceil() as i64;
         let k1 = ((t_of(r.right()) - fb) / bl).floor() as i64;
         for k in k0..=k1 {
@@ -624,6 +628,12 @@ impl DjOsApp {
         let bpm_text = if s.loaded && s.bpm > 0.0 { format!("{:.2}", s.bpm) } else { "--.--".into() };
         let bpm_rect = mono(&p, pos2(r.right(), r.top() - 2.0), Align2::RIGHT_TOP, bpm_text, 30.0, TEXT);
         // Tom da música ao lado do BPM (mostra "--" enquanto não foi analisado).
+        // Tocar no BPM abre o ajuste da grade de batidas.
+        if t.is_some() && !s.live && ui.interact(bpm_rect.expand(4.0), ui.id().with(("bpm", d)), egui::Sense::click()).clicked() {
+            let mut a = self.app.lock();
+            let open = a.grid_edit.as_ref().is_some_and(|g| g.deck == d);
+            a.grid_edit = if open { None } else { Some(crate::grid::GridEdit::new(d)) };
+        }
         let bpm_rect = match t.as_ref().and_then(|t| crate::key::from_raw(t.key)).filter(|_| !s.live) {
             Some(k) => key_badge(&p, pos2(bpm_rect.left() - 8.0, bpm_rect.center().y), k, 15.0).union(bpm_rect),
             None => bpm_rect,
@@ -729,6 +739,90 @@ impl DjOsApp {
 
     /// Coluna do efeito ao lado da waveform: alavanca, nome, batida e força. Durante a escolha
     /// (FX 1) mostra a lista inteira. Ao toque: alavanca liga/desliga, nome troca, −/+ mudam a batida.
+    /// Ajuste da grade de batidas de um deck (BPM, posição das batidas, TAP).
+    fn draw_grid_editor(&mut self, ui: &mut egui::Ui, p: &Painter, r: Rect, d: usize, t: &Arc<Track>, s: &DeckSnap) {
+        p.rect_filled(r, 8.0, PANEL);
+        p.rect_stroke(r, 8.0, Stroke::new(2.0_f32, ACCENT));
+        let tp = p.with_clip_rect(r.shrink(6.0));
+        text(&tp, r.left_top() + vec2(14.0, 10.0), Align2::LEFT_TOP, format!("GRADE DE BATIDAS · DECK {} · {}", d + 1, t.title), 14.0, ACCENT);
+        mono(&tp, r.center_top() + vec2(0.0, 34.0), Align2::CENTER_TOP, format!("{:.2} BPM", t.bpm()), 26.0, TEXT);
+        let close = Rect::from_min_size(pos2(r.right() - 116.0, r.top() + 8.0), vec2(104.0, 28.0));
+        p.rect_filled(close, 5.0, PANEL2);
+        text(p, close.center(), Align2::CENTER_CENTER, "X  FECHAR", 12.0, TEXT);
+        let mut changed = false;
+        let mut done = ui.interact(close, ui.id().with("grade-fechar"), egui::Sense::click()).clicked();
+        let taps = self.app.lock().grid_edit.as_ref().map_or(0, |g| g.taps());
+        let tap_label = if taps > 0 && taps < 4 { format!("TAP ({taps})") } else { "TAP".to_string() };
+        let rows: [Vec<(String, u8)>; 2] = [
+            ["÷2", "-1", "-0.1", "-0.01", tap_label.as_str(), "+0.01", "+0.1", "+1", "×2"].iter().enumerate().map(|(i, s)| (s.to_string(), i as u8)).collect(),
+            ["-½ BATIDA", "-10 ms", "-1 ms", "BATIDA AQUI", "+1 ms", "+10 ms", "+½ BATIDA"].iter().enumerate().map(|(i, s)| (s.to_string(), 20 + i as u8)).collect(),
+        ];
+        let bh = ((r.height() - 90.0) / 2.0 - 8.0).clamp(28.0, 52.0);
+        for (ri, row) in rows.iter().enumerate() {
+            let y = r.top() + 76.0 + ri as f32 * (bh + 8.0);
+            let bw = (r.width() - 24.0 - (row.len() - 1) as f32 * 6.0) / row.len() as f32;
+            for (k, (label, id)) in row.iter().enumerate() {
+                let b = Rect::from_min_size(pos2(r.left() + 12.0 + k as f32 * (bw + 6.0), y), vec2(bw, bh));
+                let main = matches!(*id, 4 | 23);
+                p.rect_filled(b, 5.0, if main { ACCENT.gamma_multiply(0.3) } else { PANEL2 });
+                p.rect_stroke(b, 5.0, Stroke::new(1.0_f32, if main { ACCENT } else { LINE }));
+                text(&p.with_clip_rect(b), b.center(), Align2::CENTER_CENTER, label, 13.0, TEXT);
+                if !ui.interact(b, ui.id().with(("grade", *id)), egui::Sense::click()).clicked() {
+                    continue;
+                }
+                changed = true;
+                match *id {
+                    0 => crate::grid::set_bpm(t, t.bpm() / 2.0),
+                    1 => crate::grid::set_bpm(t, t.bpm() - 1.0),
+                    2 => crate::grid::set_bpm(t, t.bpm() - 0.1),
+                    3 => crate::grid::set_bpm(t, t.bpm() - 0.01),
+                    4 => {
+                        let bpm = self.app.lock().grid_edit.as_mut().and_then(|g| g.tap(std::time::Instant::now(), s.rate));
+                        match bpm {
+                            Some(b) => crate::grid::set_bpm(t, (b * 100.0).round() / 100.0),
+                            None => changed = false,
+                        }
+                    }
+                    5 => crate::grid::set_bpm(t, t.bpm() + 0.01),
+                    6 => crate::grid::set_bpm(t, t.bpm() + 0.1),
+                    7 => crate::grid::set_bpm(t, t.bpm() + 1.0),
+                    8 => crate::grid::set_bpm(t, t.bpm() * 2.0),
+                    20 => crate::grid::shift_beats(t, -0.5),
+                    21 => crate::grid::shift_secs(t, -0.010),
+                    22 => crate::grid::shift_secs(t, -0.001),
+                    23 => crate::grid::beat_here(t, s.pos),
+                    24 => crate::grid::shift_secs(t, 0.001),
+                    25 => crate::grid::shift_secs(t, 0.010),
+                    _ => crate::grid::shift_beats(t, 0.5),
+                }
+            }
+        }
+        text(
+            &tp,
+            r.left_bottom() + vec2(14.0, -8.0),
+            Align2::LEFT_BOTTOM,
+            "TAP: bata 4 vezes no ritmo · BATIDA AQUI: põe uma batida onde a música está agora · grava sozinho",
+            11.0,
+            DIM,
+        );
+        if ui.input(|i| i.key_pressed(Key::Escape)) {
+            done = true;
+        }
+        if changed {
+            // Grava na memória da música (em segundo plano; mantém os cues).
+            let (bpm, path) = (t.bpm(), t.path.clone());
+            let t = t.clone();
+            std::thread::spawn(move || crate::grid::save(&t));
+            let mut a = self.app.lock();
+            for e in a.lib.tracks.iter_mut().filter(|e| e.path == path) {
+                e.bpm = Some(bpm);
+            }
+        }
+        if done {
+            self.app.lock().grid_edit = None;
+        }
+    }
+
     fn draw_fx(&self, ui: &mut egui::Ui, p: &Painter, r: Rect, side: usize, d: usize, s: &DeckSnap, pick: Option<FxKind>) {
         let f = s.fx[0];
         let col = deck_color(d);
@@ -1322,7 +1416,8 @@ impl eframe::App for DjOsApp {
                 }
                 None => {
                     p.rect_filled(recr, 5.0, PANEL2);
-                    text(&p, recr.center(), Align2::CENTER_CENTER, "● GRAVAR", 12.0, TEXT);
+                    p.circle_filled(recr.left_center() + vec2(18.0, 0.0), 5.0, RED);
+                    text(&p, recr.center() + vec2(8.0, 0.0), Align2::CENTER_CENTER, "GRAVAR", 12.0, TEXT);
                 }
             }
             if ui.interact(recr, ui.id().with("gravar"), egui::Sense::click()).clicked() {
@@ -1365,15 +1460,19 @@ impl eframe::App for DjOsApp {
             if snap.master_limit > 0.0 && snap.master_limit < 0.966 {
                 self.lim_until = std::time::Instant::now() + Duration::from_secs(1);
             }
-            if std::time::Instant::now() < self.lim_until {
-                text(&p, pos2(top.right() - 146.0, top.center().y), Align2::RIGHT_CENTER, "LIM", 12.0, ORANGE);
-            }
+
             for (i, v) in snap.master_peak.iter().enumerate() {
                 let m = Rect::from_min_size(pos2(top.right() - 140.0, top.top() + 9.0 + i as f32 * 9.0), vec2(126.0, 6.0));
                 p.rect_filled(m, 2.0, BG);
                 let lvl = v.clamp(0.0, 1.0);
                 let c = if lvl > 0.95 { RED } else if lvl > 0.7 { ORANGE } else { ACCENT };
                 p.rect_filled(Rect::from_min_size(m.min, vec2(m.width() * lvl, 6.0)), 2.0, c);
+            }
+            // "LIM" por cima dos medidores (sem disputar espaço com o texto da controladora).
+            if std::time::Instant::now() < self.lim_until {
+                let lr = Rect::from_center_size(pos2(top.right() - 77.0, top.center().y), vec2(40.0, 18.0));
+                p.rect_filled(lr, 3.0, ORANGE);
+                text(&p, lr.center(), Align2::CENTER_CENTER, "LIM", 12.0, BG);
             }
 
             let pad = 8.0;
@@ -1424,6 +1523,19 @@ impl eframe::App for DjOsApp {
                     }
                     let fr = Rect::from_min_size(pos2(wr.right() + gap, y), vec2(fx_w, wave_h));
                     self.draw_fx(ui, &p, fr, k, d, &snap.decks[d], fx_pick[k]);
+                }
+                // Ajuste da grade: em cima da waveform do OUTRO deck (a do deck ajustado continua
+                // visível, com as batidas mudando na hora).
+                let editing = self.app.lock().grid_edit.as_ref().map(|g| g.deck);
+                if let Some(d) = editing {
+                    match (side.iter().position(|&x| x == d), tracks[d].clone()) {
+                        (Some(k), Some(t)) => {
+                            let y = body.top() + (1 - k) as f32 * (wave_h + gap);
+                            let gr = Rect::from_min_size(pos2(body.left(), y), vec2(body.width() - fx_w - gap, wave_h));
+                            self.draw_grid_editor(ui, &p, gr, d, &t, &snap.decks[d]);
+                        }
+                        _ => self.app.lock().grid_edit = None,
+                    }
                 }
                 let y = body.top() + 2.0 * (wave_h + gap);
                 let col_w = (body.width() - gap) / 2.0;

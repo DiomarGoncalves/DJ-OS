@@ -153,7 +153,7 @@ impl Deck {
     pub fn load(&mut self, t: Arc<Track>) -> Option<Arc<Track>> {
         self.pos = 0.0;
         self.playing = false;
-        self.cue = if t.bpm > 0.0 { t.first_beat.max(0.0) } else { 0.0 };
+        self.cue = if t.bpm() > 0.0 { t.first_beat().max(0.0) } else { 0.0 };
         self.pos = self.cue;
         self.cue_preview = false;
         self.hotcues = [None; HOTCUES];
@@ -220,7 +220,7 @@ impl Deck {
     }
 
     pub fn has_bpm(&self) -> bool {
-        self.track.as_ref().is_some_and(|t| t.bpm > 0.0)
+        self.track.as_ref().is_some_and(|t| t.bpm() > 0.0)
     }
 
     fn key_mult(&self) -> f64 {
@@ -237,7 +237,7 @@ impl Deck {
     }
 
     pub fn bpm_eff(&self) -> f64 {
-        self.track.as_ref().map_or(0.0, |t| t.bpm * self.rate * self.key_mult())
+        self.track.as_ref().map_or(0.0, |t| t.bpm() * self.rate * self.key_mult())
     }
 
     pub fn at_cue(&self) -> bool {
@@ -247,7 +247,7 @@ impl Deck {
     /// Início da grade (em frames) com quantização para `unit` batidas.
     fn quantize_floor(&self, unit: f64) -> f64 {
         match &self.track {
-            Some(t) if t.bpm > 0.0 => {
+            Some(t) if t.bpm() > 0.0 => {
                 let b = t.beats_at(self.pos);
                 t.pos_of_beat((b / unit).floor() * unit)
             }
@@ -721,7 +721,7 @@ impl Deck {
 
     pub fn snapshot(&self) -> DeckSnap {
         let (loaded, gen, frames, sr, bpm_track) = match &self.track {
-            Some(t) => (true, t.gen, t.frames as f64, t.sr, t.bpm),
+            Some(t) => (true, t.gen, t.frames as f64, t.sr, t.bpm()),
             None => (false, 0, 0.0, self.fs, 0.0),
         };
         DeckSnap {

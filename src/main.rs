@@ -11,6 +11,7 @@ mod audio_out;
 mod bluetooth;
 mod engine;
 mod firmware;
+mod grid;
 mod history;
 mod import;
 mod key;
@@ -47,11 +48,11 @@ fn main() -> eframe::Result<()> {
                 Ok(t) => println!(
                     "{}: {:.2} BPM, tom {}, volume {:.1} LUFS (ganho automático {:+.1} dB), primeira batida {:.3} s, {:.1} s de música, analisado em {} ms",
                     t.display_name(),
-                    t.bpm,
+                    t.bpm(),
                     key::from_raw(t.key).map_or("?".to_string(), |k| format!("{} ({})", key::label(k), key::name(k))),
                     t.loudness,
                     loudness::gain_db(t.loudness),
-                    t.first_beat / t.sr,
+                    t.first_beat() / t.sr,
                     t.duration_secs(),
                     t0.elapsed().as_millis()
                 ),
