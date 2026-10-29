@@ -16,6 +16,8 @@ while true; do
     inicio=$(date +%s)
     # -d: o cage cuida das bordas (o programa não desenha barra de título).
     cage -s -d -- /usr/local/bin/dj-os --tela-cheia >>"$LOG" 2>&1
+    # Daqui em diante é reabertura (o programa caiu): as músicas voltam para os decks.
+    export DJOS_RETOMAR=1
     # Fechou em menos de 10 s: a tela provavelmente não abriu.
     if [ $(( $(date +%s) - inicio )) -lt 10 ]; then
         falhas=$((falhas + 1))

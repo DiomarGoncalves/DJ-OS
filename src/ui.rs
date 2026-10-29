@@ -87,6 +87,9 @@ pub struct DjOsApp {
     /// Pads da tela apertados (por deck), para mandar o "soltar".
     pad_touch: [[bool; 8]; 4],
     last_frame: std::time::Instant,
+    /// Estado dos decks guardado por último (para retomar depois de um travamento).
+    resume_saved: String,
+    resume_at: std::time::Instant,
     /// Último quadro contado no histórico (tempo no ar de cada música).
     history_at: std::time::Instant,
     /// Até quando mostrar "LIM" (o limitador do master trabalhou há pouco).
@@ -161,7 +164,7 @@ impl DjOsApp {
             eprintln!("[djos] placa de vídeo: {renderer}{}", if weak_gpu(&renderer) { " (modo leve automático)" } else { "" });
             app.lock().gpu = renderer;
         }
-        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), pad_touch: [[false; 8]; 4], last_frame: std::time::Instant::now(), lim_until: std::time::Instant::now(), history_at: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
+        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), pad_touch: [[false; 8]; 4], last_frame: std::time::Instant::now(), lim_until: std::time::Instant::now(), history_at: std::time::Instant::now(), resume_saved: String::new(), resume_at: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
     }
 
     /// Atalhos para testar sem a controladora.
@@ -1382,6 +1385,10 @@ impl eframe::App for DjOsApp {
                 let dt = self.history_at.elapsed().as_secs_f32();
                 self.history_at = std::time::Instant::now();
                 crate::history::tick(&mut a, &snap, dt);
+                if self.resume_at.elapsed() > Duration::from_secs(2) {
+                    self.resume_at = std::time::Instant::now();
+                    crate::resume::save(&a, &snap, &mut self.resume_saved);
+                }
                 a.commit_fx_picks(&self.cmd);
                 a.tick_browse_hold();
                 if a.toast.as_ref().is_some_and(|(_, t)| t.elapsed() > Duration::from_secs(3)) {

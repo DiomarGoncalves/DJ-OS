@@ -20,6 +20,7 @@ mod loudness;
 mod midi;
 mod phone;
 mod record;
+mod resume;
 mod pw_out;
 mod search;
 mod store;
@@ -109,6 +110,8 @@ fn main() -> eframe::Result<()> {
     }
 
     let loader = app::Loader::start(app.clone(), cmd.clone());
+    // Reaberto pela sessão depois de um travamento: as músicas voltam para os decks.
+    resume::restore_after_crash(&mut app.lock(), &loader);
     {
         // Análise automática das músicas novas (prioridade baixa).
         let a = app.lock();

@@ -237,7 +237,8 @@ pub fn migrate_old_data_dir() {
 }
 
 enum Job {
-    Deck { deck: usize, path: PathBuf },
+    /// `resume`: posição (frames) para voltar depois de um travamento.
+    Deck { deck: usize, path: PathBuf, resume: Option<f64> },
     Banks,
 }
 
@@ -255,7 +256,7 @@ impl Loader {
             .spawn(move || {
                 for job in rx {
                     match job {
-                        Job::Deck { deck, path } => load_deck(&app, &cmd, deck, &path),
+                        Job::Deck { deck, path, resume } => load_deck(&app, &cmd, deck, &path, resume),
                         Job::Banks => load_banks(&app),
                     }
                 }
@@ -272,12 +273,22 @@ impl Loader {
         }
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         app.decks[deck].loading = Some(name);
-        let _ = self.tx.send(Job::Deck { deck, path });
+        let _ = self.tx.send(Job::Deck { deck, path, resume: None });
+    }
+
+    /// Recarrega uma música e volta para `pos` (retomar depois de um travamento).
+    pub fn resume_deck(&self, app: &mut AppState, deck: usize, path: PathBuf, pos: f64) {
+        if deck >= NUM_DECKS {
+            return;
+        }
+        let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        app.decks[deck].loading = Some(name);
+        let _ = self.tx.send(Job::Deck { deck, path, resume: Some(pos) });
     }
 
 }
 
-fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path) {
+fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path, resume: Option<f64>) {
     let started = Instant::now();
     let saved = crate::store::load(path);
     let cached = saved.as_ref().map(|s| (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness));
@@ -308,6 +319,9 @@ fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path) 
             cmd.send(Cmd::Load { deck, track: t });
             if let Some(s) = saved {
                 cmd.send(Cmd::RestoreCues { deck, cue: s.cue, hotcues: s.hotcues, loop_: s.loop_ });
+            }
+            if let Some(pos) = resume {
+                cmd.send(Cmd::SetPos { deck, pos });
             }
         }
         Err(e) => {
