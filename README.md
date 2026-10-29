@@ -39,4 +39,8 @@ Requisitos: PC x86-64 (BIOS ou UEFI) com 4 GB de RAM e disco de 16 GB ou mais.
   já resolvem.
 
 ## Licença
-A definir.
+[GPL-3.0](LICENSE): pode usar, estudar, modificar e distribuir; quem distribuir uma versão
+modificada precisa manter a mesma licença e abrir o código dela também.
+
+DJ OS não tem relação com a Pioneer DJ ou AlphaTheta; os nomes de produtos citados pertencem aos
+seus donos e aparecem só para dizer com qual hardware o sistema funciona.
