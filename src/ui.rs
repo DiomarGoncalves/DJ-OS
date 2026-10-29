@@ -1066,8 +1066,17 @@ impl DjOsApp {
             let cp = tp.with_clip_rect(Rect::from_min_max(rr.min, pos2(artist_x - 10.0, rr.bottom())));
             // Já tocou nesta noite: ✓ e apagadinha (fora das "Tocadas hoje", onde todas tocaram).
             let played = e.when.is_none() && lib.played.contains(&e.path);
-            let title = if played { format!("✓ {}", e.title) } else { e.title.clone() };
-            text(&cp, rr.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, title, 14.0, if played { DIM } else { TEXT });
+            let tx = if played {
+                // ✓ desenhado (a fonte não tem o símbolo).
+                let c = rr.left_center() + vec2(14.0, 0.0);
+                let st = Stroke::new(2.0_f32, ACCENT);
+                cp.line_segment([c + vec2(-5.0, 0.0), c + vec2(-1.5, 4.0)], st);
+                cp.line_segment([c + vec2(-1.5, 4.0), c + vec2(5.0, -4.5)], st);
+                26.0
+            } else {
+                10.0
+            };
+            text(&cp, rr.left_center() + vec2(tx, 0.0), Align2::LEFT_CENTER, &e.title, 14.0, if played { DIM } else { TEXT });
             let ap = tp.with_clip_rect(Rect::from_min_max(pos2(artist_x, rr.top()), pos2(rr.right() - 150.0, rr.bottom())));
             text(&ap, pos2(artist_x, rr.center().y), Align2::LEFT_CENTER, &e.artist, 14.0, DIM);
             if let Some(k) = e.key {
