@@ -65,6 +65,13 @@ case "$alvo" in nvme*|mmcblk*) P=${D}p ;; *) P=$D ;; esac
 
 instalar() {
     set -e
+    # A ISO no pendrive pode ter chegado estragada (cópia interrompida): confere antes de apagar
+    # qualquer coisa.
+    passo "Conferindo a ISO no pendrive" 2
+    if [ -f "$MEDIO/live/SHA256SUMS" ] && ! (cd "$MEDIO/live" && sha256sum --quiet -c SHA256SUMS >>"$LOG" 2>&1); then
+        echo "ISO ESTRAGADA" >>"$LOG"
+        exit 3
+    fi
     passo "Apagando o disco $D" 5
     umount "$P"* 2>/dev/null || true
     wipefs -a "$D" >>"$LOG" 2>&1
@@ -92,6 +99,10 @@ instalar() {
     cp "$MEDIO/live/filesystem.squashfs" /mnt/sistema/a/
     cat /etc/dj-os-versao > /mnt/sistema/a/versao
     sync
+    passo "Conferindo o que foi gravado no disco" 75
+    if [ -f "$MEDIO/live/SHA256SUMS" ]; then
+        (cd /mnt/sistema/a && sha256sum --quiet -c "$MEDIO/live/SHA256SUMS") >>"$LOG" 2>&1 || { echo "CÓPIA ESTRAGADA" >>"$LOG"; exit 4; }
+    fi
 
     passo "Instalando o carregador (BIOS e UEFI)" 80
     grub-install --target=i386-pc --boot-directory=/mnt/boot/boot "$D" >>"$LOG" 2>&1
@@ -111,11 +122,17 @@ instalar() {
 
 echo "== instalando em $D ($(date))" >>"$LOG"
 if [ -n "$auto" ]; then
-    ( instalar ) || erro "a instalação parou (veja o registro)."
+    ( instalar ); rc=$?
 else
     ( instalar ) | wt --gauge "Preparando…" 8 70 0
-    [ "${PIPESTATUS[0]}" -eq 0 ] || erro "a instalação parou (veja o registro)."
+    rc=${PIPESTATUS[0]}
 fi
+case $rc in
+    0) ;;
+    3) erro "A ISO no pendrive está estragada (a cópia não chegou inteira).\nNada foi apagado. Copie a ISO de novo para o pendrive e use 'Remover com segurança' antes de tirar." ;;
+    4) erro "O disco não gravou o sistema direito (disco com defeito?).\nTente de novo ou use outro disco." ;;
+    *) erro "a instalação parou (veja o registro)." ;;
+esac
 msg "Instalação concluída!\n\nTire o pendrive e aperte Enter: o computador vai reiniciar já no DJ OS."
 [ -n "$auto" ] && { echo "INSTALADO"; poweroff; exit 0; }
 clear

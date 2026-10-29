@@ -97,6 +97,8 @@ rm -rf "$TRAB/kernel" && mkdir -p "$TRAB/kernel"
 tar -xf "$TRAB/raiz.tar" -C "$TRAB/kernel" --wildcards './boot/vmlinuz-*' './boot/initrd.img-*'
 cp "$(ls "$TRAB"/kernel/boot/vmlinuz-* | sort -V | tail -1)" "$TRAB/iso/live/vmlinuz"
 cp "$(ls "$TRAB"/kernel/boot/initrd.img-* | sort -V | tail -1)" "$TRAB/iso/live/initrd.img"
+# Impressões digitais: o instalador confere se a ISO chegou inteira no pendrive.
+(cd "$TRAB/iso/live" && sha256sum vmlinuz initrd.img filesystem.squashfs > SHA256SUMS)
 sed "s/@VERSAO@/$VERSAO/" "$PROJ/iso/grub.cfg" > "$TRAB/iso/boot/grub/grub.cfg"
 
 echo "== 4/4 gerando a ISO (BIOS e UEFI)"
