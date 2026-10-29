@@ -19,8 +19,73 @@ auto=$(sed -n 's/.*djos\.instalar=auto:\([a-z0-9]*\).*/\1/p' /proc/cmdline)
 # Botões em português em todas as telas.
 wt() { whiptail --title "$TITULO" --yes-button "Sim" --no-button "Não" --ok-button "OK" --cancel-button "Cancelar" "$@"; }
 msg() { [ -n "$auto" ] && { echo "$1"; return; }; wt --msgbox "$1" 14 70; }
-erro() { echo "ERRO: $1" | tee -a "$LOG"; msg "Não deu certo:\n\n$1\n\nDetalhes em $LOG.\nO computador vai reiniciar."; reboot; exit 1; }
-passo() { echo "$1" >>"$LOG"; [ -n "$auto" ] && echo "$1" || echo "XXX
+
+# Guarda o registro num pendrive (pasta dj-os-registros), para abrir depois no PC. Tenta todas as
+# partes de discos USB menos o disco que estava recebendo o sistema. No pendrive do Ventoy a parte
+# grande fica presa pela ISO aberta; a pequena (VTOYEFI) aceita.
+salvar_registro() {
+    nome="instalar-$(date +%Y%m%d-%H%M%S).log"
+    salvos=""
+    m=/run/dj-os-registro
+    mkdir -p "$m"
+    for linha in $(lsblk -nr -o NAME,TYPE,FSTYPE,PKNAME | awk '$2=="part" && $3~/^(vfat|exfat|ntfs|ext[234])$/ {print $1":"$3":"$4}'); do
+        IFS=: read -r parte fs disco <<<"$linha"
+        [ "$disco" = "${alvo:-}" ] && continue
+        [ "$(lsblk -dn -o TRAN "/dev/$disco" 2>/dev/null | tr -d ' ')" = usb ] || continue
+        rotulo=$(lsblk -no LABEL "/dev/$parte" | head -1)
+        ja=$(findmnt -n -o TARGET -S "/dev/$parte" | head -1)
+        if [ -n "$ja" ]; then
+            mount -o remount,rw "$ja" 2>/dev/null || continue
+            dir=$ja
+        else
+            tipo=$fs; [ "$fs" = ntfs ] && tipo=ntfs3
+            mount -t "$tipo" "/dev/$parte" "$m" 2>/dev/null || continue
+            dir=$m
+        fi
+        if mkdir -p "$dir/dj-os-registros" && cp "$LOG" "$dir/dj-os-registros/$nome" 2>/dev/null; then
+            salvos="$salvos\n  - pendrive ${rotulo:-$parte}, pasta dj-os-registros"
+        fi
+        sync
+        if [ -n "$ja" ]; then mount -o remount,ro "$ja" 2>/dev/null; else umount "$m"; fi
+    done
+}
+
+# Junta no registro o que ajuda a entender o erro (discos, montagens, mensagens do kernel).
+detalhes() {
+    {
+        echo "== discos"; lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,TRAN,MODEL,MOUNTPOINTS
+        echo "== montagens"; findmnt -r -o TARGET,SOURCE,FSTYPE,OPTIONS | grep -v -e cgroup -e /proc -e /sys
+        echo "== boot"; cat /proc/cmdline
+        echo "== kernel (últimas mensagens)"; dmesg | tail -n 60
+    } >>"$LOG" 2>&1
+}
+
+erro() {
+    echo "ERRO: $1" | tee -a "$LOG"
+    detalhes
+    if [ -n "$auto" ]; then reboot; exit 1; fi
+    salvar_registro
+    if [ -n "$salvos" ]; then onde="O registro do erro foi salvo em:$salvos"
+    else onde="Não achei pendrive que aceite gravação para salvar o registro.\nColoque outro pendrive e escolha 'Salvar o registro' no menu."; fi
+    wt --msgbox "Não deu certo:\n\n$1\n\n$onde\n\nNada além do disco escolhido foi mexido." 18 74
+    while true; do
+        o=$(wt --nocancel --menu "O que fazer agora?" 16 74 5 \
+            1 "Ver o registro na tela (dá para tirar foto)" \
+            2 "Salvar o registro num pendrive" \
+            3 "Tentar instalar de novo" \
+            4 "Desligar" \
+            5 "Reiniciar" 3>&1 1>&2 2>&3) || o=1
+        case $o in
+        1) tail -n 200 "$LOG" >/run/dj-os-registro.txt; wt --scrolltext --textbox /run/dj-os-registro.txt 24 78 ;;
+        2) salvar_registro
+           if [ -n "$salvos" ]; then wt --msgbox "Salvo em:$salvos" 12 74; else wt --msgbox "Nenhum pendrive aceitou. Coloque outro (FAT32, exFAT ou NTFS) e tente de novo." 10 74; fi ;;
+        3) exec "$0" ;;
+        4) clear; poweroff; exit 1 ;;
+        5) clear; reboot; exit 1 ;;
+        esac
+    done
+}
+passo() { echo "$1" >>"$LOG"; echo "$1" >/run/dj-os-passo; [ -n "$auto" ] && echo "$1" || echo "XXX
 $2
 $1
 XXX"; }
@@ -36,13 +101,13 @@ for f in $(findmnt -n -o SOURCE /run/live/rootfs/* 2>/dev/null); do
     origem="$origem$(lsblk -s -n -r -o NAME,TYPE "$f" 2>/dev/null | awk '$2=="disk"{printf "%s ", $1}')"
 done
 echo "origem da ISO: $src ->$origem" >>"$LOG"
-# Discos que podem receber o sistema (o pendrive da ISO não), com pelo menos 16 GB.
+# Discos que podem receber o sistema (o pendrive da ISO não), com pelo menos 12 GB.
 discos=()
 for nome in $(lsblk -dn -r -o NAME,TYPE | awk '$2=="disk"{print $1}'); do
     case "$origem" in *" $nome "*) continue ;; esac
     case "$nome" in loop*|sr*|zram*|fd*) continue ;; esac
     bytes=$(lsblk -bdn -o SIZE "/dev/$nome")
-    [ "$bytes" -ge $((16 * 1024 * 1024 * 1024)) ] || continue
+    [ "$bytes" -ge $((12 * 1024 * 1024 * 1024)) ] || continue
     tamanho=$(lsblk -dn -o SIZE "/dev/$nome" | tr -d ' ')
     [ "$(lsblk -dn -o TRAN "/dev/$nome" | tr -d ' ')" = usb ] && onde="USB" || onde="interno"
     modelo=$(lsblk -dn -o MODEL "/dev/$nome" | sed 's/ *$//')
@@ -54,7 +119,7 @@ if [ -n "$auto" ]; then
     case "$origem" in *" $alvo "*) erro "O disco $alvo é o da própria ISO." ;; esac
 else
     wt --yesno "Este assistente instala o DJ OS no computador.\n\nO disco escolhido será APAGADO INTEIRO: tudo o que estiver nele (Windows, arquivos) será perdido.\n\nContinuar?" 14 70 || { clear; reboot; exit 0; }
-    [ ${#discos[@]} -gt 0 ] || erro "Nenhum disco de pelo menos 16 GB encontrado (o pendrive da ISO não conta)."
+    [ ${#discos[@]} -gt 0 ] || erro "Nenhum disco de pelo menos 12 GB encontrado (o pendrive da ISO não conta)."
     alvo=$(wt --menu "Em qual disco instalar?\n(setas para escolher, Enter para confirmar)" 16 70 6 "${discos[@]}" 3>&1 1>&2 2>&3) || { clear; reboot; exit 0; }
     info=$(lsblk -dn -o SIZE,MODEL "/dev/$alvo")
     wt --defaultno --yesno "ÚLTIMA CONFIRMAÇÃO\n\nApagar TUDO em /dev/$alvo ($info)\ne instalar o DJ OS?" 12 70 || { clear; reboot; exit 0; }
@@ -65,6 +130,8 @@ case "$alvo" in nvme*|mmcblk*) P=${D}p ;; *) P=$D ;; esac
 
 instalar() {
     set -e
+    # Se algum comando falhar, o registro diz qual foi.
+    trap 'echo "FALHOU (linha $LINENO, código $?): $BASH_COMMAND" >>"$LOG"' ERR
     # A ISO no pendrive pode ter chegado estragada (cópia interrompida): confere antes de apagar
     # qualquer coisa.
     passo "Conferindo a ISO no pendrive" 2
@@ -124,14 +191,14 @@ echo "== instalando em $D ($(date))" >>"$LOG"
 if [ -n "$auto" ]; then
     ( instalar ); rc=$?
 else
-    ( instalar ) | wt --gauge "Preparando…" 8 70 0
+    ( instalar ) 2>>"$LOG" | wt --gauge "Preparando…" 8 70 0
     rc=${PIPESTATUS[0]}
 fi
 case $rc in
     0) ;;
     3) erro "A ISO no pendrive está estragada (a cópia não chegou inteira).\nNada foi apagado. Copie a ISO de novo para o pendrive e use 'Remover com segurança' antes de tirar." ;;
     4) erro "O disco não gravou o sistema direito (disco com defeito?).\nTente de novo ou use outro disco." ;;
-    *) erro "a instalação parou (veja o registro)." ;;
+    *) erro "A instalação parou no passo:\n  $(cat /run/dj-os-passo 2>/dev/null)\n$(grep '^FALHOU' "$LOG" | tail -n 1)" ;;
 esac
 msg "Instalação concluída!\n\nTire o pendrive e aperte Enter: o computador vai reiniciar já no DJ OS."
 [ -n "$auto" ] && { echo "INSTALADO"; poweroff; exit 0; }
