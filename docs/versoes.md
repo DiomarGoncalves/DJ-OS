@@ -21,16 +21,33 @@ Em `~/DJOS/iso/`:
 A ISO só precisa ser distribuída para instalações novas; quem já tem o DJ OS instalado atualiza
 pelo firmware.
 
-## Lançar uma versão
-1. Suba a versão no `Cargo.toml`.
-2. Mova os itens de "Não lançado" do `CHANGELOG.md` para a versão nova, com a data.
-3. `iso/construir.sh` (gera a ISO e o firmware assinado).
-4. Teste na máquina virtual (`iso/testar-qemu.sh`, veja `docs/desenvolvimento/testes.md`).
-5. `git commit` e `git tag v<versão>` (ex.: `git tag v0.2.0`).
+## Lançar uma versão (publicação automática)
+1. Suba a versão no `Cargo.toml` (ex.: `version = "0.2.0"`).
+2. Mova os itens de "Não lançado" do `CHANGELOG.md` para `## [0.2.0] - <data>`.
+3. Teste (`cargo test`; se mexeu na ISO, `iso/construir.sh` e `iso/testar-qemu.sh`).
+4. Grave, marque e envie:
+   ```bash
+   git commit -am "Versão 0.2.0"
+   git tag v0.2.0
+   git push origin main --tags
+   ```
+5. O GitHub (`.github/workflows/lancamento.yml`) roda os testes, monta a ISO e o firmware
+   assinado e publica em **Releases** com as notas do CHANGELOG. Leva uns 20-30 minutos; o
+   andamento aparece na aba **Actions** do repositório.
+
+A marca (`v0.2.0`) precisa ser igual à versão do `Cargo.toml`, senão a publicação para com erro.
+
+### Preparação (uma vez só)
+No GitHub: **Settings → Secrets and variables → Actions → New repository secret**:
+- Nome: `FIRMWARE_KEY`
+- Valor: o conteúdo inteiro de `~/DJOS/chave/firmware.key` (`cat ~/DJOS/chave/firmware.key`,
+  incluindo as linhas `-----BEGIN PRIVATE KEY-----` e `-----END PRIVATE KEY-----`).
+
+O segredo só é usado pela montagem; ninguém consegue ler o conteúdo depois de salvo.
 
 ## A chave do firmware
-- `~/DJOS/chave/firmware.key` é a chave secreta que assina os firmwares. **Fica só no PC de quem
-  publica e nunca entra no repositório.** Guarde uma cópia em lugar seguro: sem ela os aparelhos
+- `~/DJOS/chave/firmware.key` é a chave secreta que assina os firmwares. **Fica no PC de quem
+  publica e no segredo `FIRMWARE_KEY` do GitHub; nunca entra no repositório.** Guarde uma cópia em lugar seguro: sem ela os aparelhos
   instalados não aceitam mais atualizações (só reinstalando pela ISO).
 - `firmware.pub` (a pública) vai dentro do sistema e só serve para conferir.
 - Quem montar o DJ OS por conta própria gera uma chave nova: os aparelhos dele aceitam só os

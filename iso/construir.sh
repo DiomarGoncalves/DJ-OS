@@ -30,7 +30,10 @@ if [ ! -f "$CHAVE_DIR/firmware.key" ]; then
 fi
 openssl pkey -in "$CHAVE_DIR/firmware.key" -pubout -out "$CHAVE_DIR/firmware.pub"
 echo "== 1/4 compilando o DJ OS (versão $VERSAO)"
-(cd "$PROJ" && nice -n 19 "$HOME/.cargo/bin/cargo" build --release --offline -j 4)
+# Neste PC compila sem internet (as dependências já estão baixadas); no GitHub (DJOS_CI=1) baixa.
+OFFLINE=--offline
+[ -n "${DJOS_CI:-}" ] && OFFLINE=
+(cd "$PROJ" && nice -n 19 "$HOME/.cargo/bin/cargo" build --release $OFFLINE -j 4)
 
 PACOTES=(
     # Base e boot ao vivo

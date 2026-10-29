@@ -6,22 +6,6 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
-### Adicionado
-- Configurações em abas (estilo XDJ), com resumo de cada aba e navegação pelo BROWSE.
-- Tela de inicialização com a logo do DJ OS; menu de boot escondido no aparelho instalado (Esc mostra).
-- Botão power desliga com segurança; fechar a tampa ou teclas de suspender não fazem nada.
-- Limitador no master e no fone: o som nunca passa de -1 dBFS (aviso "LIM" na barra de cima).
-- Tom da música (key) no formato Camelot com cores, no browser e no deck; a análise automática
-  completa o tom das músicas já analisadas sem perder os cues.
-- Ganho automático: mede o volume de cada música (LUFS) e nivela em -9 LUFS (de -12 a +6 dB),
-  com opção em CONFIG → ÁUDIO e o valor aplicado no deck ("AG").
-
-### Corrigido
-- Eco na caixa Bluetooth (o master ia duas vezes para ela).
-- Scratch: o backspin segue o prato solto até ele parar.
-- Celular por Bluetooth: pareamento sem pedir código e nome "DJ OS"; visibilidade com prazo.
-- Nomes: acentos separados viravam quadradinho; número da faixa no nome do arquivo virava artista.
-
 ## [0.1.0] - 2026-10-29
 
 Primeira versão funcional, em teste com a Pioneer DDJ-REV1.
@@ -46,3 +30,19 @@ Primeira versão funcional, em teste com a Pioneer DDJ-REV1.
 ### Aparelho (ISO)
 - ISO para pendrive/Ventoy com "testar sem instalar", "instalar no disco" e modo de segurança.
 - Firmware A/B assinado: atualização pelo pendrive com volta automática para a versão anterior.
+
+### Também nesta versão
+- Configurações em abas (estilo XDJ), com resumo de cada aba e navegação pelo BROWSE.
+- Tela de inicialização com a logo do DJ OS; menu de boot escondido no aparelho instalado (Esc mostra).
+- Botão power desliga com segurança; fechar a tampa ou teclas de suspender não fazem nada.
+- Limitador no master e no fone: o som nunca passa de -1 dBFS (aviso "LIM" na barra de cima).
+- Tom da música (key) no formato Camelot com cores, no browser e no deck; a análise automática
+  completa o tom das músicas já analisadas sem perder os cues.
+- Ganho automático: mede o volume de cada música (LUFS) e nivela em -9 LUFS (de -12 a +6 dB),
+  com opção em CONFIG → ÁUDIO e o valor aplicado no deck ("AG").
+
+### Correções
+- Eco na caixa Bluetooth (o master ia duas vezes para ela).
+- Scratch: o backspin segue o prato solto até ele parar.
+- Celular por Bluetooth: pareamento sem pedir código e nome "DJ OS"; visibilidade com prazo.
+- Nomes: acentos separados viravam quadradinho; número da faixa no nome do arquivo virava artista.

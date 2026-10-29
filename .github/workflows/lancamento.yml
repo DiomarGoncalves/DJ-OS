@@ -1,0 +1,79 @@
+# Lançamento automático: ao enviar uma marca de versão (ex.: v0.2.0), o GitHub roda os testes,
+# monta a ISO e o firmware assinado e publica os dois em Releases, com as notas do CHANGELOG.
+#
+# Preparação (uma vez só): em Settings → Secrets and variables → Actions, crie o segredo
+# FIRMWARE_KEY com o conteúdo de ~/DJOS/chave/firmware.key. Veja docs/versoes.md.
+name: Lançamento
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Espaço em disco (a montagem usa ~8 GB)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Ferramentas de montagem
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mmdebstrap uidmap squashfs-tools xorriso mtools \
+            grub-pc-bin grub-efi-amd64-bin grub-common libasound2-dev pkg-config openssl
+          # mmdebstrap sem sudo (modo "unshare"): libera os espaços de usuário e dá uma faixa de ids.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          grep -q "^$USER:" /etc/subuid || echo "$USER:100000:65536" | sudo tee -a /etc/subuid
+          grep -q "^$USER:" /etc/subgid || echo "$USER:100000:65536" | sudo tee -a /etc/subgid
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Versão da marca = versão do Cargo.toml
+        run: |
+          cargo_v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          [ "v$cargo_v" = "$GITHUB_REF_NAME" ] || { echo "::error::A marca $GITHUB_REF_NAME não bate com a versão $cargo_v do Cargo.toml"; exit 1; }
+          echo "VERSAO=$cargo_v" >> "$GITHUB_ENV"
+
+      - name: Testes
+        run: cargo test --release
+
+      - name: Chave do firmware
+        env:
+          FIRMWARE_KEY: ${{ secrets.FIRMWARE_KEY }}
+        run: |
+          [ -n "$FIRMWARE_KEY" ] || { echo "::error::Falta o segredo FIRMWARE_KEY (veja docs/versoes.md)"; exit 1; }
+          mkdir -p ~/DJOS/chave && chmod 700 ~/DJOS/chave
+          printf '%s\n' "$FIRMWARE_KEY" > ~/DJOS/chave/firmware.key
+          chmod 600 ~/DJOS/chave/firmware.key
+          openssl pkey -in ~/DJOS/chave/firmware.key -noout
+
+      - name: Montar a ISO e o firmware
+        run: DJOS_CI=1 SAIDA="$GITHUB_WORKSPACE/saida" iso/construir.sh
+
+      - name: Notas da versão (do CHANGELOG)
+        run: |
+          awk -v v="$VERSAO" '
+            /^## \[/ { dentro = index($0, "[" v "]") > 0; next }
+            dentro' CHANGELOG.md > notas.md
+          {
+            echo
+            echo "### Arquivos"
+            echo "- **dj-os-…iso**: instalar do zero ou testar sem instalar (pendrive / Ventoy)."
+            echo "- **dj-os-firmware-…djos**: atualizar um aparelho já instalado (CONFIG → SISTEMA → Atualizar firmware)."
+          } >> notas.md
+          cat notas.md
+
+      - name: Publicar em Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DJ OS ${{ env.VERSAO }}
+          body_path: notas.md
+          files: |
+            saida/dj-os-*.iso
+            saida/dj-os-firmware-*.djos
