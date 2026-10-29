@@ -97,6 +97,12 @@ if [ -n "$auto" ]; then
     alvo=$auto
     case "$origem" in *" $alvo "*) erro "O disco $alvo é o da própria ISO." ;; esac
 else
+    # Ligado no modo antigo da BIOS (Legacy/CSM): em algumas máquinas o DJ OS instalado não liga
+    # assim ("invalid magic number" ou tela piscando). Com UEFI funciona.
+    if [ ! -d /sys/firmware/efi ]; then
+        echo "modo de boot: Legacy/CSM" >>"$LOG"
+        wt --defaultno --yesno "ATENÇÃO: este computador está ligando no MODO ANTIGO da BIOS (Legacy/CSM).\n\nEm algumas máquinas o DJ OS instalado não liga assim (tela piscando ou erro \"invalid magic number\").\n\nRecomendado: desligue, entre na BIOS (geralmente F2, F10 ou Del ao ligar), ative o modo UEFI (ou desligue o CSM/Legacy) e instale de novo.\n\nInstalar mesmo assim no modo antigo?" 18 74 || { clear; poweroff; exit 0; }
+    fi
     wt --yesno "Este assistente instala o DJ OS no computador.\n\nO disco escolhido será APAGADO INTEIRO: tudo o que estiver nele (Windows, arquivos) será perdido.\n\nContinuar?" 14 70 || { clear; reboot; exit 0; }
     [ ${#discos[@]} -gt 0 ] || erro "Nenhum disco de pelo menos 12 GB encontrado (o pendrive da ISO não conta)."
     alvo=$(wt --menu "Em qual disco instalar?\n(setas para escolher, Enter para confirmar)" 16 70 6 "${discos[@]}" 3>&1 1>&2 2>&3) || { clear; reboot; exit 0; }
