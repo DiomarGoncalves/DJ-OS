@@ -1,0 +1,3 @@
+# O usuário do aparelho só pode chamar, como administrador, a ferramenta do firmware
+# (atualizar, confirmar, reiniciar, desligar). Nada além disso.
+dj ALL=(root) NOPASSWD: /usr/local/sbin/dj-os-firmware

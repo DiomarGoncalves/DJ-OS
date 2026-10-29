@@ -1,0 +1,19 @@
+# Tela de inicialização do DJ OS: a logo no centro da tela preta, com um brilho pulsando de leve.
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+logo = Image("logo.png");
+# A logo é quadrada com fundo preto: ocupa 85% da altura (ou da largura, se a tela for estreita).
+escala = Math.Min(Window.GetHeight() * 0.85 / logo.GetHeight(), Window.GetWidth() * 0.85 / logo.GetWidth());
+logo = logo.Scale(logo.GetWidth() * escala, logo.GetHeight() * escala);
+sprite = Sprite(logo);
+sprite.SetX(Window.GetX() + Window.GetWidth() / 2 - logo.GetWidth() / 2);
+sprite.SetY(Window.GetY() + Window.GetHeight() / 2 - logo.GetHeight() / 2);
+
+tempo = 0;
+fun atualiza() {
+    tempo++;
+    # Pulso de ~3 s entre 75% e 100% de brilho (a tela atualiza 50 vezes por segundo).
+    sprite.SetOpacity(0.875 + 0.125 * Math.Sin(tempo * 0.042));
+}
+Plymouth.SetRefreshFunction(atualiza);

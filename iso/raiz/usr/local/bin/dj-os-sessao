@@ -1,0 +1,47 @@
+#!/bin/sh
+# Sessão do aparelho: o DJ OS em tela cheia, sem área de trabalho (compositor "cage").
+# Se o programa fechar ou travar, abre de novo. Se a tela não abrir, tenta o desenho pelo
+# processador e explica o problema na tela (em vez de só piscar).
+export XDG_SESSION_TYPE=wayland
+export XCURSOR_SIZE=32
+# Teclado brasileiro (ABNT2), lido de /etc/default/keyboard.
+. /etc/default/keyboard 2>/dev/null
+export XKB_DEFAULT_LAYOUT="${XKBLAYOUT:-br}" XKB_DEFAULT_MODEL="${XKBMODEL:-abnt2}"
+mkdir -p "$HOME/DJOS"
+LOG="$HOME/DJOS/sessao.log"
+# Modo de segurança: sem aceleração (só a tela básica).
+grep -q "djos.video=basico" /proc/cmdline && export WLR_RENDERER=pixman LIBGL_ALWAYS_SOFTWARE=1
+falhas=0
+while true; do
+    inicio=$(date +%s)
+    # -d: o cage cuida das bordas (o programa não desenha barra de título).
+    cage -s -d -- /usr/local/bin/dj-os --tela-cheia >>"$LOG" 2>&1
+    # Fechou em menos de 10 s: a tela provavelmente não abriu.
+    if [ $(( $(date +%s) - inicio )) -lt 10 ]; then
+        falhas=$((falhas + 1))
+    else
+        falhas=0
+    fi
+    if [ "$falhas" -ge 2 ] && [ -z "$WLR_RENDERER" ]; then
+        export WLR_RENDERER=pixman LIBGL_ALWAYS_SOFTWARE=1 WLR_NO_HARDWARE_CURSORS=1
+    fi
+    if [ "$falhas" -ge 4 ]; then
+        clear
+        echo "DJ OS: a tela nao abriu."
+        if [ -e /dev/dri/card0 ]; then
+            echo "Placa de video encontrada, mas o compositor falhou."
+        else
+            echo "Nenhuma placa de video utilizavel (sem /dev/dri)."
+            echo "Reinicie e escolha 'modo de seguranca' no menu."
+            echo "Em maquina virtual: VirtualBox -> Tela -> Controladora grafica VMSVGA."
+        fi
+        echo
+        echo "Ultimas mensagens:"
+        grep -v "keysym\|xkbcomp\|not fatal" "$LOG" | tail -n 8
+        echo
+        echo "Ctrl+Alt+F2 abre um terminal. Tentando de novo em 20 s..."
+        sleep 20
+    else
+        sleep 2
+    fi
+done

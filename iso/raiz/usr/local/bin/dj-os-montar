@@ -1,0 +1,22 @@
+#!/bin/sh
+# Chamado pelo udev quando um pendrive/SSD USB é ligado: monta em /media/dj/<nome>, só leitura
+# (o sistema só lê do pendrive; nunca estraga nada nele). Ao tirar, o systemd desmonta sozinho.
+dev="$1"; label="$2"; uuid="$3"; fstype="$4"
+# Partição interna do Ventoy (só tem o carregador): não interessa.
+[ "$label" = VTOYEFI ] && exit 0
+name=$(printf '%s' "${label:-$uuid}" | tr -c 'A-Za-z0-9._-' '_')
+[ -n "$name" ] || name=pendrive
+opts=ro,nosuid,nodev,noexec
+case "$fstype" in
+    vfat|exfat|ntfs|ntfs3) opts="$opts,uid=1000,gid=1000" ;;
+esac
+[ "$fstype" = ntfs ] && fstype=ntfs3 && opts="$opts,force"
+# Pendrive do Ventoy (de onde o sistema ligou): a partição fica presa pelo Ventoy enquanto a ISO
+# roda. Abre por um "espelho" só leitura (loop), que pode ler junto sem atrapalhar.
+holders=$(ls "/sys/class/block/$(basename "$dev")/holders" 2>/dev/null)
+if [ -n "$holders" ]; then
+    loop=$(losetup --read-only --find --show "$dev") || exit 1
+    logger -t dj-os-montar "$dev preso por $holders (Ventoy?): montando pelo $loop"
+    dev=$loop
+fi
+exec /usr/bin/systemd-mount --no-block --collect --fsck=no -t "$fstype" -o "$opts" "$dev" "/media/dj/$name"

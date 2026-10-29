@@ -1,0 +1,115 @@
+#!/bin/bash
+# Firmware do DJ OS. O sistema chama pelo sudo (só esta ferramenta é liberada).
+#
+#   dj-os-firmware info               versão atual, versão de cada parte (a/b) e se é instalado
+#   dj-os-firmware procurar           arquivos de firmware (*.djos) nos pendrives
+#   dj-os-firmware atualizar <.djos>   confere a assinatura e grava na versão que não está em uso
+#   dj-os-firmware confirmar          a versão em teste ligou bem: vira a oficial
+#   dj-os-firmware reiniciar|desligar
+#
+# Arquivo de firmware (.djos) = tar com: manifesto, manifesto.sig, vmlinuz, initrd.img,
+# filesystem.squashfs. O manifesto tem a versão e o SHA-256 de cada arquivo; a assinatura
+# (Ed25519) é conferida com a chave pública que vem dentro do sistema. Sem a chave certa, nada
+# é gravado.
+set -u
+CHAVE=/usr/share/dj-os/firmware.pub
+SIS=/run/live/medium
+BOOT=/run/dj-os-boot
+ARQUIVOS="vmlinuz initrd.img filesystem.squashfs"
+
+slot=$(sed -n 's/.*djos\.slot=\([ab]\).*/\1/p' /proc/cmdline)
+outro() { [ "$1" = a ] && echo b || echo a; }
+diga() { echo "$*"; }
+falha() { echo "ERRO $*"; exit 1; }
+
+grubenv() { # grubenv <args do grub-editenv>
+    mkdir -p "$BOOT"
+    mountpoint -q "$BOOT" || mount /dev/disk/by-label/DJOS_BOOT "$BOOT" || return 1
+    grub-editenv "$BOOT/boot/grub/grubenv" "$@"
+    local rc=$?
+    umount "$BOOT"
+    return $rc
+}
+
+case "${1:-}" in
+info)
+    diga "VERSAO $(cat /etc/dj-os-versao)"
+    if [ -z "$slot" ]; then diga "MODO teste (ISO, nada é guardado)"; exit 0; fi
+    diga "MODO instalado"
+    diga "SLOT $slot"
+    o=$(outro "$slot")
+    [ -f "$SIS/$o/versao" ] && diga "OUTRA $(cat "$SIS/$o/versao")"
+    ;;
+procurar)
+    find /media/dj -maxdepth 3 -iname '*.djos' -type f 2>/dev/null | sort -r
+    ;;
+atualizar)
+    arq=${2:-}
+    [ -n "$slot" ] || falha "só funciona no sistema instalado (não pela ISO)"
+    [ -f "$arq" ] || falha "arquivo não encontrado: $arq"
+    case "$arq" in /media/dj/*) ;; *) falha "o arquivo precisa estar num pendrive" ;; esac
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    diga "PASSO conferindo a assinatura"
+    tar -xf "$arq" -C "$tmp" manifesto manifesto.sig 2>/dev/null || falha "arquivo de firmware inválido"
+    openssl pkeyutl -verify -pubin -inkey "$CHAVE" -rawin -in "$tmp/manifesto" -sigfile "$tmp/manifesto.sig" >/dev/null 2>&1 \
+        || falha "assinatura inválida: este firmware não é oficial"
+    versao=$(sed -n 's/^versao=//p' "$tmp/manifesto")
+    [ -n "$versao" ] || falha "manifesto sem versão"
+    destino=$(outro "$slot")
+    diga "VERSAO $versao"
+    atual=$(cat /etc/dj-os-versao)
+    if [ "$versao" != "$atual" ] && [ "$(printf '%s\n%s\n' "$versao" "$atual" | sort -V | head -1)" = "$versao" ]; then
+        diga "AVISO $versao é mais antiga que a atual ($atual)"
+    fi
+    diga "PASSO gravando na parte $destino"
+    mount -o remount,rw "$SIS" || falha "não consegui liberar a gravação do sistema"
+    trap 'mount -o remount,ro "$SIS" 2>/dev/null; rm -rf "$tmp"' EXIT
+    # Grava ao lado (.novo); a versão antiga só sai depois da nova conferida.
+    rm -rf "$SIS/$destino.novo"
+    mkdir -p "$SIS/$destino.novo"
+    total=$(stat -c %s "$arq")
+    # Extrai mostrando o andamento (em %, pelo tamanho já gravado).
+    tar -xf "$arq" -C "$SIS/$destino.novo" $ARQUIVOS &
+    pid=$!
+    while kill -0 $pid 2>/dev/null; do
+        feito=$(du -sb "$SIS/$destino.novo" | cut -f1)
+        diga "PROGRESSO $((feito * 90 / total))"
+        sleep 1
+    done
+    wait $pid || falha "não consegui gravar (pendrive retirado ou disco cheio?)"
+    diga "PASSO conferindo o que foi gravado"
+    for f in $ARQUIVOS; do
+        esperado=$(sed -n "s/^$f \([0-9a-f]*\)$/\1/p" "$tmp/manifesto")
+        lido=$(sha256sum "$SIS/$destino.novo/$f" | cut -d' ' -f1)
+        [ -n "$esperado" ] && [ "$esperado" = "$lido" ] || falha "$f veio diferente do assinado"
+    done
+    echo "$versao" > "$SIS/$destino.novo/versao"
+    sync
+    rm -rf "$SIS/$destino"
+    mv "$SIS/$destino.novo" "$SIS/$destino"
+    sync
+    grubenv set novo="$destino" || falha "não consegui marcar a versão nova para o boot"
+    diga "PROGRESSO 100"
+    diga "OK $versao"
+    ;;
+confirmar)
+    [ -n "$slot" ] || exit 0
+    mkdir -p "$BOOT"
+    mount /dev/disk/by-label/DJOS_BOOT "$BOOT" 2>/dev/null || exit 0
+    testando=$(grub-editenv "$BOOT/boot/grub/grubenv" list | sed -n 's/^testando=//p')
+    umount "$BOOT"
+    [ -n "$testando" ] || exit 0
+    if [ "$testando" = "$slot" ]; then
+        grubenv set ativo="$slot" && grubenv unset testando
+        diga "CONFIRMADO $(cat /etc/dj-os-versao)"
+    else
+        # A versão em teste não chegou a confirmar: o boot voltou para esta.
+        grubenv unset testando
+        diga "FALHOU $(cat "$SIS/$testando/versao" 2>/dev/null)"
+    fi
+    ;;
+reiniciar) systemctl reboot ;;
+desligar) systemctl poweroff ;;
+*) sed -n '2,10p' "$0"; exit 1 ;;
+esac

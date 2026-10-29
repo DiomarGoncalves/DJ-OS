@@ -1,0 +1,6 @@
+[env]
+PKG_CONFIG_PATH = { value = "dev-shim/pkgconfig", relative = true }
+
+[build]
+# Limita a compilação a 4 núcleos para não travar o computador.
+jobs = 4

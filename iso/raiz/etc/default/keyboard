@@ -1,0 +1,6 @@
+# Teclado brasileiro (ABNT2) no terminal de manutenção. A sessão do DJ OS usa o mesmo.
+XKBMODEL="abnt2"
+XKBLAYOUT="br"
+XKBVARIANT=""
+XKBOPTIONS=""
+BACKSPACE="guess"

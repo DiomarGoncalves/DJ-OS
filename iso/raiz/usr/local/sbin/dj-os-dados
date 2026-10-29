@@ -1,0 +1,23 @@
+#!/bin/sh
+# Liga a parte DADOS do disco instalado (etiqueta DJOS_DADOS): músicas, configurações, memória das
+# músicas, redes Wi-Fi e aparelhos Bluetooth pareados. O sistema em si é somente leitura e volta
+# ao original a cada boot; só o que está aqui é guardado.
+# Sem a parte DADOS (testando pela ISO), não faz nada: tudo fica na memória até desligar.
+udevadm settle -t 5 2>/dev/null
+dev=/dev/disk/by-label/DJOS_DADOS
+[ -e "$dev" ] || { echo "sem DJOS_DADOS: modo de teste"; exit 0; }
+mkdir -p /dados
+mount -o noatime "$dev" /dados || exit 1
+liga() { # liga <pasta em /dados> <onde aparece> <dono>
+    mkdir -p "/dados/$1" "$2"
+    [ -n "$3" ] && chown "$3" "/dados/$1"
+    mount --bind "/dados/$1" "$2"
+}
+liga dj /home/dj/DJOS dj:dj
+liga sistema/wireplumber /home/dj/.local/state/wireplumber dj:dj
+chown dj:dj /home/dj/.local /home/dj/.local/state
+liga sistema/bluetooth /var/lib/bluetooth ""
+chmod 700 /dados/sistema/bluetooth
+liga sistema/rede /etc/NetworkManager/system-connections ""
+chmod 700 /dados/sistema/rede
+echo "DJOS_DADOS ligado"

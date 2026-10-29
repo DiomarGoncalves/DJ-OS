@@ -1,0 +1,8 @@
+# Atalho de desenvolvimento: permite compilar sem o pacote libasound2-dev.
+# Na ISO final o pacote de verdade é instalado e esta pasta não é usada.
+libdir=${pcfiledir}/../lib
+Name: alsa
+Description: ALSA (shim de desenvolvimento)
+Version: 1.2.11
+Libs: -L${libdir} -lasound
+Cflags:

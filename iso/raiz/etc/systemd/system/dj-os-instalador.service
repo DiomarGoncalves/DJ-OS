@@ -1,0 +1,19 @@
+[Unit]
+Description=DJ OS: instalador (opção "INSTALAR NO DISCO" do menu da ISO)
+ConditionKernelCommandLine=djos.instalar
+After=systemd-user-sessions.service systemd-udev-settle.service
+Before=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dj-os-instalar
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Environment=TERM=linux
+
+[Install]
+WantedBy=multi-user.target

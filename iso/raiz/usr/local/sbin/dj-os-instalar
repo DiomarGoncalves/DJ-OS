@@ -1,0 +1,122 @@
+#!/bin/bash
+# Instalador do DJ OS: apaga o disco escolhido e instala o sistema.
+#
+# Roda na tela 1 quando a ISO liga pela opção "INSTALAR NO DISCO" (djos.instalar no boot).
+# Para testes automáticos: djos.instalar=auto:<disco> (ex.: auto:vda) instala sem perguntar.
+#
+# Disco instalado (GPT, liga em BIOS antiga e em UEFI):
+#   1  bios      1 MB    código do GRUB para BIOS antiga
+#   2  DJOS_BOOT  256 MB  FAT32: GRUB (BIOS e UEFI) e a memória de qual versão ligar
+#   3  DJOS_SISTEMA 6 GB  ext4: a/ e b/, duas versões do sistema (somente leitura)
+#   4  DJOS_DADOS resto   ext4: músicas, configurações, pareamentos
+set -u
+LOG=/run/dj-os-instalar.log
+MEDIO=/run/live/medium
+TITULO="DJ OS $(cat /etc/dj-os-versao 2>/dev/null) - instalador"
+export NEWT_COLORS='root=,black window=,black border=yellow,black title=yellow,black textbox=white,black button=black,yellow actbutton=black,yellow listbox=white,black actlistbox=black,yellow actsellistbox=black,yellow'
+
+auto=$(sed -n 's/.*djos\.instalar=auto:\([a-z0-9]*\).*/\1/p' /proc/cmdline)
+# Botões em português em todas as telas.
+wt() { whiptail --title "$TITULO" --yes-button "Sim" --no-button "Não" --ok-button "OK" --cancel-button "Cancelar" "$@"; }
+msg() { [ -n "$auto" ] && { echo "$1"; return; }; wt --msgbox "$1" 14 70; }
+erro() { echo "ERRO: $1" | tee -a "$LOG"; msg "Não deu certo:\n\n$1\n\nDetalhes em $LOG.\nO computador vai reiniciar."; reboot; exit 1; }
+passo() { echo "$1" >>"$LOG"; [ -n "$auto" ] && echo "$1" || echo "XXX
+$2
+$1
+XXX"; }
+
+clear
+[ -f "$MEDIO/live/filesystem.squashfs" ] || erro "Não achei o sistema na ISO ($MEDIO/live)."
+
+# Disco(s) de onde a ISO ligou: não podem ser escolhidos. Segue a cadeia até o disco físico
+# (pelo Ventoy a origem é /dev/mapper/ventoy, que fica em cima do pendrive).
+src=$(findmnt -n -o SOURCE "$MEDIO")
+origem=" $(lsblk -s -n -r -o NAME,TYPE "$src" 2>/dev/null | awk '$2=="disk"{printf "%s ", $1}')"
+for f in $(findmnt -n -o SOURCE /run/live/rootfs/* 2>/dev/null); do
+    origem="$origem$(lsblk -s -n -r -o NAME,TYPE "$f" 2>/dev/null | awk '$2=="disk"{printf "%s ", $1}')"
+done
+echo "origem da ISO: $src ->$origem" >>"$LOG"
+# Discos que podem receber o sistema (o pendrive da ISO não), com pelo menos 16 GB.
+discos=()
+for nome in $(lsblk -dn -r -o NAME,TYPE | awk '$2=="disk"{print $1}'); do
+    case "$origem" in *" $nome "*) continue ;; esac
+    case "$nome" in loop*|sr*|zram*|fd*) continue ;; esac
+    bytes=$(lsblk -bdn -o SIZE "/dev/$nome")
+    [ "$bytes" -ge $((16 * 1024 * 1024 * 1024)) ] || continue
+    tamanho=$(lsblk -dn -o SIZE "/dev/$nome" | tr -d ' ')
+    [ "$(lsblk -dn -o TRAN "/dev/$nome" | tr -d ' ')" = usb ] && onde="USB" || onde="interno"
+    modelo=$(lsblk -dn -o MODEL "/dev/$nome" | sed 's/ *$//')
+    discos+=("$nome" "$tamanho  $onde  ${modelo:-disco}")
+done
+
+if [ -n "$auto" ]; then
+    alvo=$auto
+    case "$origem" in *" $alvo "*) erro "O disco $alvo é o da própria ISO." ;; esac
+else
+    wt --yesno "Este assistente instala o DJ OS no computador.\n\nO disco escolhido será APAGADO INTEIRO: tudo o que estiver nele (Windows, arquivos) será perdido.\n\nContinuar?" 14 70 || { clear; reboot; exit 0; }
+    [ ${#discos[@]} -gt 0 ] || erro "Nenhum disco de pelo menos 16 GB encontrado (o pendrive da ISO não conta)."
+    alvo=$(wt --menu "Em qual disco instalar?\n(setas para escolher, Enter para confirmar)" 16 70 6 "${discos[@]}" 3>&1 1>&2 2>&3) || { clear; reboot; exit 0; }
+    info=$(lsblk -dn -o SIZE,MODEL "/dev/$alvo")
+    wt --defaultno --yesno "ÚLTIMA CONFIRMAÇÃO\n\nApagar TUDO em /dev/$alvo ($info)\ne instalar o DJ OS?" 12 70 || { clear; reboot; exit 0; }
+fi
+D=/dev/$alvo
+[ -b "$D" ] || erro "Disco $D não existe."
+case "$alvo" in nvme*|mmcblk*) P=${D}p ;; *) P=$D ;; esac
+
+instalar() {
+    set -e
+    passo "Apagando o disco $D" 5
+    umount "$P"* 2>/dev/null || true
+    wipefs -a "$D" >>"$LOG" 2>&1
+    sgdisk -Z "$D" >>"$LOG" 2>&1
+    passo "Criando as partes do disco" 10
+    sgdisk -n 1:0:+1M -t 1:EF02 -c 1:bios \
+           -n 2:0:+256M -t 2:EF00 -c 2:DJOS_BOOT \
+           -n 3:0:+6G -t 3:8300 -c 3:DJOS_SISTEMA \
+           -n 4:0:0 -t 4:8300 -c 4:DJOS_DADOS "$D" >>"$LOG" 2>&1
+    partprobe "$D" 2>/dev/null || true
+    udevadm settle
+    sleep 1
+    mkfs.fat -F 32 -n DJOS_BOOT "${P}2" >>"$LOG" 2>&1
+    mkfs.ext4 -q -F -L DJOS_SISTEMA "${P}3" >>"$LOG" 2>&1
+    mkfs.ext4 -q -F -L DJOS_DADOS -m 1 "${P}4" >>"$LOG" 2>&1
+    mkdir -p /mnt/boot /mnt/sistema /mnt/dados
+    mount "${P}2" /mnt/boot
+    mount "${P}3" /mnt/sistema
+    mount "${P}4" /mnt/dados
+
+    passo "Copiando o sistema (versão A)" 20
+    mkdir -p /mnt/sistema/a
+    cp "$MEDIO/live/vmlinuz" "$MEDIO/live/initrd.img" /mnt/sistema/a/
+    passo "Copiando o sistema (pode levar alguns minutos)" 30
+    cp "$MEDIO/live/filesystem.squashfs" /mnt/sistema/a/
+    cat /etc/dj-os-versao > /mnt/sistema/a/versao
+    sync
+
+    passo "Instalando o carregador (BIOS e UEFI)" 80
+    grub-install --target=i386-pc --boot-directory=/mnt/boot/boot "$D" >>"$LOG" 2>&1
+    grub-install --target=x86_64-efi --efi-directory=/mnt/boot --boot-directory=/mnt/boot/boot \
+        --removable --no-nvram >>"$LOG" 2>&1
+    cp /usr/share/dj-os/grub-instalado.cfg /mnt/boot/boot/grub/grub.cfg
+    grub-editenv /mnt/boot/boot/grub/grubenv create
+    grub-editenv /mnt/boot/boot/grub/grubenv set ativo=a
+
+    passo "Preparando a parte das músicas" 95
+    mkdir -p /mnt/dados/dj/musicas
+    chown -R 1000:1000 /mnt/dados/dj
+    sync
+    umount /mnt/boot /mnt/sistema /mnt/dados
+    passo "Pronto" 100
+}
+
+echo "== instalando em $D ($(date))" >>"$LOG"
+if [ -n "$auto" ]; then
+    ( instalar ) || erro "a instalação parou (veja o registro)."
+else
+    ( instalar ) | wt --gauge "Preparando…" 8 70 0
+    [ "${PIPESTATUS[0]}" -eq 0 ] || erro "a instalação parou (veja o registro)."
+fi
+msg "Instalação concluída!\n\nTire o pendrive e aperte Enter: o computador vai reiniciar já no DJ OS."
+[ -n "$auto" ] && { echo "INSTALADO"; poweroff; exit 0; }
+clear
+reboot

@@ -1,0 +1,14 @@
+[Unit]
+Description=DJ OS: dados guardados (músicas, configurações, pareamentos)
+DefaultDependencies=no
+After=local-fs.target systemd-udevd.service
+Before=bluetooth.service NetworkManager.service systemd-user-sessions.service getty@tty1.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/dj-os-dados
+
+[Install]
+WantedBy=multi-user.target

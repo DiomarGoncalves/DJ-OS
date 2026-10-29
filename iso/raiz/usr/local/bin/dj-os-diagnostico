@@ -1,0 +1,10 @@
+#!/bin/sh
+# Mostra o estado do aparelho para diagnóstico (pendrives, som, tela, controladora).
+echo "== versão: $(cat /etc/dj-os-versao 2>/dev/null)"
+echo "== discos e pendrives"; lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT | grep -v loop
+echo "== /media/dj"; for d in /media/dj/*; do [ -e "$d" ] || continue
+    if findmnt -n "$d" >/dev/null; then echo "$d: montado ($(ls "$d" | wc -l) itens)"; else echo "$d: NÃO montado"; fi; done
+echo "== montagem (últimas mensagens)"; journalctl -b --no-pager 2>/dev/null | grep -iE "dj-os-montar|media-dj|ntfs|exfat" | tail -n 8
+echo "== som"; wpctl status 2>/dev/null | sed -n '/Sinks:/,/Sources:/p' | head -8
+echo "== vídeo"; ls /dev/dri 2>/dev/null; grep -o "nomodeset\|djos.video=[a-z]*" /proc/cmdline
+echo "== USB"; lsusb 2>/dev/null | grep -iv "hub"
