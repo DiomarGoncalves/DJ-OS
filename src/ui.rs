@@ -87,6 +87,8 @@ pub struct DjOsApp {
     /// Pads da tela apertados (por deck), para mandar o "soltar".
     pad_touch: [[bool; 8]; 4],
     last_frame: std::time::Instant,
+    /// Até quando mostrar "LIM" (o limitador do master trabalhou há pouco).
+    lim_until: std::time::Instant,
     /// Roda do mouse nas configurações: pixels acumulados até virar um passo.
     wheel: std::cell::Cell<f32>,
     /// Memória por música: último estado de cue/hotcues/loop visto em cada deck.
@@ -145,7 +147,7 @@ impl DjOsApp {
             eprintln!("[djos] placa de vídeo: {renderer}{}", if weak_gpu(&renderer) { " (modo leve automático)" } else { "" });
             app.lock().gpu = renderer;
         }
-        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), pad_touch: [[false; 8]; 4], last_frame: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
+        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), pad_touch: [[false; 8]; 4], last_frame: std::time::Instant::now(), lim_until: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
     }
 
     /// Atalhos para testar sem a controladora.
@@ -1285,6 +1287,13 @@ impl eframe::App for DjOsApp {
             let ar = Rect::from_min_max(pos2(top.center().x + 44.0, top.top()), pos2(mr.left() - 16.0, top.bottom()));
             let col = if audio_dead { RED } else if no_out { ORANGE } else { DIM };
             text(&p.with_clip_rect(ar), pos2(ar.right(), top.center().y), Align2::RIGHT_CENTER, &audio, 12.0, col);
+            // Limitador trabalhando (baixou mais de 0,3 dB): "LIM" por 1 s ao lado do medidor.
+            if snap.master_limit > 0.0 && snap.master_limit < 0.966 {
+                self.lim_until = std::time::Instant::now() + Duration::from_secs(1);
+            }
+            if std::time::Instant::now() < self.lim_until {
+                text(&p, pos2(top.right() - 146.0, top.center().y), Align2::RIGHT_CENTER, "LIM", 12.0, ORANGE);
+            }
             for (i, v) in snap.master_peak.iter().enumerate() {
                 let m = Rect::from_min_size(pos2(top.right() - 140.0, top.top() + 9.0 + i as f32 * 9.0), vec2(126.0, 6.0));
                 p.rect_filled(m, 2.0, BG);

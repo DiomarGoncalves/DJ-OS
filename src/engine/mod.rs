@@ -10,7 +10,7 @@ mod tests;
 use crate::shared::{Cmd, SharedSnap, Snapshot, NUM_DECKS, SAMPLER_SLOTS};
 use crate::track::Track;
 use deck::Deck;
-use dsp::{soft_clip, Smooth};
+use dsp::{soft_clip, Limiter, Smooth};
 use std::sync::Arc;
 
 const BLOCK: usize = 64;
@@ -31,6 +31,8 @@ pub struct Engine {
     master: Smooth,
     hp: Smooth,
     hp_mix: Smooth,
+    lim_master: Limiter,
+    lim_phones: Limiter,
     voices: Vec<Voice>,
     pre: [[[f32; 2]; BLOCK]; NUM_DECKS],
     post: [[[f32; 2]; BLOCK]; NUM_DECKS],
@@ -119,6 +121,8 @@ impl Engine {
             master: Smooth::new(0.98, 0.002),
             hp: Smooth::new(0.72, 0.002),
             hp_mix: Smooth::new(0.0, 0.002),
+            lim_master: Limiter::new(fs),
+            lim_phones: Limiter::new(fs),
             voices: (0..SAMPLER_SLOTS).map(|_| Voice { track: None, pos: 0.0, playing: false }).collect(),
             pre: [[[0.0; 2]; BLOCK]; NUM_DECKS],
             post: [[[0.0; 2]; BLOCK]; NUM_DECKS],
@@ -393,13 +397,13 @@ impl Engine {
                     m[1] += live[i][1] * sg;
                 }
                 let mg = self.master.next();
-                let mo = [soft_clip(m[0] * mg), soft_clip(m[1] * mg)];
+                // Limitador (picos abaixo de -1 dBFS) e, por segurança, o soft clip.
+                let l = self.lim_master.process([m[0] * mg, m[1] * mg]);
+                let mo = [soft_clip(l[0]), soft_clip(l[1])];
                 let mix = self.hp_mix.next();
                 let hg = self.hp.next();
-                let h = [
-                    soft_clip((c[0] * (1.0 - mix) + mo[0] * mix) * hg),
-                    soft_clip((c[1] * (1.0 - mix) + mo[1] * mix) * hg),
-                ];
+                let hl = self.lim_phones.process([(c[0] * (1.0 - mix) + mo[0] * mix) * hg, (c[1] * (1.0 - mix) + mo[1] * mix) * hg]);
+                let h = [soft_clip(hl[0]), soft_clip(hl[1])];
                 // Bluetooth: master (sem o atraso) ou fone; se a fila encher, o quadro é descartado.
                 if let Some(p) = self.bt.as_mut() {
                     let _ = p.push(if self.bt_source == 2 { h } else { mo });
@@ -438,6 +442,7 @@ impl Engine {
             let mut snap = Snapshot {
                 decks: std::array::from_fn(|d| self.decks[d].snapshot()),
                 master_peak: self.master_peak,
+                master_limit: self.lim_master.min_gain,
                 sampler_playing: std::array::from_fn(|i| self.voices[i].playing),
                 sample_rate: self.fs,
             };
@@ -447,6 +452,7 @@ impl Engine {
             }
             *s = snap;
             self.master_peak = [0.0; 2];
+            self.lim_master.min_gain = 1.0;
         }
     }
 }

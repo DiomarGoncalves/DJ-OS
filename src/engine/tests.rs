@@ -2,6 +2,7 @@
 
 use super::deck::Deck;
 use super::fx::{beats_label, step_beats, FxCtx, FxKind, FxSlot, BEATS};
+use super::dsp::Limiter;
 use super::Engine;
 use crate::shared::{Cmd, Snapshot};
 use crate::track::{synthetic, Track};
@@ -626,4 +627,24 @@ fn backspin_segue_o_prato_solto_e_depois_volta_a_tocar() {
     render(&mut d, 48000);
     let speed = (d.pos - p) / 48000.0;
     assert!((speed - 1.0).abs() < 0.02, "voltou à velocidade normal ({speed:.3})");
+}
+
+#[test]
+fn limitador_segura_o_master_sem_distorcer() {
+    // Dois decks no máximo, EQ de grave em cima e master no máximo: soma muito acima de 0 dB.
+    let mut r = rig();
+    for d in 0..2 {
+        r.send(Cmd::Load { deck: d, track: Arc::new(synthetic(30.0, FS, 128.0, 0.9)) });
+        r.send(Cmd::Fader { deck: d, v: 1.0 });
+        r.send(Cmd::Trim { deck: d, v: 1.0 });
+        r.send(Cmd::Eq { deck: d, band: 0, v: 1.0 });
+        r.send(Cmd::PlayToggle(d));
+    }
+    r.send(Cmd::Crossfader(0.5));
+    r.send(Cmd::MasterLevel(1.0));
+    r.run(24000);
+    let p = r.run(48000);
+    assert!(p[0] <= Limiter::THRESHOLD + 0.001 && p[1] <= Limiter::THRESHOLD + 0.001, "master nunca passa de -1 dBFS ({:?})", p);
+    assert!(p[0] > 0.8, "mas continua alto ({:?})", p);
+    assert!(r.snap.lock().master_limit < 0.9, "a tela mostra que está limitando");
 }

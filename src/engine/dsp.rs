@@ -199,3 +199,52 @@ pub fn soft_clip(x: f32) -> f32 {
         x.signum() * (K + (1.0 - K) * ((a - K) / (1.0 - K)).tanh())
     }
 }
+
+/// Limitador com olhar à frente: segura os picos abaixo de `-1 dBFS` baixando o volume só no
+/// instante do pico (sem distorcer a onda) e voltando devagar. Atrasa o som em 64 amostras (1,3 ms).
+pub struct Limiter {
+    buf: [[f32; 2]; Limiter::LOOKAHEAD],
+    need: [f32; Limiter::LOOKAHEAD],
+    idx: usize,
+    gain: f32,
+    release: f32,
+    attack: f32,
+    /// Menor ganho desde a última leitura (para mostrar "LIM" na tela).
+    pub min_gain: f32,
+}
+
+impl Limiter {
+    pub const LOOKAHEAD: usize = 64;
+    pub const THRESHOLD: f32 = 0.89;
+
+    pub fn new(fs: f64) -> Self {
+        Self {
+            buf: [[0.0; 2]; Self::LOOKAHEAD],
+            need: [1.0; Self::LOOKAHEAD],
+            idx: 0,
+            gain: 1.0,
+            // Volta ao normal em ~150 ms; desce em ~1/4 do olhar à frente.
+            release: 1.0 - (-1.0 / (0.15 * fs)).exp() as f32,
+            attack: 1.0 - (-4.0 / Self::LOOKAHEAD as f32).exp(),
+            min_gain: 1.0,
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, x: [f32; 2]) -> [f32; 2] {
+        let peak = x[0].abs().max(x[1].abs());
+        self.need[self.idx] = if peak > Self::THRESHOLD { Self::THRESHOLD / peak } else { 1.0 };
+        let out = self.buf[self.idx];
+        self.buf[self.idx] = x;
+        self.idx = (self.idx + 1) % Self::LOOKAHEAD;
+        // O ganho mira o menor necessário entre as amostras que ainda vão sair.
+        let target = self.need.iter().copied().fold(1.0f32, f32::min);
+        let k = if target < self.gain { self.attack } else { self.release };
+        self.gain += (target - self.gain) * k;
+        // Garantia: a amostra que sai agora nunca passa do limite.
+        let out_peak = out[0].abs().max(out[1].abs());
+        let g = if out_peak * self.gain > Self::THRESHOLD { Self::THRESHOLD / out_peak } else { self.gain };
+        self.min_gain = self.min_gain.min(g);
+        [out[0] * g, out[1] * g]
+    }
+}

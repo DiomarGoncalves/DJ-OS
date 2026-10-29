@@ -10,6 +10,7 @@ para diferenciar firmwares de teste da mesma versão.
 - Configurações em abas (estilo XDJ), com resumo de cada aba e navegação pelo BROWSE.
 - Tela de inicialização com a logo do DJ OS; menu de boot escondido no aparelho instalado (Esc mostra).
 - Botão power desliga com segurança; fechar a tampa ou teclas de suspender não fazem nada.
+- Limitador no master e no fone: o som nunca passa de -1 dBFS (aviso "LIM" na barra de cima).
 
 ### Corrigido
 - Eco na caixa Bluetooth (o master ia duas vezes para ela).

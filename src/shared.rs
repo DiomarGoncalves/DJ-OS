@@ -155,6 +155,8 @@ pub struct DeckSnap {
 pub struct Snapshot {
     pub decks: [DeckSnap; NUM_DECKS],
     pub master_peak: [f32; 2],
+    /// Menor ganho do limitador do master desde a última leitura (1 = não está limitando).
+    pub master_limit: f32,
     pub sampler_playing: [bool; SAMPLER_SLOTS],
     pub sample_rate: f64,
 }
