@@ -184,14 +184,15 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>) {
                 let mut did = 0;
                 for p in paths {
                     match crate::store::peek(&p) {
-                        // Já analisada, com o tom.
-                        Some((_, k)) if k != crate::key::RAW_UNKNOWN => continue,
-                        // Analisada antes do tom existir: calcula só o tom e mantém os cues.
+                        // Já analisada, com o tom e o volume.
+                        Some(k) if k.key != crate::key::RAW_UNKNOWN && k.has_loudness => continue,
+                        // Analisada antes do tom/volume existirem: calcula só o que falta e mantém
+                        // os cues.
                         Some(_) => {
                             if let Some(s) = crate::store::load(&p) {
-                                let cached = (crate::track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key);
+                                let cached = (crate::track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness);
                                 if let Ok(t) = crate::track::load_cached(&p, true, Some(cached)) {
-                                    crate::store::save(&p, &crate::store::Saved { key: t.key, ..s });
+                                    crate::store::save(&p, &crate::store::Saved { key: t.key, loudness: t.loudness, ..s });
                                     counter.fetch_add(1, Ordering::Relaxed);
                                     did += 1;
                                 }

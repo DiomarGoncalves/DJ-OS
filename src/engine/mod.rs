@@ -222,6 +222,7 @@ impl Engine {
             Cmd::Trans { deck, beats, down } if ok(deck) => self.decks[deck].trans(beats, down),
             Cmd::TrackingPad { deck, semis } if ok(deck) => self.decks[deck].tracking_pad(semis),
             Cmd::Trim { deck, v } if ok(deck) => self.decks[deck].set_trim(v),
+            Cmd::AutoGain(on) => self.decks.iter_mut().for_each(|d| d.set_auto_gain(on)),
             Cmd::Eq { deck, band, v } if ok(deck) => self.decks[deck].set_eq(band, v),
             Cmd::Filter { deck, v } if ok(deck) => self.decks[deck].filter_v = v.clamp(0.0, 1.0),
             Cmd::Fader { deck, v } if ok(deck) => self.decks[deck].set_fader(v),

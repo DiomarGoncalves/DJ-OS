@@ -272,15 +272,18 @@ impl Loader {
 fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path) {
     let started = Instant::now();
     let saved = crate::store::load(path);
-    let cached = saved.as_ref().map(|s| (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key));
+    let cached = saved.as_ref().map(|s| (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness));
     match track::load_cached(path, true, cached) {
         Ok(t) => {
             let t = Arc::new(t);
             match &saved {
                 // Primeira vez: guarda a análise para abrir rápido nas próximas.
                 None => crate::store::save(path, &crate::store::Saved::from_track(&t)),
-                // Análise de antes do tom existir: guarda o tom calculado agora (mantém os cues).
-                Some(s) if s.key != t.key => crate::store::save(path, &crate::store::Saved { key: t.key, ..s.clone() }),
+                // Análise de antes do tom/volume existirem: guarda o que foi calculado agora
+                // (mantém os cues).
+                Some(s) if s.key != t.key || s.loudness.is_nan() != t.loudness.is_nan() => {
+                    crate::store::save(path, &crate::store::Saved { key: t.key, loudness: t.loudness, ..s.clone() })
+                }
                 _ => {}
             }
             eprintln!(

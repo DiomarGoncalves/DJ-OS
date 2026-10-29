@@ -39,6 +39,8 @@ pub struct Track {
     pub first_beat: f64,
     /// Tom guardado como em `key::to_raw` (0 = não analisado).
     pub key: u8,
+    /// Volume percebido (LUFS) para o ganho automático: NaN = não analisado, -inf = silêncio.
+    pub loudness: f32,
     /// Identificador único desta carga.
     pub gen: u64,
 }
@@ -274,8 +276,9 @@ pub fn load(path: &Path, analyze: bool) -> Result<Track, String> {
     load_cached(path, analyze, None)
 }
 
-/// Análise já salva: waveform, BPM, primeira batida e tom (0 = tom ainda não analisado).
-pub type Cached = (Waveform, f64, f64, u8);
+/// Análise já salva: waveform, BPM, primeira batida, tom (0 = não analisado) e volume (NaN = não
+/// analisado).
+pub type Cached = (Waveform, f64, f64, u8, f32);
 
 /// Como `load`, mas reaproveita a análise já salva (sem analisar de novo). Se a análise salva
 /// for de antes do tom existir, calcula só o tom.
@@ -289,13 +292,22 @@ pub fn load_cached(path: &Path, analyze: bool, cached: Option<Cached>) -> Result
         artist = fa;
     }
     let frames = data.len() / 2;
-    let (wave, bpm, first_beat, key) = match cached {
-        Some((w, b, f, k)) => (w, b, f, if k == crate::key::RAW_UNKNOWN && analyze { crate::key::to_raw(crate::key::detect(&data, sr)) } else { k }),
+    let measure = |data: &[f32]| crate::loudness::measure(data, sr).unwrap_or(f32::NEG_INFINITY);
+    let (wave, bpm, first_beat, key, loudness) = match cached {
+        // Análise de antes do tom/volume existirem: calcula só o que falta.
+        Some((w, b, f, k, l)) => (
+            w,
+            b,
+            f,
+            if k == crate::key::RAW_UNKNOWN && analyze { crate::key::to_raw(crate::key::detect(&data, sr)) } else { k },
+            if l.is_nan() && analyze { measure(&data) } else { l },
+        ),
         None => {
             let (wave, onset) = waveform(&data, sr);
             let (bpm, first_beat) = if analyze { detect_bpm(&onset, sr) } else { (0.0, 0.0) };
             let key = if analyze { crate::key::to_raw(crate::key::detect(&data, sr)) } else { crate::key::RAW_UNKNOWN };
-            (wave, bpm, first_beat, key)
+            let loudness = if analyze { measure(&data) } else { f32::NAN };
+            (wave, bpm, first_beat, key, loudness)
         }
     };
     Ok(Track {
@@ -309,6 +321,7 @@ pub fn load_cached(path: &Path, analyze: bool, cached: Option<Cached>) -> Result
         bpm,
         first_beat,
         key,
+        loudness,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
     })
 }
@@ -446,6 +459,7 @@ pub fn synthetic(secs: f64, sr: f64, bpm: f64, first_beat_secs: f64) -> Track {
         bpm,
         first_beat: first_beat_secs * sr,
         key: crate::key::RAW_UNKNOWN,
+        loudness: f32::NAN,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
     }
 }

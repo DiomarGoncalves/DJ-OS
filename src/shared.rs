@@ -56,6 +56,8 @@ pub enum Cmd {
     Trans { deck: usize, beats: f64, down: bool },
     TrackingPad { deck: usize, semis: f64 },
     Trim { deck: usize, v: f32 },
+    /// Ganho automático (nivela o volume das músicas) ligado/desligado em todos os decks.
+    AutoGain(bool),
     Eq { deck: usize, band: usize, v: f32 },
     Filter { deck: usize, v: f32 },
     Fader { deck: usize, v: f32 },
@@ -146,6 +148,8 @@ pub struct DeckSnap {
     pub pfl: bool,
     pub fader: f32,
     pub peak: f32,
+    /// Correção do ganho automático aplicada à música carregada (dB).
+    pub auto_gain_db: f32,
     /// O deck está tocando o som do celular (Bluetooth) em vez de uma música.
     pub live: bool,
     pub fx: [FxSnap; FX_SLOTS],

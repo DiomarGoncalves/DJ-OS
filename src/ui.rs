@@ -614,7 +614,9 @@ impl DjOsApp {
         };
         let pitch = (s.rate - 1.0) * 100.0;
         // Sem estado do motor (áudio parado) mostra traços em vez de números sem sentido.
-        let pitch_text = if s.rate > 0.0 { format!("{:+.2}%  ±{:.0}", pitch, s.pitch_range * 100.0) } else { "--".into() };
+        // Ganho automático aplicado (quando corrige mais de 0,1 dB) antes do pitch.
+        let ag = if s.loaded && !s.live && s.auto_gain_db.abs() >= 0.1 { format!("AG {:+.1} dB   ", s.auto_gain_db) } else { String::new() };
+        let pitch_text = if s.rate > 0.0 { format!("{ag}{:+.2}%  ±{:.0}", pitch, s.pitch_range * 100.0) } else { "--".into() };
         mono(
             &p,
             pos2(r.right(), bpm_rect.bottom() + 1.0),

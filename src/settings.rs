@@ -33,6 +33,8 @@ pub struct Settings {
     pub light_mode: usize,
     /// Som do celular por Bluetooth: índice em `phone::ROUTES` (0 = desligado).
     pub phone_in: usize,
+    /// Ganho automático: nivela o volume das músicas.
+    pub auto_gain: bool,
 }
 
 impl Default for Settings {
@@ -50,6 +52,7 @@ impl Default for Settings {
             ambient_duck: true,
             light_mode: 0,
             phone_in: 0,
+            auto_gain: true,
         }
     }
 }
@@ -84,6 +87,7 @@ impl Settings {
                 "abaixar_ambiente" => s.ambient_duck = v == "sim",
                 "modo_leve" => s.light_mode = num(LIGHT_MODES.len()).unwrap_or(0),
                 "celular_bt" => s.phone_in = num(crate::phone::ROUTES.len()).unwrap_or(0),
+                "ganho_automatico" => s.auto_gain = v == "sim",
                 _ => {}
             }
         }
@@ -99,7 +103,7 @@ impl Settings {
         };
         format!(
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
-             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\n",
+             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -110,7 +114,8 @@ impl Settings {
             self.ambient_vol,
             yn(self.ambient_duck),
             self.light_mode,
-            self.phone_in
+            self.phone_in,
+            yn(self.auto_gain)
         )
     }
 
@@ -139,6 +144,7 @@ impl Settings {
         cmd.send(Cmd::AmbientVolume(AMBIENT_VOLS[self.ambient_vol]));
         cmd.send(Cmd::AmbientDuck(self.ambient_duck));
         cmd.send(Cmd::LineInRoute(crate::phone::route_target(self.phone_in)));
+        cmd.send(Cmd::AutoGain(self.auto_gain));
     }
 }
 
@@ -161,6 +167,7 @@ pub enum Action {
     BtScan,
     BtPair(String, String),
     PhoneIn,
+    AutoGain,
     FwSearch,
     FwInstall(std::path::PathBuf),
     Restart,
@@ -262,6 +269,12 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Info(format!("Saída: {}", app.audio_status)));
             v.push(Row::Info("Com a DDJ-REV1 ligada: master nas saídas 1-2, fone nas 3-4.".into()));
             v.push(Row::Info("Sem a REV1: o master vai para a placa de som do computador.".into()));
+            v.push(Row::Item {
+                label: "Ganho automático (nivela o volume das músicas)".into(),
+                value: if s.auto_gain { "LIGADO" } else { "DESLIGADO" }.into(),
+                action: Action::AutoGain,
+            });
+            v.push(Row::Info(format!("Leva cada música a {:.0} LUFS (de {:+.0} a {:+.0} dB); o TRIM ajusta por cima.", crate::loudness::TARGET_LUFS, crate::loudness::MIN_GAIN_DB, crate::loudness::MAX_GAIN_DB)));
         }
         Tab::Bluetooth => {
             v.push(Row::Item { label: "Caixa Bluetooth toca".into(), value: app.bt_mode.name().into(), action: Action::BtMode });
@@ -442,6 +455,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::AmbientVol => a.settings.ambient_vol = next(a.settings.ambient_vol, AMBIENT_VOLS.len()),
         Action::AmbientDuck => a.settings.ambient_duck = !a.settings.ambient_duck,
         Action::LightMode => a.settings.light_mode = next(a.settings.light_mode, LIGHT_MODES.len()),
+        Action::AutoGain => a.settings.auto_gain = !a.settings.auto_gain,
         Action::PhoneIn => {
             a.settings.phone_in = next(a.settings.phone_in, crate::phone::ROUTES.len());
             a.phone_status = if a.settings.phone_in == 0 { "desligando…".into() } else { "ligando o Bluetooth…".into() };
@@ -621,6 +635,7 @@ mod tests {
             ambient_duck: false,
             light_mode: 1,
             phone_in: 3,
+            auto_gain: false,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");
@@ -680,9 +695,9 @@ mod tests {
         close(&mut app);
         open(&mut app);
         assert_eq!(current_tab(&app), Tab::Phone);
-        // A aba ÁUDIO só tem informação: apertar não sai das abas.
+        // Aba ÁUDIO: apertar entra no item do ganho automático.
         select_tab(&mut app, 0);
-        focus_tabs(&mut app, false);
-        assert!(app.settings_ui.as_ref().unwrap().on_tabs);
+        let r = rows(&app);
+        assert!(matches!(&r[selectable(&r)[0]], Row::Item { action: Action::AutoGain, .. }));
     }
 }

@@ -648,3 +648,34 @@ fn limitador_segura_o_master_sem_distorcer() {
     assert!(p[0] > 0.8, "mas continua alto ({:?})", p);
     assert!(r.snap.lock().master_limit < 0.9, "a tela mostra que está limitando");
 }
+
+#[test]
+fn ganho_automatico_nivela_musicas_alta_e_baixa() {
+    // Mesma música, uma "masterizada" 8 dB mais alta: com o ganho automático as duas saem iguais.
+    let mut alta = synthetic(10.0, FS, 128.0, 0.25);
+    let mut baixa = synthetic(10.0, FS, 128.0, 0.25);
+    let g = 10f32.powf(-8.0 / 20.0);
+    baixa.data.iter_mut().for_each(|x| *x *= g);
+    // Volumes como os medidos na análise (dentro da faixa de correção).
+    alta.loudness = -5.0;
+    baixa.loudness = -13.0;
+    let mut d1 = Deck::new(FS);
+    let mut d2 = Deck::new(FS);
+    d1.load(Arc::new(alta));
+    d2.load(Arc::new(baixa));
+    assert!((d2.auto_gain_db() - d1.auto_gain_db() - 8.0).abs() < 0.2, "correções diferem em 8 dB");
+    d1.play_toggle();
+    d2.play_toggle();
+    // Mede depois de a correção assentar (ela entra suave, em ~10 ms).
+    let peak = |d: &mut Deck| {
+        render(d, 4800);
+        render(d, 48000).iter().fold(0.0f32, |a, s| a.max(s[0].abs()))
+    };
+    let (p1, p2) = (peak(&mut d1), peak(&mut d2));
+    assert!((20.0 * (p1 / p2).log10()).abs() < 0.3, "saem no mesmo nível ({p1:.3} vs {p2:.3})");
+    // Desligado: a diferença original volta.
+    d1.set_auto_gain(false);
+    d2.set_auto_gain(false);
+    let (p1, p2) = (peak(&mut d1), peak(&mut d2));
+    assert!((20.0 * (p1 / p2).log10() - 8.0).abs() < 0.3, "sem ganho automático: 8 dB de diferença");
+}

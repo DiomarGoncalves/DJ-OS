@@ -57,9 +57,9 @@ impl TrackEntry {
 
     /// Completa com o BPM e o tom guardados na memória da música (se já analisada).
     fn with_saved(mut self) -> Self {
-        if let Some((bpm, key)) = crate::store::peek(&self.path) {
-            self.bpm = Some(bpm);
-            self.key = crate::key::from_raw(key);
+        if let Some(p) = crate::store::peek(&self.path) {
+            self.bpm = Some(p.bpm);
+            self.key = crate::key::from_raw(p.key);
         }
         self
     }

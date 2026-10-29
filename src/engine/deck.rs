@@ -57,6 +57,9 @@ pub struct Deck {
     bend_ticks: f64,
     // canal do mixer
     trim: Smooth,
+    /// Ganho automático (nivela o volume das músicas pelo LUFS medido na análise).
+    auto_gain_on: bool,
+    auto_gain: Smooth,
     eq: [Smooth; 3],
     pub filter_v: f32,
     filt_amt: Smooth,
@@ -129,6 +132,8 @@ impl Deck {
             bend: 0.0,
             bend_ticks: 0.0,
             trim: Smooth::new(1.0, 0.002),
+            auto_gain_on: true,
+            auto_gain: Smooth::new(1.0, 0.002),
             eq: [Smooth::new(1.0, 0.002); 3],
             filter_v: 0.5,
             filt_amt: Smooth::new(0.0, 0.003),
@@ -161,7 +166,26 @@ impl Deck {
         self.key_semis = 0.0;
         self.scratching = false;
         self.kl.reset();
-        self.track.replace(t)
+        let old = self.track.replace(t);
+        self.update_auto_gain();
+        old
+    }
+
+    /// Correção do ganho automático da música carregada, em dB (0 se desligado ou sem medida).
+    pub fn auto_gain_db(&self) -> f32 {
+        match &self.track {
+            Some(t) if self.auto_gain_on => crate::loudness::gain_db(t.loudness),
+            _ => 0.0,
+        }
+    }
+
+    fn update_auto_gain(&mut self) {
+        self.auto_gain.set(10f32.powf(self.auto_gain_db() / 20.0));
+    }
+
+    pub fn set_auto_gain(&mut self, on: bool) {
+        self.auto_gain_on = on;
+        self.update_auto_gain();
     }
 
     /// Cue, hotcues e loop salvos da música. O deck vai para o cue salvo; o loop fica guardado
@@ -632,7 +656,7 @@ impl Deck {
             };
             self.trans_gate += (open - self.trans_gate) * 0.02;
 
-            let g = self.trim.next() * self.trans_gate;
+            let g = self.trim.next() * self.auto_gain.next() * self.trans_gate;
             let mut x = [l * g, r * g];
             if fx_on {
                 ctx.beat_pos = t.beats_at(self.pos);
@@ -727,6 +751,7 @@ impl Deck {
             pfl: self.pfl,
             fader: self.fader_v,
             peak: self.peak,
+            auto_gain_db: self.auto_gain_db(),
             live: false,
             fx: std::array::from_fn(|i| {
                 let f = &self.fx[i];

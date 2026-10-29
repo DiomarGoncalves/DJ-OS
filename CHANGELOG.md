@@ -13,6 +13,8 @@ para diferenciar firmwares de teste da mesma versão.
 - Limitador no master e no fone: o som nunca passa de -1 dBFS (aviso "LIM" na barra de cima).
 - Tom da música (key) no formato Camelot com cores, no browser e no deck; a análise automática
   completa o tom das músicas já analisadas sem perder os cues.
+- Ganho automático: mede o volume de cada música (LUFS) e nivela em -9 LUFS (de -12 a +6 dB),
+  com opção em CONFIG → ÁUDIO e o valor aplicado no deck ("AG").
 
 ### Corrigido
 - Eco na caixa Bluetooth (o master ia duas vezes para ela).

@@ -9,15 +9,19 @@ use crate::shared::HOTCUES;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-/// DXJ1: formato antigo (sem o tom). DXJ2: igual, com 1 byte de tom logo depois do BPM.
+/// DXJ1: formato antigo (sem o tom). DXJ2: com 1 byte de tom logo depois do BPM. DXJ3: DXJ2 +
+/// volume (LUFS, f32) no fim.
 const MAGIC_V1: &[u8; 4] = b"DXJ1";
-const MAGIC: &[u8; 4] = b"DXJ2";
+const MAGIC_V2: &[u8; 4] = b"DXJ2";
+const MAGIC: &[u8; 4] = b"DXJ3";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Saved {
     pub bpm: f64,
     /// Tom como em `key::to_raw` (0 = ainda não analisado).
     pub key: u8,
+    /// Volume percebido (LUFS): NaN = ainda não analisado.
+    pub loudness: f32,
     pub first_beat: f64,
     pub low: Vec<u8>,
     pub mid: Vec<u8>,
@@ -34,6 +38,7 @@ impl Saved {
         Saved {
             bpm: t.bpm,
             key: t.key,
+            loudness: t.loudness,
             first_beat: t.first_beat,
             low: t.wave.low.clone(),
             mid: t.wave.mid.clone(),
@@ -87,6 +92,7 @@ fn encode(s: &Saved) -> Vec<u8> {
         b.extend_from_slice(&(w.len() as u32).to_le_bytes());
         b.extend_from_slice(w);
     }
+    b.extend_from_slice(&s.loudness.to_le_bytes());
     b
 }
 
@@ -117,11 +123,13 @@ impl Reader<'_> {
 
 fn decode(b: &[u8]) -> Option<Saved> {
     let mut r = Reader { b, i: 0 };
-    let v2 = match r.take(4)? {
-        m if m == MAGIC => true,
-        m if m == MAGIC_V1 => false,
+    let version = match r.take(4)? {
+        m if m == MAGIC => 3,
+        m if m == MAGIC_V2 => 2,
+        m if m == MAGIC_V1 => 1,
         _ => return None,
     };
+    let v2 = version >= 2;
     let bpm = r.f64()?;
     let key = if v2 { r.take(1)?[0] } else { crate::key::RAW_UNKNOWN };
     let first_beat = r.f64()?;
@@ -138,7 +146,8 @@ fn decode(b: &[u8]) -> Option<Saved> {
     if !bpm.is_finite() || low.len() != mid.len() || mid.len() != high.len() {
         return None;
     }
-    Some(Saved { bpm, key, first_beat, low, mid, high, cue, hotcues, loop_: has_loop.then_some((a, z, n)) })
+    let loudness = if version >= 3 { f32::from_le_bytes(r.take(4)?.try_into().ok()?) } else { f32::NAN };
+    Some(Saved { bpm, key, loudness, first_beat, low, mid, high, cue, hotcues, loop_: has_loop.then_some((a, z, n)) })
 }
 
 fn dir() -> PathBuf {
@@ -159,18 +168,26 @@ fn save_to(dir: &Path, track: &Path, s: &Saved) -> std::io::Result<()> {
     std::fs::rename(tmp, dir.join(format!("{k}.dxj")))
 }
 
-/// Só o BPM e o tom salvos (lê 13 bytes), para mostrar na lista sem carregar a waveform.
-pub fn peek(track: &Path) -> Option<(f64, u8)> {
+/// O que já foi analisado de uma música (lê só o começo do arquivo, sem a waveform).
+pub struct Peek {
+    pub bpm: f64,
+    pub key: u8,
+    /// O volume (ganho automático) já foi medido (formato DXJ3).
+    pub has_loudness: bool,
+}
+
+pub fn peek(track: &Path) -> Option<Peek> {
     use std::io::Read;
     let mut f = std::fs::File::open(dir().join(format!("{}.dxj", key(track)?))).ok()?;
     let mut b = [0u8; 13];
     let n = f.read(&mut b).ok()?;
-    if n < 12 || (&b[..4] != MAGIC && &b[..4] != MAGIC_V1) {
+    let m = b.get(..4)?;
+    if n < 12 || (m != MAGIC && m != MAGIC_V2 && m != MAGIC_V1) {
         return None;
     }
     let bpm = f64::from_le_bytes(b[4..12].try_into().ok()?);
-    let k = if &b[..4] == MAGIC && n == 13 { b[12] } else { crate::key::RAW_UNKNOWN };
-    bpm.is_finite().then_some((bpm, k))
+    let key = if m != MAGIC_V1 && n == 13 { b[12] } else { crate::key::RAW_UNKNOWN };
+    bpm.is_finite().then_some(Peek { bpm, key, has_loudness: m == MAGIC })
 }
 
 pub fn load(track: &Path) -> Option<Saved> {
@@ -194,6 +211,7 @@ mod tests {
         Saved {
             bpm: 128.0,
             key: crate::key::to_raw(Some(21)),
+            loudness: -8.5,
             first_beat: 1234.0,
             low: vec![1, 2, 3],
             mid: vec![4, 5, 6],
@@ -211,8 +229,10 @@ mod tests {
         let mut old = encode(&s);
         old[..4].copy_from_slice(MAGIC_V1);
         old.remove(12);
+        old.truncate(old.len() - 4); // sem o volume
         let lido = decode(&old).expect("lê o formato antigo");
         assert_eq!(lido.key, crate::key::RAW_UNKNOWN, "tom ainda não analisado");
+        assert!(lido.loudness.is_nan(), "volume ainda não analisado");
         assert_eq!((lido.bpm, lido.cue, lido.hotcues, lido.loop_), (s.bpm, s.cue, s.hotcues, s.loop_), "cues mantidos");
     }
 
