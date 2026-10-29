@@ -145,7 +145,7 @@ impl AppState {
             samples: vec![None; SAMPLER_SLOTS],
             scratch: vec![None; SAMPLER_SLOTS],
             scratch_saved: vec![None; NUM_DECKS],
-            midi_status: "procurando DDJ-REV1…".into(),
+            midi_status: "procurando controladora…".into(),
             audio_status: String::new(),
         }
     }

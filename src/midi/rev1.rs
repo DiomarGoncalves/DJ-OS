@@ -57,6 +57,26 @@ fn enc_delta(v: u8) -> i32 {
     }
 }
 
+/// A porta MIDI é da DDJ-REV1?
+pub fn matches(port: &str) -> bool {
+    let n = port.to_uppercase();
+    n.contains("REV1") || n.contains("DDJ-REV")
+}
+
+pub fn create(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) -> Box<dyn super::Controller> {
+    Box::new(Rev1::new(app, cmd, snap, loader))
+}
+
+impl super::Controller for Rev1 {
+    fn handle(&mut self, msg: &[u8]) {
+        Rev1::handle(self, msg);
+    }
+
+    fn leds(&self, app: &crate::app::AppState, snap: &Snapshot, blink: bool, out: &mut Vec<(u8, u8, u8)>) {
+        leds(app, snap, blink, out);
+    }
+}
+
 impl Rev1 {
     pub fn new(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) -> Self {
         Self {

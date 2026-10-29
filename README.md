@@ -31,7 +31,8 @@ Requisitos: PC x86-64 (BIOS ou UEFI) com 4 GB de RAM e disco de 16 GB ou mais.
 
 ## Para quem desenvolve
 - Programa em Rust (`src/`): `cargo run --release`. Guia da controladora em
-  [docs/mapeamento-ddj-rev1.md](docs/mapeamento-ddj-rev1.md).
+  [docs/mapeamento-ddj-rev1.md](docs/mapeamento-ddj-rev1.md); para acrescentar outra controladora,
+  [docs/controladoras.md](docs/controladoras.md).
 - ISO e firmware: `iso/construir.sh` (Ubuntu 24.04 mínimo, sem precisar de sudo). Versões e
   lançamento em [docs/versoes.md](docs/versoes.md); testes em
   [docs/desenvolvimento/testes.md](docs/desenvolvimento/testes.md).

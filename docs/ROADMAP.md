@@ -4,9 +4,10 @@ Prioridade agora: o sistema 100% redondo com a DDJ-REV1. Estas ficam anotadas pa
 sistema estiver consolidado.
 
 ## Outras controladoras (DDJ-400, DDJ-FLX4, …)
-- Separar o mapeamento da REV1 (`src/midi/rev1.rs`) num formato de mapeamento por controladora:
-  cada controladora vira um arquivo (mensagem MIDI → ação do sistema), escolhido pelo nome do
-  aparelho USB.
+- ✅ Catálogo de controladoras (`MODELS` em `src/midi/mod.rs`): cada uma é reconhecida pelo nome
+  da porta MIDI e tem o seu mapeamento; as desconhecidas aparecem como "ainda não suportada".
+  Guia em [controladoras.md](controladoras.md).
+- Falta: os mapeamentos em si (DDJ-400, FLX4…), com a lista MIDI de cada uma e alguém para testar.
 - Depois: um assistente de "aprender" (aperte o botão na controladora, escolha a ação na tela)
   para mapear controladoras novas sem programar.
 

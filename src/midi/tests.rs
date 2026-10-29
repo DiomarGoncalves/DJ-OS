@@ -280,3 +280,13 @@ fn leds_refletem_o_estado() {
     assert_eq!(get(0x94, 0x70), Some(0x7F), "FX 1 aceso para o knob central funcionar");
     assert_eq!(get(0x90, 0x1B), Some(0x7F), "modo HOT CUE aceso");
 }
+
+#[test]
+fn reconhece_a_controladora_pelo_nome_da_porta() {
+    let n = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let rev1 = super::detect_names(&n(&["Midi Through:Midi Through Port-0 14:0", "DDJ-REV1:DDJ-REV1 MIDI 1 28:0"]));
+    assert_eq!(rev1.and_then(|r| r.ok()).map(|m| m.name), Some("DDJ-REV1"));
+    let outra = super::detect_names(&n(&["DDJ-400:DDJ-400 MIDI 1 24:0"]));
+    assert_eq!(outra.and_then(|r| r.err()).as_deref(), Some("DDJ-400"), "desconhecida: mostra o nome");
+    assert!(super::detect_names(&n(&["Midi Through:Midi Through Port-0 14:0"])).is_none(), "só portas do sistema");
+}
