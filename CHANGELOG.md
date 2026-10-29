@@ -40,6 +40,9 @@ Primeira versão funcional, em teste com a Pioneer DDJ-REV1.
   completa o tom das músicas já analisadas sem perder os cues.
 - Ganho automático: mede o volume de cada música (LUFS) e nivela em -9 LUFS (de -12 a +6 dB),
   com opção em CONFIG → ÁUDIO e o valor aplicado no deck ("AG").
+- Gravar o set (botão GRAVAR ou Ctrl+R): WAV do master na pasta "records", no aparelho ou direto
+  no pendrive (CONFIG → ÁUDIO → Gravar em); protegido contra falta de luz; copiar do aparelho
+  para o pendrive pelo browser.
 
 ### Correções
 - Eco na caixa Bluetooth (o master ia duas vezes para ela).

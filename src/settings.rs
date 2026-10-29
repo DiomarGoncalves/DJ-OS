@@ -35,6 +35,8 @@ pub struct Settings {
     pub phone_in: usize,
     /// Ganho automático: nivela o volume das músicas.
     pub auto_gain: bool,
+    /// Onde gravar o set: índice em `record::TARGETS`.
+    pub rec_target: usize,
 }
 
 impl Default for Settings {
@@ -53,6 +55,7 @@ impl Default for Settings {
             light_mode: 0,
             phone_in: 0,
             auto_gain: true,
+            rec_target: 0,
         }
     }
 }
@@ -88,6 +91,7 @@ impl Settings {
                 "modo_leve" => s.light_mode = num(LIGHT_MODES.len()).unwrap_or(0),
                 "celular_bt" => s.phone_in = num(crate::phone::ROUTES.len()).unwrap_or(0),
                 "ganho_automatico" => s.auto_gain = v == "sim",
+                "gravar_em" => s.rec_target = num(crate::record::TARGETS.len()).unwrap_or(0),
                 _ => {}
             }
         }
@@ -103,7 +107,7 @@ impl Settings {
         };
         format!(
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
-             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\n",
+             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -115,7 +119,8 @@ impl Settings {
             yn(self.ambient_duck),
             self.light_mode,
             self.phone_in,
-            yn(self.auto_gain)
+            yn(self.auto_gain),
+            self.rec_target
         )
     }
 
@@ -168,6 +173,7 @@ pub enum Action {
     BtPair(String, String),
     PhoneIn,
     AutoGain,
+    RecTarget,
     FwSearch,
     FwInstall(std::path::PathBuf),
     Restart,
@@ -275,6 +281,9 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
                 action: Action::AutoGain,
             });
             v.push(Row::Info(format!("Leva cada música a {:.0} LUFS (de {:+.0} a {:+.0} dB); o TRIM ajusta por cima.", crate::loudness::TARGET_LUFS, crate::loudness::MIN_GAIN_DB, crate::loudness::MAX_GAIN_DB)));
+            v.push(Row::Header("GRAVAR O SET (botão GRAVAR na barra de cima ou Ctrl+R)"));
+            v.push(Row::Item { label: "Gravar em".into(), value: crate::record::TARGETS[s.rec_target].into(), action: Action::RecTarget });
+            v.push(Row::Info("Arquivo WAV na pasta \"records\" (≈11 MB por minuto).".into()));
         }
         Tab::Bluetooth => {
             v.push(Row::Item { label: "Caixa Bluetooth toca".into(), value: app.bt_mode.name().into(), action: Action::BtMode });
@@ -456,6 +465,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::AmbientDuck => a.settings.ambient_duck = !a.settings.ambient_duck,
         Action::LightMode => a.settings.light_mode = next(a.settings.light_mode, LIGHT_MODES.len()),
         Action::AutoGain => a.settings.auto_gain = !a.settings.auto_gain,
+        Action::RecTarget => a.settings.rec_target = next(a.settings.rec_target, crate::record::TARGETS.len()),
         Action::PhoneIn => {
             a.settings.phone_in = next(a.settings.phone_in, crate::phone::ROUTES.len());
             a.phone_status = if a.settings.phone_in == 0 { "desligando…".into() } else { "ligando o Bluetooth…".into() };
@@ -636,6 +646,7 @@ mod tests {
             light_mode: 1,
             phone_in: 3,
             auto_gain: false,
+            rec_target: 2,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

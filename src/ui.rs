@@ -164,6 +164,10 @@ impl DjOsApp {
 
     /// Atalhos para testar sem a controladora.
     fn keyboard(&mut self, ctx: &egui::Context, snap: &Snapshot) {
+        // Ctrl+R: grava / para de gravar o set.
+        if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::R)) {
+            crate::record::toggle(&self.app, &self.cmd, snap.sample_rate);
+        }
         let (side_l, side_r) = {
             let a = self.app.lock();
             (a.side[0], a.side[1])
@@ -387,6 +391,16 @@ impl DjOsApp {
             if let Some(u) = a.search.as_mut() {
                 u.query = q.to_uppercase();
                 u.go_to("ENTER");
+            }
+        }
+        // DJOS_DEMO_GRAVAR=<segundos>: grava o set por esse tempo (teste da gravação).
+        if let Some(secs) = std::env::var("DJOS_DEMO_GRAVAR").ok().and_then(|v| v.parse::<u64>().ok()) {
+            if self.frame == 60 {
+                crate::record::start(&self.app, &self.cmd, self.snap.lock().sample_rate);
+            }
+            let rec_secs = self.app.lock().rec.active.as_ref().map(|(_, t, _)| t.elapsed().as_secs());
+            if rec_secs.is_some_and(|s| s >= secs) {
+                crate::record::stop(&self.app, &self.cmd);
             }
         }
         if self.frame == 30 && std::env::var_os("DJOS_DEMO_CONFIG").is_some() {
@@ -907,12 +921,16 @@ impl DjOsApp {
         // Ações (toque): salvar a pasta no sistema, apagar das músicas internas, andamento da cópia.
         let internal = crate::import::internal_dir();
         let sel = lib.selected_path();
-        let can_import = lib.focus == Focus::Folders && sel.as_ref().is_some_and(|p| !p.starts_with(&internal));
-        let can_delete = sel.as_ref().is_some_and(|p| p.starts_with(&internal) && *p != internal);
+        let recdir = crate::record::dir();
+        // Gravação selecionada: o primeiro botão copia para o pendrive em vez de importar.
+        let is_rec = sel.as_ref().is_some_and(|p| p.starts_with(&recdir) && p.is_file());
+        let can_import = lib.focus == Focus::Folders && sel.as_ref().is_some_and(|p| !p.starts_with(&internal) && !p.starts_with(&recdir));
+        let can_delete = sel.as_ref().is_some_and(|p| (p.starts_with(&internal) && *p != internal) || (p.starts_with(&recdir) && *p != recdir));
+        let first = if is_rec { ("COPIAR P/ PENDRIVE", true, "exportar") } else { ("SALVAR NO SISTEMA", can_import, "importar") };
         let actions = Rect::from_min_max(pos2(folders.left() + 8.0, folders.bottom() - 94.0), folders.max - vec2(8.0, 8.0));
         let bw = (actions.width() - 6.0) / 2.0;
         let mut action: Option<&str> = None;
-        for (k, (label, enabled, act)) in [("SALVAR NO SISTEMA", can_import, "importar"), ("APAGAR", can_delete, "apagar")].into_iter().enumerate() {
+        for (k, (label, enabled, act)) in [first, ("APAGAR", can_delete, "apagar")].into_iter().enumerate() {
             let b = Rect::from_min_size(pos2(actions.left() + k as f32 * (bw + 6.0), actions.top()), vec2(bw, 40.0));
             p.rect_filled(b, 5.0, if enabled { PANEL2 } else { PANEL });
             p.rect_stroke(b, 5.0, Stroke::new(1.0_f32, if enabled { if act == "apagar" { RED } else { ACCENT } } else { LINE }));
@@ -993,6 +1011,11 @@ impl DjOsApp {
                 }
             }
             Some("apagar") => self.app.lock().delete_selected(),
+            Some("exportar") => {
+                if let Some(path) = sel {
+                    crate::record::export(&self.app, path);
+                }
+            }
             _ => {}
         }
     }
@@ -1275,6 +1298,23 @@ impl eframe::App for DjOsApp {
             text(&p, cfg.center(), Align2::CENTER_CENTER, "CONFIG", 12.0, TEXT);
             if ui.interact(cfg, ui.id().with("config"), egui::Sense::click()).clicked() {
                 crate::settings::toggle(&mut self.app.lock());
+            }
+            // Botão de gravar o set: vermelho com o tempo enquanto grava.
+            let recr = Rect::from_min_size(pos2(cfg.right() + 8.0, top.top() + 4.0), vec2(104.0, 26.0));
+            let rec_since = self.app.lock().rec.active.as_ref().map(|(_, t, _)| t.elapsed().as_secs());
+            match rec_since {
+                Some(s) => {
+                    p.rect_filled(recr, 5.0, RED);
+                    let blink = if (self.frame / 30) % 2 == 0 { "●" } else { " " };
+                    mono(&p, recr.center(), Align2::CENTER_CENTER, format!("{blink} {:02}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60), 12.0, TEXT);
+                }
+                None => {
+                    p.rect_filled(recr, 5.0, PANEL2);
+                    text(&p, recr.center(), Align2::CENTER_CENTER, "● GRAVAR", 12.0, TEXT);
+                }
+            }
+            if ui.interact(recr, ui.id().with("gravar"), egui::Sense::click()).clicked() {
+                crate::record::toggle(&self.app, &self.cmd, snap.sample_rate);
             }
             // Botão do Bluetooth: tocar alterna desligado → master → retorno.
             let btr = Rect::from_min_size(pos2(top.left() + 150.0, top.top() + 4.0), vec2(250.0, 26.0));

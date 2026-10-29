@@ -82,6 +82,7 @@ pub struct AppState {
     pub bt_status: String,
     pub phone_status: String,
     pub fw: crate::firmware::FwState,
+    pub rec: crate::record::RecState,
     /// Última aba das configurações (abre nela de novo).
     pub settings_tab: usize,
     /// Nome da placa de vídeo (para o modo leve automático).
@@ -124,6 +125,7 @@ impl AppState {
             bt_status: "BT desligado".into(),
             phone_status: "desligado".into(),
             fw: Default::default(),
+            rec: Default::default(),
             settings_tab: 0,
             gpu: String::new(),
             bt_delay_ms: std::env::var("DJOS_BT_ATRASO_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(settings.bt_delay_ms),
@@ -175,8 +177,9 @@ impl AppState {
     /// Apagar (das músicas internas) em dois toques: o primeiro avisa, o segundo apaga.
     pub fn delete_selected(&mut self) {
         let Some(path) = self.lib.selected_path() else { return };
-        if !path.starts_with(crate::import::internal_dir()) || path == crate::import::internal_dir() {
-            self.toast("Só dá para apagar o que está nas músicas internas");
+        let allowed = [crate::import::internal_dir(), crate::record::dir()].iter().any(|r| path.starts_with(r) && path != *r);
+        if !allowed {
+            self.toast("Só dá para apagar o que está nas músicas internas ou nas gravações");
             return;
         }
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();

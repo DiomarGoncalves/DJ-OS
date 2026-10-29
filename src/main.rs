@@ -17,6 +17,7 @@ mod library;
 mod loudness;
 mod midi;
 mod phone;
+mod record;
 mod pw_out;
 mod search;
 mod store;

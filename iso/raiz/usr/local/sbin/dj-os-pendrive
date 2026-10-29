@@ -1,0 +1,39 @@
+#!/bin/bash
+# Gravações do set no pendrive. Os pendrives ficam montados só leitura no aparelho: esta
+# ferramenta (chamada pelo sudo) libera a escrita só quando o DJ OS precisa.
+#
+#   dj-os-pendrive liberar <pendrive>              escrita liberada (início da gravação no pendrive)
+#   dj-os-pendrive travar <pendrive>               volta a só leitura (fim da gravação)
+#   dj-os-pendrive copiar <gravação> <pendrive>    copia uma gravação do aparelho para "records"
+set -u
+falha() { echo "ERRO $*"; exit 1; }
+drive_ok() {
+    drive=$(realpath -e "${1:-}" 2>/dev/null) || falha "pendrive não encontrado"
+    case "$drive" in /media/dj/*) ;; *) falha "destino precisa ser um pendrive" ;; esac
+    mountpoint -q "$drive" || falha "pendrive não está montado"
+}
+case "${1:-}" in
+liberar)
+    drive_ok "${2:-}"
+    mount -o remount,rw "$drive" 2>/dev/null || falha "este pendrive não aceita gravação (ex.: o do Ventoy)"
+    echo "OK"
+    ;;
+travar)
+    drive_ok "${2:-}"
+    sync
+    mount -o remount,ro "$drive" || falha "não voltou para só leitura"
+    echo "OK"
+    ;;
+copiar)
+    arq=$(realpath -e "${2:-}" 2>/dev/null) || falha "gravação não encontrada"
+    case "$arq" in /home/dj/DJOS/records/*.wav) ;; *) falha "só copia gravações do DJ OS" ;; esac
+    drive_ok "${3:-}"
+    mount -o remount,rw "$drive" 2>/dev/null || falha "este pendrive não aceita gravação (ex.: o do Ventoy)"
+    trap 'sync; mount -o remount,ro "$drive"' EXIT
+    mkdir -p "$drive/records" || falha "não criou a pasta no pendrive"
+    cp "$arq" "$drive/records/" || falha "pendrive cheio ou retirado"
+    sync
+    echo "OK"
+    ;;
+*) sed -n '2,8p' "$0"; exit 1 ;;
+esac

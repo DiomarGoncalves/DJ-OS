@@ -36,7 +36,7 @@ pub fn free_space(path: &Path) -> Option<u64> {
 }
 
 /// Baixa a prioridade da thread atual (para cópia e análise não atrapalharem o áudio).
-fn low_priority() {
+pub fn low_priority() {
     unsafe {
         libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as libc::id_t, 19);
     }
@@ -160,10 +160,14 @@ fn copy_file(from: &Path, to: &Path) -> std::io::Result<()> {
 
 /// Apaga uma música ou pasta, só se estiver dentro das músicas internas.
 pub fn delete_internal(path: &Path) -> Result<(), String> {
-    let root = internal_dir().canonicalize().map_err(|e| e.to_string())?;
     let target = path.canonicalize().map_err(|e| e.to_string())?;
-    if !target.starts_with(&root) || target == root {
-        return Err("só dá para apagar o que está nas músicas internas".into());
+    // Só dentro das músicas internas ou das gravações (nunca a própria pasta, nunca um pendrive).
+    let ok = [internal_dir(), crate::record::dir()]
+        .iter()
+        .filter_map(|r| r.canonicalize().ok())
+        .any(|root| target.starts_with(&root) && target != root);
+    if !ok {
+        return Err("só dá para apagar o que está nas músicas internas ou nas gravações".into());
     }
     if target.is_dir() {
         std::fs::remove_dir_all(&target).map_err(|e| e.to_string())

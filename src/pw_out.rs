@@ -529,8 +529,9 @@ fn open_main(slot: &EngineSlot, sink: Option<&Sink>) -> Result<(Stream, String),
 pub const NO_OUTPUT: &str = "SEM SAÍDA DE SOM · ligue a REV1";
 
 /// Há alguma saída para o master (REV1 ou placa com fio; Bluetooth e celular não contam)?
+/// `DJOS_SEM_SAIDA=1` (testes): finge que não há, e o motor roda no relógio silencioso.
 fn has_output(dump: &[serde_json::Value]) -> bool {
-    pick_main(dump).is_some()
+    std::env::var_os("DJOS_SEM_SAIDA").is_none() && pick_main(dump).is_some()
 }
 
 /// Relógio silencioso: sem nenhuma saída de som, o motor continua rodando no tempo certo (play,
@@ -614,7 +615,7 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
         .spawn(move || loop {
             std::thread::sleep(Duration::from_secs(3));
             let dump = pw_dump();
-            let now = pick_main(&dump);
+            let now = if has_output(&dump) { pick_main(&dump) } else { None };
             let any = now.is_some();
             let changed = match &stream {
                 None => any,

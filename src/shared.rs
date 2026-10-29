@@ -76,6 +76,9 @@ pub enum Cmd {
     /// Liga a fila que leva o áudio para a caixa Bluetooth (a outra ponta fica no fluxo do Bluetooth).
     BtAttach(rtrb::Producer<[f32; 2]>),
     BtDetach,
+    /// Gravação do set: o motor manda o master (depois do limitador) para esta fila.
+    RecAttach(rtrb::Producer<[f32; 2]>),
+    RecDetach,
     /// O que vai para o Bluetooth: 1 = master, 2 = fone (retorno).
     BtSource(u8),
     /// Atraso do master com fio (saídas 1-2), em ms, para alinhar com a caixa Bluetooth.

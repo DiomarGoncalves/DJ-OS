@@ -104,6 +104,6 @@ direita.
 
 ## Teclado do computador (para testar sem a REV1)
 
-B browser · Ctrl+F pesquisa · setas navegam · Tab pastas/músicas · Enter abre pasta · 1-4 carregam ·
+B browser · Ctrl+F pesquisa · Ctrl+R grava o set · setas navegam · Tab pastas/músicas · Enter abre pasta · 1-4 carregam ·
 Z/M play · X/N cue · S/K sync · F1/F5 alavanca · F2-F3/F6-F7 batida · F4/F8 troca efeito · +/- zoom ·
 setas esq/dir crossfader.

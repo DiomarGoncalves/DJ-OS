@@ -38,6 +38,7 @@ pub struct Engine {
     post: [[[f32; 2]; BLOCK]; NUM_DECKS],
     master_peak: [f32; 2],
     bt: Option<rtrb::Producer<[f32; 2]>>,
+    rec: Option<rtrb::Producer<[f32; 2]>>,
     bt_source: u8,
     xf_curve: u8,
     line_in: Option<LineIn>,
@@ -128,6 +129,7 @@ impl Engine {
             post: [[[0.0; 2]; BLOCK]; NUM_DECKS],
             master_peak: [0.0; 2],
             bt: None,
+            rec: None,
             bt_source: 1,
             xf_curve: 0,
             line_in: None,
@@ -262,6 +264,8 @@ impl Engine {
             Cmd::SamplerStop(s) if s < SAMPLER_SLOTS => self.voices[s].playing = false,
             Cmd::BtAttach(p) => self.bt = Some(p),
             Cmd::BtDetach => self.bt = None,
+            Cmd::RecAttach(p) => self.rec = Some(p),
+            Cmd::RecDetach => self.rec = None,
             Cmd::BtSource(s) => self.bt_source = s,
             Cmd::AmbientVolume(v) => self.ambient_vol = v.clamp(0.0, 1.0),
             Cmd::AmbientDuck(on) => self.ambient_duck = on,
@@ -406,6 +410,10 @@ impl Engine {
                 let hl = self.lim_phones.process([(c[0] * (1.0 - mix) + mo[0] * mix) * hg, (c[1] * (1.0 - mix) + mo[1] * mix) * hg]);
                 let h = [soft_clip(hl[0]), soft_clip(hl[1])];
                 // Bluetooth: master (sem o atraso) ou fone; se a fila encher, o quadro é descartado.
+                // Gravação do set: o master como sai (sem o atraso do Bluetooth).
+                if let Some(p) = self.rec.as_mut() {
+                    let _ = p.push(mo);
+                }
                 if let Some(p) = self.bt.as_mut() {
                     let _ = p.push(if self.bt_source == 2 { h } else { mo });
                 }

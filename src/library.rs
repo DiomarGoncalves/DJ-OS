@@ -143,6 +143,11 @@ pub fn sources() -> Vec<(String, PathBuf)> {
     let internal = crate::app::data_dir().join("musicas");
     let _ = std::fs::create_dir_all(&internal);
     out.push(("🏠 Músicas internas".to_string(), internal));
+    // Gravações do set no aparelho (só aparece depois da primeira).
+    let rec = crate::record::dir();
+    if std::fs::read_dir(&rec).is_ok_and(|mut d| d.next().is_some()) {
+        out.push(("🎙 Records (gravações)".to_string(), rec));
+    }
     let user = std::env::var("USER").unwrap_or_default();
     for base in [PathBuf::from("/media").join(&user), PathBuf::from("/run/media").join(&user)] {
         // Só pendrives montados de verdade: uma pasta que sobrou de uma montagem que falhou
@@ -188,7 +193,8 @@ fn scan_index(index: Arc<Mutex<Index>>, roots: Vec<PathBuf>, gen: Arc<AtomicU64>
                         continue;
                     }
                     if p.is_dir() {
-                        if depth < 12 {
+                        // Pastas "records" (gravações do set) ficam fora da pesquisa e da análise.
+                        if depth < 12 && p.file_name().is_none_or(|n| n != "records") {
                             stack.push((p, depth + 1));
                         }
                     } else if is_audio(&p) {
@@ -267,7 +273,11 @@ impl Library {
         self.refresh_tracks();
         let my_gen = self.scan_gen.fetch_add(1, Ordering::Relaxed) + 1;
         self.index.lock().scanning = true;
-        scan_index(self.index.clone(), self.sources_sig.clone(), self.scan_gen.clone(), my_gen);
+        // Gravações ficam fora da pesquisa e da análise automática (um set de horas não pode ser
+        // aberto inteiro na memória só para analisar).
+        let rec = crate::record::dir();
+        let roots = self.sources_sig.iter().filter(|p| **p != rec).cloned().collect();
+        scan_index(self.index.clone(), roots, self.scan_gen.clone(), my_gen);
     }
 
     /// Mostra as músicas da pasta selecionada (ou os resultados, no item da pesquisa).

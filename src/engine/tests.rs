@@ -679,3 +679,25 @@ fn ganho_automatico_nivela_musicas_alta_e_baixa() {
     let (p1, p2) = (peak(&mut d1), peak(&mut d2));
     assert!((20.0 * (p1 / p2).log10() - 8.0).abs() < 0.3, "sem ganho automático: 8 dB de diferença");
 }
+
+#[test]
+fn gravacao_recebe_o_master() {
+    let mut r = rig();
+    let (tx, mut rx) = rtrb::RingBuffer::<[f32; 2]>::new(48000 * 2);
+    r.send(Cmd::Load { deck: 0, track: track(128.0) });
+    r.send(Cmd::Crossfader(0.0));
+    r.send(Cmd::PlayToggle(0));
+    r.send(Cmd::RecAttach(tx));
+    let p = r.run(24064);
+    let mut n = 0;
+    let mut peak = 0.0f32;
+    while let Ok(f) = rx.pop() {
+        n += 1;
+        peak = peak.max(f[0].abs());
+    }
+    assert_eq!(n, 24064, "um quadro gravado por quadro tocado");
+    assert!((peak - p[0]).abs() < 1e-6, "grava o mesmo que sai no master ({peak} vs {})", p[0]);
+    r.send(Cmd::RecDetach);
+    r.run(4096);
+    assert!(rx.pop().is_err(), "parou de gravar");
+}
