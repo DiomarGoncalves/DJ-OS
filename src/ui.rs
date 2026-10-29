@@ -1524,46 +1524,10 @@ impl eframe::App for DjOsApp {
                     self.draw_search(ui, &p, body);
                 }
             } else if !big {
-                // Tela principal estilo XDJ-RR: waveforms grandes com o efeito ao lado; embaixo as
-                // informações e os pads de cada deck. A biblioteca fica só na tela cheia.
-                let info_h = 112.0;
-                let pads_h = 104.0;
-                let fx_w = 300.0;
-                let wave_h = ((body.height() - info_h - pads_h - 3.0 * gap) / 2.0).max(60.0);
+                // Tela principal (src/ui/principal.rs): 2 ou 4 decks, estilo equipamento de cabine.
                 let zoom = ZOOMS[zoom_idx.min(ZOOMS.len() - 1)];
-                for (k, &d) in side.iter().enumerate() {
-                    let y = body.top() + k as f32 * (wave_h + gap);
-                    let wr = Rect::from_min_size(pos2(body.left(), y), vec2(body.width() - fx_w - gap, wave_h));
-                    draw_wave(&p, wr, d, tracks[d].as_deref(), &snap.decks[d], loading[d].as_deref(), zoom);
-                    mono(&p, wr.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, format!("ZOOM {}s", zoom), 11.0, DIM);
-                    if ui.interact(wr, ui.id().with(("onda", k)), egui::Sense::click()).clicked() {
-                        let mut a = self.app.lock();
-                        a.wave_zoom = (a.wave_zoom + 1) % ZOOMS.len();
-                    }
-                    let fr = Rect::from_min_size(pos2(wr.right() + gap, y), vec2(fx_w, wave_h));
-                    self.draw_fx(ui, &p, fr, k, d, &snap.decks[d], fx_pick[k]);
-                }
-                // Ajuste da grade: em cima da waveform do OUTRO deck (a do deck ajustado continua
-                // visível, com as batidas mudando na hora).
-                let editing = self.app.lock().grid_edit.as_ref().map(|g| g.deck);
-                if let Some(d) = editing {
-                    match (side.iter().position(|&x| x == d), tracks[d].clone()) {
-                        (Some(k), Some(t)) => {
-                            let y = body.top() + (1 - k) as f32 * (wave_h + gap);
-                            let gr = Rect::from_min_size(pos2(body.left(), y), vec2(body.width() - fx_w - gap, wave_h));
-                            self.draw_grid_editor(ui, &p, gr, d, &t, &snap.decks[d]);
-                        }
-                        _ => self.app.lock().grid_edit = None,
-                    }
-                }
-                let y = body.top() + 2.0 * (wave_h + gap);
-                let col_w = (body.width() - gap) / 2.0;
-                for (k, &d) in side.iter().enumerate() {
-                    let x = body.left() + k as f32 * (col_w + gap);
-                    self.draw_deck_info(ui, &p, Rect::from_min_size(pos2(x, y), vec2(col_w, info_h)), d, tracks[d].clone(), &snap.decks[d]);
-                    let pr = Rect::from_min_size(pos2(x, y + info_h + gap), vec2(col_w, pads_h));
-                    self.draw_pads(ui, &p, pr, d, &snap.decks[d], &snap, &sampler_names, &scratch_names);
-                }
+                let _ = (&sampler_names, &scratch_names);
+                self.draw_principal(ui, &p, body, &snap, side, &tracks, &loading, fx_pick, zoom);
             } else {
                 self.draw_library(ui, &p, body);
                 if self.app.lock().search.is_some() {

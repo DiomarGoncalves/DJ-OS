@@ -15,7 +15,8 @@
 //! │      │ ▁▂▃▅▃▂▁ música inteira   │      │                             │
 //! └─────────────────────────────────┴────────────────────────────────────┘
 //! ```
-//! Com 4 decks: as 4 waveforms empilhadas e os 4 painéis embaixo (2 x 2), sem a faixa de cues.
+//! Com 4 decks (padrão): em cima continuam as 2 waveforms dos decks da frente; embaixo, os 4
+//! painéis (2 x 2), compactos.
 
 use super::{fmt_time, key_badge, light, DjOsApp, ZOOMS};
 use crate::engine::fx::{beats_label, step_beats, FxKind};
@@ -139,12 +140,14 @@ impl DjOsApp {
     ) {
         let four = self.app.lock().settings.four_decks;
         p.rect_filled(body.expand(8.0), 0.0, K_BG);
-        let shown: Vec<usize> = if four { vec![0, 1, 2, 3] } else { side.to_vec() };
+        // Em cima, sempre os 2 decks da frente (os que a controladora está comandando).
+        let shown: Vec<usize> = side.to_vec();
         let gap = 4.0;
         let card_w = 176.0;
         let fx_w = 236.0;
-        let panel_h = if four { 2.0 * 104.0 + gap } else { 150.0 };
-        let cues_h = if four { 0.0 } else { 54.0 };
+        let ph = if four { 98.0 } else { 150.0 };
+        let panel_h = if four { 2.0 * ph + gap } else { ph };
+        let cues_h = 54.0;
         let waves = Rect::from_min_max(body.min, pos2(body.right(), body.bottom() - panel_h - cues_h - 2.0 * gap));
 
         // Coluna da esquerda (um cartão por deck) e waveforms.
@@ -156,7 +159,7 @@ impl DjOsApp {
             let card = Rect::from_min_size(pos2(waves.left(), y), vec2(card_w, row_h));
             self.draw_card(p, card, d, tracks[d].as_deref(), &snap.decks[d], side.contains(&d));
             let wr = Rect::from_min_size(pos2(wave_area.left(), y), vec2(wave_area.width(), row_h));
-            draw_wave_pro(p, wr, d, tracks[d].as_deref(), &snap.decks[d], loading[d].as_deref(), zoom, !four);
+            draw_wave_pro(p, wr, d, tracks[d].as_deref(), &snap.decks[d], loading[d].as_deref(), zoom, true);
             if ui.interact(wr, ui.id().with(("onda", d)), egui::Sense::click()).clicked() {
                 let mut a = self.app.lock();
                 a.wave_zoom = (a.wave_zoom + 1) % ZOOMS.len();
@@ -171,21 +174,19 @@ impl DjOsApp {
             draw_fx_pro(p, fr, d, &snap.decks[d], fx_pick[k]);
         }
 
-        // Faixa dos hot cues (só com 2 decks).
+        // Faixa dos hot cues dos 2 decks da frente.
         let col_w = (body.width() - gap) / 2.0;
-        if !four {
-            let y = waves.bottom() + gap;
-            for (k, &d) in side.iter().enumerate() {
-                let r = Rect::from_min_size(pos2(body.left() + k as f32 * (col_w + gap), y), vec2(col_w, cues_h));
-                draw_cue_strip(p, r, &snap.decks[d], tracks[d].as_deref());
-            }
+        let y = waves.bottom() + gap;
+        for (k, &d) in side.iter().enumerate() {
+            let r = Rect::from_min_size(pos2(body.left() + k as f32 * (col_w + gap), y), vec2(col_w, cues_h));
+            draw_cue_strip(p, r, &snap.decks[d], tracks[d].as_deref());
         }
 
-        // Painéis dos decks embaixo.
+        // Painéis dos decks embaixo: os 4 (1 e 2 em cima, 3 e 4 embaixo) ou só os 2 da frente.
         let py = body.bottom() - panel_h;
-        let ph = if four { 104.0 } else { panel_h };
-        for (k, &d) in shown.iter().enumerate() {
-            let (cx, cy) = if four { ((k % 2) as f32, (k / 2) as f32) } else { (k as f32, 0.0) };
+        let panels: Vec<usize> = if four { vec![0, 1, 2, 3] } else { side.to_vec() };
+        for (k, &d) in panels.iter().enumerate() {
+            let (cx, cy) = ((k % 2) as f32, (k / 2) as f32);
             let r = Rect::from_min_size(pos2(body.left() + cx * (col_w + gap), py + cy * (ph + gap)), vec2(col_w, ph));
             self.draw_deck_panel(ui, p, r, d, tracks[d].clone(), &snap.decks[d], four, side.contains(&d));
         }
@@ -197,8 +198,7 @@ impl DjOsApp {
                 (Some(k), Some(t)) => {
                     let other = if shown.len() > 1 { (k + 1) % shown.len() } else { k };
                     let y = waves.top() + other as f32 * (row_h + gap);
-                    let rows = if four { 2.0 } else { 1.0 };
-                    let gr = Rect::from_min_size(pos2(wave_area.left(), y.min(waves.bottom() - rows * row_h)), vec2(wave_area.width(), (row_h * rows).max(170.0)));
+                    let gr = Rect::from_min_size(pos2(wave_area.left(), y), vec2(wave_area.width(), row_h.max(170.0)));
                     self.draw_grid_editor(ui, p, gr, d, &t, &snap.decks[d]);
                 }
                 _ => self.app.lock().grid_edit = None,
@@ -294,7 +294,9 @@ impl DjOsApp {
         }
 
         // BPM (tocar abre o ajuste da grade).
-        let bpm_box = Rect::from_min_size(pos2(r.right() - 112.0, r.top() + 34.0), vec2(104.0, if compact { 44.0 } else { 58.0 }));
+        // Compacto (4 decks): o BPM desce até o pé do painel e a mini-onda fica à esquerda dele.
+        let bpm_h = if compact { r.height() - 42.0 } else { 58.0 };
+        let bpm_box = Rect::from_min_size(pos2(r.right() - 112.0, r.top() + 34.0), vec2(104.0, bpm_h));
         p.rect_stroke(bpm_box, 2.0, Stroke::new(1.5_f32, if s.sync_ok && s.loaded { K_GREEN } else { K_TEXT }));
         tr(p, bpm_box.left_top() + vec2(5.0, 2.0), Align2::LEFT_TOP, "BPM", 10.0, K_DIM);
         let bpm_txt = if s.loaded && s.bpm > 0.0 { format!("{:.1}", s.bpm) } else { "--.-".into() };
@@ -308,7 +310,7 @@ impl DjOsApp {
         // Tempo restante e decorrido.
         let ty = r.top() + 34.0;
         tr(p, pos2(x0, ty), Align2::LEFT_TOP, "RESTANTE", 10.0, K_DIM);
-        let big = if compact { 30.0 } else { 40.0 };
+        let big = if compact { 24.0 } else { 40.0 };
         let tt = tb(p, pos2(x0, ty + 8.0), Align2::LEFT_TOP, if s.live { "AO VIVO".into() } else { remain_text(s) }, big, K_TEXT);
         if !compact && s.sr > 0.0 && !s.live {
             tr(p, pos2(tt.right() + 8.0, tt.bottom() - 8.0), Align2::LEFT_BOTTOM, fmt_time(s.pos / s.sr), 13.0, K_DIM);
@@ -322,13 +324,14 @@ impl DjOsApp {
         tb(p, range.center(), Align2::CENTER_CENTER, format!("±{:.0}", s.pitch_range * 100.0), 10.0, if s.vinyl { K_TEXT } else { K_BG });
         let ptxt = if s.rate > 0.0 { format!("{:+.2}%", pitch) } else { "--".into() };
         tb(p, pos2(px, ty + 14.0), Align2::LEFT_TOP, ptxt, if compact { 18.0 } else { 22.0 }, if pitch.abs() < 0.005 { K_TEXT } else { K_ORANGE });
-        if s.auto_gain_db.abs() >= 0.1 && s.loaded && !s.live {
+        if !compact && s.auto_gain_db.abs() >= 0.1 && s.loaded && !s.live {
             tr(p, pos2(px, ty + if compact { 34.0 } else { 40.0 }), Align2::LEFT_TOP, format!("AG {:+.1} dB", s.auto_gain_db), 11.0, K_DIM);
         }
 
         // Música inteira (mini-onda) com o que já tocou, cues e posição.
-        let oh = if compact { 18.0 } else { 30.0 };
-        let ov = Rect::from_min_max(pos2(x0, r.bottom() - oh - 8.0), pos2(r.right() - 8.0, r.bottom() - 8.0));
+        let oh = if compact { 16.0 } else { 30.0 };
+        let ov_right = if compact { bpm_box.left() - 8.0 } else { r.right() - 8.0 };
+        let ov = Rect::from_min_max(pos2(x0, r.bottom() - oh - 8.0), pos2(ov_right, r.bottom() - 8.0));
         p.rect_filled(ov, 0.0, K_BG);
         if let Some(t) = &t {
             let width = ov.width().max(1.0) as usize;
@@ -341,8 +344,8 @@ impl DjOsApp {
                 let fx = ov.left() + x as f32;
                 let played = (x as f32) < frac_played * width as f32;
                 let dim = if played { 0.35 } else { 1.0 };
-                for (v, col) in [(c[0], pal[0]), (c[1], pal[1]), (c[2], pal[2])] {
-                    let a = v as f32 / 255.0 * (oh - 4.0);
+                for (v, col, scale) in [(c[0], pal[0], 1.0f32), (c[1], pal[1], 0.46), (c[2], pal[2], 0.28)] {
+                    let a = (v as f32 / 255.0).powf(0.75) * scale * (oh - 4.0);
                     if a > 0.5 {
                         mesh.add_colored_rect(Rect::from_min_max(pos2(fx, mid - a), pos2(fx + 1.0, mid)), col.gamma_multiply(dim));
                     }
@@ -418,8 +421,9 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
                 h = h.max(t.wave.high[i]);
             }
             let dim = if ts < pos_s { 0.55 } else { 1.0 };
-            for (k, (v, scale)) in [(l, 1.0f32), (m, 0.78), (h, 0.5)].into_iter().enumerate().take(layers) {
-                let a = (v as f32 / 255.0 * scale * gains[k]).min(1.0) * hh;
+            // Grave por fora, médio no meio, agudo no centro (a curva realça o que é baixo).
+            for (k, (v, scale)) in [(l, 1.0f32), (m, 0.46), (h, 0.28)].into_iter().enumerate().take(layers) {
+                let a = ((v as f32 / 255.0).powf(0.75) * scale * gains[k]).min(1.0) * hh;
                 if a > 0.5 {
                     mesh.add_colored_rect(Rect::from_min_max(pos2(x, mid - a), pos2(x + step, mid + a)), pal[k].gamma_multiply(dim));
                 }

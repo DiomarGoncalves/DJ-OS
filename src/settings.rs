@@ -58,7 +58,7 @@ impl Default for Settings {
             phone_in: 0,
             auto_gain: true,
             rec_target: 0,
-            four_decks: false,
+            four_decks: true,
         }
     }
 }
