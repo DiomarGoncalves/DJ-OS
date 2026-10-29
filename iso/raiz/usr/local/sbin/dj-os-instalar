@@ -167,9 +167,16 @@ instalar() {
     cat /etc/dj-os-versao > /mnt/sistema/a/versao
     sync
     passo "Conferindo o que foi gravado no disco" 75
+    # Lê de volta do disco de verdade: sem limpar a memória, a conferência leria a cópia que ainda
+    # está na RAM, e um disco com defeito (aceita a gravação e devolve outra coisa) passaria.
+    sync
+    echo 3 > /proc/sys/vm/drop_caches
     if [ -f "$MEDIO/live/SHA256SUMS" ]; then
-        (cd /mnt/sistema/a && sha256sum --quiet -c "$MEDIO/live/SHA256SUMS") >>"$LOG" 2>&1 || { echo "CÓPIA ESTRAGADA" >>"$LOG"; exit 4; }
+        (cd /mnt/sistema/a && sha256sum -c "$MEDIO/live/SHA256SUMS") >>"$LOG" 2>&1 || { echo "CÓPIA ESTRAGADA" >>"$LOG"; exit 4; }
+        # Para o boot conferir o kernel se não conseguir ligar (mostra na tela o que estragou).
+        grep -v filesystem.squashfs "$MEDIO/live/SHA256SUMS" > /mnt/sistema/a/boot.sha256
     fi
+    dmesg | grep -i -e "i/o error" -e "ata.*error" -e "nvme.*error" -e "mmc.*error" | tail -n 20 >>"$LOG"
 
     passo "Instalando o carregador (BIOS e UEFI)" 80
     grub-install --target=i386-pc --boot-directory=/mnt/boot/boot "$D" >>"$LOG" 2>&1
@@ -197,9 +204,29 @@ fi
 case $rc in
     0) ;;
     3) erro "A ISO no pendrive está estragada (a cópia não chegou inteira).\nNada foi apagado. Copie a ISO de novo para o pendrive e use 'Remover com segurança' antes de tirar." ;;
-    4) erro "O disco não gravou o sistema direito (disco com defeito?).\nTente de novo ou use outro disco." ;;
+    4) erro "O disco interno gravou o sistema ERRADO: escrevemos uma coisa e, lendo de volta,\nveio outra. Sinal de disco com defeito.\nTente de novo; se repetir, o disco precisa ser trocado." ;;
     *) erro "A instalação parou no passo:\n  $(cat /run/dj-os-passo 2>/dev/null)\n$(grep '^FALHOU' "$LOG" | tail -n 1)" ;;
 esac
+# Outro disco com um DJ OS antigo: o computador pode continuar ligando por ele (e ele pode estar
+# estragado). Oferece desativar: apaga só o boot e o sistema antigos; as músicas daquele disco ficam.
+if [ -z "$auto" ]; then
+    for d in $(lsblk -dn -r -o NAME,TYPE | awk '$2=="disk"{print $1}'); do
+        [ "$d" = "$alvo" ] && continue
+        case "$origem" in *" $d "*) continue ;; esac
+        lsblk -nr -o LABEL "/dev/$d" | grep -qx -e DJOS_BOOT -e DJOS_SISTEMA || continue
+        info=$(lsblk -dn -o SIZE,MODEL "/dev/$d" | sed 's/ *$//')
+        echo "DJ OS antigo em $d ($info)" >>"$LOG"
+        wt --yesno "Achei OUTRO DJ OS instalado no disco $d ($info).\n\nO computador pode continuar ligando por ele em vez do novo.\n\nDesativar o DJ OS antigo desse disco?\n(apaga só o boot e o sistema antigos; as músicas desse disco ficam)" 16 74 || continue
+        for p in $(lsblk -nr -o PATH,LABEL "/dev/$d" | awk '$2=="DJOS_BOOT" || $2=="DJOS_SISTEMA" {print $1}'); do
+            umount "$p" 2>/dev/null
+            wipefs -a "$p" >>"$LOG" 2>&1
+        done
+        # Código de boot da BIOS antiga (os primeiros 440 bytes); a tabela de partições fica.
+        dd if=/dev/zero of="/dev/$d" bs=440 count=1 conv=notrunc 2>>"$LOG"
+        sync
+        echo "DJ OS antigo em $d desativado" >>"$LOG"
+    done
+fi
 msg "Instalação concluída!\n\nTire o pendrive e aperte Enter: o computador vai reiniciar já no DJ OS."
 [ -n "$auto" ] && { echo "INSTALADO"; poweroff; exit 0; }
 clear

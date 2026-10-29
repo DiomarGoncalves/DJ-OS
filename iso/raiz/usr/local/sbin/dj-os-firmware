@@ -22,9 +22,16 @@ outro() { [ "$1" = a ] && echo b || echo a; }
 diga() { echo "$*"; }
 falha() { echo "ERRO $*"; exit 1; }
 
+# Parte BOOT do mesmo disco do sistema em uso (não a de outro disco com DJ OS).
+parte_boot() {
+    local disco
+    disco=$(lsblk -no PKNAME "$(findmnt -n -o SOURCE "$SIS")" 2>/dev/null | head -1)
+    [ -n "$disco" ] && lsblk -nr -o PATH,LABEL "/dev/$disco" | awk '$2=="DJOS_BOOT" {print $1; exit}'
+}
+
 grubenv() { # grubenv <args do grub-editenv>
     mkdir -p "$BOOT"
-    mountpoint -q "$BOOT" || mount /dev/disk/by-label/DJOS_BOOT "$BOOT" || return 1
+    mountpoint -q "$BOOT" || mount "$(parte_boot)" "$BOOT" || return 1
     grub-editenv "$BOOT/boot/grub/grubenv" "$@"
     local rc=$?
     umount "$BOOT"
@@ -79,12 +86,17 @@ atualizar)
     done
     wait $pid || falha "não consegui gravar (pendrive retirado ou disco cheio?)"
     diga "PASSO conferindo o que foi gravado"
+    # Lê do disco de verdade, não da cópia que ficou na memória.
+    sync
+    echo 3 > /proc/sys/vm/drop_caches
     for f in $ARQUIVOS; do
         esperado=$(sed -n "s/^$f \([0-9a-f]*\)$/\1/p" "$tmp/manifesto")
         lido=$(sha256sum "$SIS/$destino.novo/$f" | cut -d' ' -f1)
         [ -n "$esperado" ] && [ "$esperado" = "$lido" ] || falha "$f veio diferente do assinado"
     done
     echo "$versao" > "$SIS/$destino.novo/versao"
+    # Para o boot conferir o kernel se não conseguir ligar.
+    sed -n 's/^\(vmlinuz\|initrd\.img\) \([0-9a-f]*\)$/\2  \1/p' "$tmp/manifesto" > "$SIS/$destino.novo/boot.sha256"
     sync
     rm -rf "$SIS/$destino"
     mv "$SIS/$destino.novo" "$SIS/$destino"
@@ -96,7 +108,7 @@ atualizar)
 confirmar)
     [ -n "$slot" ] || exit 0
     mkdir -p "$BOOT"
-    mount /dev/disk/by-label/DJOS_BOOT "$BOOT" 2>/dev/null || exit 0
+    mount "$(parte_boot)" "$BOOT" 2>/dev/null || exit 0
     testando=$(grub-editenv "$BOOT/boot/grub/grubenv" list | sed -n 's/^testando=//p')
     # Este boot chegou até o DJ OS aberto: o próximo pode esconder o menu de novo.
     grub-editenv "$BOOT/boot/grub/grubenv" set boot_ok=1

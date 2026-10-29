@@ -4,8 +4,12 @@
 # ao original a cada boot; só o que está aqui é guardado.
 # Sem a parte DADOS (testando pela ISO), não faz nada: tudo fica na memória até desligar.
 udevadm settle -t 5 2>/dev/null
-dev=/dev/disk/by-label/DJOS_DADOS
-[ -e "$dev" ] || { echo "sem DJOS_DADOS: modo de teste"; exit 0; }
+# A parte DADOS do mesmo disco do sistema que ligou (se a máquina tiver outro disco com DJ OS,
+# não mistura). Ligando pela ISO o disco é o pendrive, que não tem DADOS.
+disco=$(lsblk -no PKNAME "$(findmnt -n -o SOURCE /run/live/medium)" 2>/dev/null | head -1)
+dev=
+[ -n "$disco" ] && dev=$(lsblk -nr -o PATH,LABEL "/dev/$disco" | awk '$2=="DJOS_DADOS" {print $1; exit}')
+[ -n "$dev" ] || { echo "sem DJOS_DADOS: modo de teste"; exit 0; }
 mkdir -p /dados
 mount -o noatime "$dev" /dados || exit 1
 liga() { # liga <pasta em /dados> <onde aparece> <dono>
