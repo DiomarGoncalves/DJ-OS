@@ -37,6 +37,8 @@ pub struct Settings {
     pub auto_gain: bool,
     /// Onde gravar o set: índice em `record::TARGETS`.
     pub rec_target: usize,
+    /// Tela principal com os 4 decks (senão, os 2 da frente).
+    pub four_decks: bool,
 }
 
 impl Default for Settings {
@@ -56,6 +58,7 @@ impl Default for Settings {
             phone_in: 0,
             auto_gain: true,
             rec_target: 0,
+            four_decks: false,
         }
     }
 }
@@ -92,6 +95,7 @@ impl Settings {
                 "celular_bt" => s.phone_in = num(crate::phone::ROUTES.len()).unwrap_or(0),
                 "ganho_automatico" => s.auto_gain = v == "sim",
                 "gravar_em" => s.rec_target = num(crate::record::TARGETS.len()).unwrap_or(0),
+                "quatro_decks" => s.four_decks = v == "sim",
                 _ => {}
             }
         }
@@ -107,7 +111,7 @@ impl Settings {
         };
         format!(
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
-             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\n",
+             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -120,7 +124,8 @@ impl Settings {
             self.light_mode,
             self.phone_in,
             yn(self.auto_gain),
-            self.rec_target
+            self.rec_target,
+            yn(self.four_decks)
         )
     }
 
@@ -647,6 +652,7 @@ mod tests {
             phone_in: 3,
             auto_gain: false,
             rec_target: 2,
+            four_decks: true,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

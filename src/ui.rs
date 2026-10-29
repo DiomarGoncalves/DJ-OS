@@ -1,6 +1,8 @@
 //! Tela do sistema no estilo XDJ: waveforms empilhadas, informações dos decks e biblioteca.
 //! Pensada para 1366x768 e operada pela controladora; o teclado serve para testes.
 
+mod principal;
+
 use crate::app::{Loader, SharedApp};
 use crate::engine::fx::{beats_label, step_beats, FxKind};
 use crate::library::Focus;
@@ -36,7 +38,7 @@ pub fn weak_gpu(renderer: &str) -> bool {
 }
 
 /// Paleta da waveform escolhida nas configurações (graves, médios, agudos).
-static PALETTE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub(crate) static PALETTE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 fn wave_colors() -> [Color32; 3] {
     match PALETTE.load(std::sync::atomic::Ordering::Relaxed) {
@@ -158,6 +160,7 @@ impl DjOsApp {
         trash: rtrb::Consumer<Arc<Track>>,
     ) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        principal::install_fonts(&cc.egui_ctx);
         if let Some(gl) = cc.gl.as_ref() {
             use eframe::glow::HasContext;
             let renderer = unsafe { gl.get_parameter_string(eframe::glow::RENDERER) };

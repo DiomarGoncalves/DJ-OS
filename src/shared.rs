@@ -153,6 +153,9 @@ pub struct DeckSnap {
     pub peak: f32,
     /// Correção do ganho automático aplicada à música carregada (dB).
     pub auto_gain_db: f32,
+    /// Ganho atual do EQ (grave, médio, agudo) e do TRIM, para a waveform reagir aos knobs.
+    pub eq: [f32; 3],
+    pub trim: f32,
     /// O deck está tocando o som do celular (Bluetooth) em vez de uma música.
     pub live: bool,
     pub fx: [FxSnap; FX_SLOTS],

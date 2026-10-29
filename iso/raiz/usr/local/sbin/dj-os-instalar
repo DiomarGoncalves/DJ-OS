@@ -99,7 +99,7 @@ instalar() {
         --removable --no-nvram >>"$LOG" 2>&1
     cp /usr/share/dj-os/grub-instalado.cfg /mnt/boot/boot/grub/grub.cfg
     grub-editenv /mnt/boot/boot/grub/grubenv create
-    grub-editenv /mnt/boot/boot/grub/grubenv set ativo=a
+    grub-editenv /mnt/boot/boot/grub/grubenv set ativo=a boot_ok=1
 
     passo "Preparando a parte das músicas" 95
     mkdir -p /mnt/dados/dj/musicas

@@ -98,6 +98,8 @@ confirmar)
     mkdir -p "$BOOT"
     mount /dev/disk/by-label/DJOS_BOOT "$BOOT" 2>/dev/null || exit 0
     testando=$(grub-editenv "$BOOT/boot/grub/grubenv" list | sed -n 's/^testando=//p')
+    # Este boot chegou até o DJ OS aberto: o próximo pode esconder o menu de novo.
+    grub-editenv "$BOOT/boot/grub/grubenv" set boot_ok=1
     umount "$BOOT"
     [ -n "$testando" ] || exit 0
     if [ "$testando" = "$slot" ]; then

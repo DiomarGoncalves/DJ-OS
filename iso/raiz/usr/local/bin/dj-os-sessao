@@ -12,6 +12,9 @@ LOG="$HOME/DJOS/sessao.log"
 # Modo de segurança: sem aceleração (só a tela básica).
 grep -q "djos.video=basico" /proc/cmdline && export WLR_RENDERER=pixman LIBGL_ALWAYS_SOFTWARE=1
 falhas=0
+# Diagnóstico (opção do menu de boot): mostra o problema já na primeira falha.
+limite=4
+grep -q "djos.diagnostico" /proc/cmdline && limite=1
 while true; do
     inicio=$(date +%s)
     # -d: o cage cuida das bordas (o programa não desenha barra de título).
@@ -27,7 +30,7 @@ while true; do
     if [ "$falhas" -ge 2 ] && [ -z "$WLR_RENDERER" ]; then
         export WLR_RENDERER=pixman LIBGL_ALWAYS_SOFTWARE=1 WLR_NO_HARDWARE_CURSORS=1
     fi
-    if [ "$falhas" -ge 4 ]; then
+    if [ "$falhas" -ge "$limite" ]; then
         clear
         echo "DJ OS: a tela nao abriu."
         if [ -e /dev/dri/card0 ]; then

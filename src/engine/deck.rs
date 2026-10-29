@@ -752,6 +752,8 @@ impl Deck {
             fader: self.fader_v,
             peak: self.peak,
             auto_gain_db: self.auto_gain_db(),
+            eq: [self.eq[0].cur, self.eq[1].cur, self.eq[2].cur],
+            trim: self.trim.cur,
             live: false,
             fx: std::array::from_fn(|i| {
                 let f = &self.fx[i];
