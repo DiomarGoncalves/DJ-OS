@@ -1,0 +1,15 @@
+[Unit]
+Description=DJ OS: registros na parte VTOYEFI do Ventoy (ligando pela ISO)
+# Só ligando pela ISO (o sistema instalado tem djos.slot no boot).
+ConditionKernelCommandLine=!djos.slot
+After=local-fs.target systemd-udev-settle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/dj-os-logs-ventoy
+ExecStop=/usr/local/sbin/dj-os-logs-ventoy final
+TimeoutStopSec=20
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

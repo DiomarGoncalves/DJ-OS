@@ -1,0 +1,79 @@
+#!/bin/bash
+# Ligando pela ISO no Ventoy: guarda os registros sozinho no próprio Ventoy (pasta dj-os-logs),
+# para levar ao PC e descobrir o que deu errado. Tenta a parte "Ventoy" (onde ficam as ISOs);
+# normalmente ela fica presa enquanto a ISO roda, e aí grava na parte pequena (VTOYEFI).
+#
+#   dj-os-logs-ventoy           no começo: máquina e DJ OS instalado; depois atualiza a cada 30 s
+#   dj-os-logs-ventoy final     última cópia (ao desligar)
+#
+# Cada boot tem a sua pasta (data, hora e o modo). A VTOYEFI é pequena (~4 MB livres): guarda só
+# o que é texto, compactado, e apaga os mais antigos passando de 1,5 MB.
+set -u
+. /usr/local/lib/dj-os/pendrive.sh
+LIMITE_KB=1500
+grande=$(lsblk -nr -o PATH,LABEL,FSTYPE | awk '$2=="Ventoy" && $3~/^(exfat|ntfs|vfat)$/ {print $1":"$3; exit}')
+pequena=$(lsblk -nr -o PATH,LABEL | awk '$2=="VTOYEFI" {print $1; exit}')
+[ -n "$grande$pequena" ] || exit 0   # não ligou pelo Ventoy
+modo=testar
+for m in instalar registros diagnostico; do grep -q "djos.$m" /proc/cmdline && modo=$m; done
+T=/run/dj-os-logs
+mkdir -p "$T"
+[ -f "$T/nome" ] || date "+%Y%m%d-%H%M%S-$modo" >"$T/nome"
+nome=$(cat "$T/nome")
+
+# Grava <arquivos> na pasta deste boot no Ventoy (monta só durante a gravação).
+grava() {
+    local m=/run/dj-os-ventoy ja dir dev tipo
+    mkdir -p "$m"
+    for alvo in "$grande" "$pequena:vfat"; do
+        [ "${alvo%%:*}" ] || continue
+        dev=${alvo%%:*}; tipo=${alvo#*:}; [ "$tipo" = ntfs ] && tipo=ntfs3
+        ja=$(findmnt -n -o TARGET -S "$dev" | head -1)
+        if [ -n "$ja" ]; then
+            mount -o remount,rw "$ja" 2>/dev/null && { dir=$ja; break; }
+        else
+            mount -t "$tipo" "$dev" "$m" 2>/dev/null && { dir=$m; break; }
+        fi
+    done
+    [ -n "${dir:-}" ] || return 1
+    mkdir -p "$dir/dj-os-logs/$nome"
+    cp "$@" "$dir/dj-os-logs/$nome/" 2>/dev/null
+    # Sem espaço para crescer: apaga as pastas mais antigas (nunca a deste boot).
+    while [ "$(du -sk "$dir/dj-os-logs" | cut -f1)" -gt "$LIMITE_KB" ]; do
+        velha=$(ls -1 "$dir/dj-os-logs" | grep -vx "$nome" | head -1)
+        [ -n "$velha" ] || break
+        rm -rf "${dir:?}/dj-os-logs/$velha"
+    done
+    sync
+    if [ -n "$ja" ]; then mount -o remount,ro "$ja" 2>/dev/null; else umount "$m"; fi
+}
+
+# Registros deste boot (sistema, instalador e programa), compactados.
+agora() {
+    local R=$T/agora
+    rm -rf "$R"; mkdir -p "$R"
+    journalctl -b --no-pager -o short-monotonic >"$R/sistema.txt" 2>&1
+    cp /run/dj-os-instalar.log "$R/" 2>/dev/null
+    cp /home/dj/DJOS/sessao.log "$R/" 2>/dev/null
+    tar -czf "$T/agora.tar.gz" -C "$R" .
+    grava "$T/agora.tar.gz"
+}
+
+if [ "${1:-}" = final ]; then
+    agora
+    exit 0
+fi
+info_maquina >"$T/maquina.txt" 2>&1
+junta_instalado "$T/instalado"
+if [ -d "$T/instalado" ] && [ -n "$(ls -A "$T/instalado")" ]; then
+    tar -czf "$T/instalado.tar.gz" -C "$T/instalado" .
+    gzip -c "$T/maquina.txt" >"$T/maquina.txt.gz"
+    grava "$T/maquina.txt.gz" "$T/instalado.tar.gz"
+else
+    gzip -c "$T/maquina.txt" >"$T/maquina.txt.gz"
+    grava "$T/maquina.txt.gz"
+fi
+while true; do
+    agora
+    sleep 30
+done

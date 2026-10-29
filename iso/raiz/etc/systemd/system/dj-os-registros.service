@@ -1,0 +1,19 @@
+[Unit]
+Description=DJ OS: copia os registros do DJ OS instalado para um pendrive (opção do menu da ISO)
+ConditionKernelCommandLine=djos.registros
+After=systemd-user-sessions.service systemd-udev-settle.service
+Before=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dj-os-registros
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Environment=TERM=linux
+
+[Install]
+WantedBy=multi-user.target

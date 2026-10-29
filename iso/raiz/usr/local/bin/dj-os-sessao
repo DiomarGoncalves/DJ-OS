@@ -3,12 +3,17 @@
 # Se o programa fechar ou travar, abre de novo. Se a tela não abrir, tenta o desenho pelo
 # processador e explica o problema na tela (em vez de só piscar).
 export XDG_SESSION_TYPE=wayland
+# Se o programa cair, o registro mostra onde.
+export RUST_BACKTRACE=1
 export XCURSOR_SIZE=32
 # Teclado brasileiro (ABNT2), lido de /etc/default/keyboard.
 . /etc/default/keyboard 2>/dev/null
 export XKB_DEFAULT_LAYOUT="${XKBLAYOUT:-br}" XKB_DEFAULT_MODEL="${XKBMODEL:-abnt2}"
 mkdir -p "$HOME/DJOS"
 LOG="$HOME/DJOS/sessao.log"
+# Guarda só o atual e o anterior (fica na parte DADOS; não pode crescer sem fim).
+[ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt 5000000 ] && mv -f "$LOG" "$LOG.1"
+echo "== $(date '+%Y-%m-%d %H:%M:%S') sessão iniciada ($(cat /etc/dj-os-versao 2>/dev/null))" >>"$LOG"
 # Modo de segurança: sem aceleração (só a tela básica).
 grep -q "djos.video=basico" /proc/cmdline && export WLR_RENDERER=pixman LIBGL_ALWAYS_SOFTWARE=1
 falhas=0
@@ -19,6 +24,8 @@ while true; do
     inicio=$(date +%s)
     # -d: o cage cuida das bordas (o programa não desenha barra de título).
     cage -s -d -- /usr/local/bin/dj-os --tela-cheia >>"$LOG" 2>&1
+    rc=$?
+    echo "== $(date '+%H:%M:%S') DJ OS fechou (código $rc)" >>"$LOG"
     # Daqui em diante é reabertura (o programa caiu): as músicas voltam para os decks.
     export DJOS_RETOMAR=1
     # Fechou em menos de 10 s: a tela provavelmente não abriu.

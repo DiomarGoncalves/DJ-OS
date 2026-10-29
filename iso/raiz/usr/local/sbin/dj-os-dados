@@ -24,4 +24,9 @@ liga sistema/bluetooth /var/lib/bluetooth ""
 chmod 700 /dados/sistema/bluetooth
 liga sistema/rede /etc/NetworkManager/system-connections ""
 chmod 700 /dados/sistema/rede
+# Mensagens do sistema guardadas no disco (para descobrir depois por que caiu ou não abriu; a
+# opção "copiar registros" do menu da ISO leva para o pendrive). Tamanho limitado em journald.conf.d.
+liga sistema/journal /var/log/journal ""
+systemd-tmpfiles --create --prefix /var/log/journal 2>/dev/null
+journalctl --flush 2>/dev/null
 echo "DJOS_DADOS ligado"

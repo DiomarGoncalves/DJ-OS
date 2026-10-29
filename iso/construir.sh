@@ -79,7 +79,7 @@ nice -n 19 mmdebstrap --mode=unshare --variant=apt \
     --customize-hook='chroot "$1" ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime' \
     --customize-hook='echo "LANG=C.UTF-8" > "$1/etc/default/locale"' \
     --customize-hook="echo '$VERSAO' > \"\$1/etc/dj-os-versao\"" \
-    --customize-hook='chroot "$1" systemctl enable NetworkManager bluetooth serial-getty@ttyS0 dj-os-dados dj-os-instalador' \
+    --customize-hook='chroot "$1" systemctl enable NetworkManager bluetooth serial-getty@ttyS0 dj-os-dados dj-os-instalador dj-os-registros dj-os-logs-ventoy' \
     --customize-hook='chroot "$1" systemctl mask systemd-networkd-wait-online.service NetworkManager-wait-online.service' \
     --customize-hook='chroot "$1" update-initramfs -u -k all' \
     --customize-hook="sync-out /var/cache/apt/archives '$CACHE'" \

@@ -1,0 +1,36 @@
+#!/bin/bash
+# Copia os registros do DJ OS instalado no disco para um pendrive, para descobrir por que caiu ou
+# não abriu. Roda na tela 1 quando a ISO liga pela opção "copiar registros" (djos.registros).
+#
+# Junta: registro da sessão (programa e tela), mensagens do sistema dos últimos boots, a
+# configuração e informações da máquina (discos, placa de vídeo). Lê o disco só para leitura.
+set -u
+. /usr/local/lib/dj-os/pendrive.sh
+TITULO="DJ OS $(cat /etc/dj-os-versao 2>/dev/null) - registros"
+export NEWT_COLORS='root=,black window=,black border=yellow,black title=yellow,black textbox=white,black button=black,yellow actbutton=black,yellow listbox=white,black actlistbox=black,yellow actsellistbox=black,yellow'
+wt() { whiptail --title "$TITULO" --ok-button "OK" "$@"; }
+
+clear
+echo "Juntando os registros..."
+T=$(mktemp -d /run/dj-os-registros.XXXX)
+nome="dj-os-registros-$(date +%Y%m%d-%H%M%S)"
+R=$T/$nome
+mkdir -p "$R"
+info_maquina >"$R/maquina.txt" 2>&1
+achou=0
+junta_instalado "$R" && achou=1
+
+tar -czf "$T/$nome.tar.gz" -C "$T" "$nome"
+no_pendrive "$T/$nome.tar.gz" dj-os-registros
+if [ "$achou" = 0 ]; then
+    aviso="Não achei o DJ OS instalado (parte DJOS_DADOS) neste computador.\nSalvei só as informações da máquina."
+else
+    aviso="Registros do DJ OS instalado copiados."
+fi
+if [ -n "$salvos" ]; then
+    wt --msgbox "$aviso\n\nSalvo em:$salvos\n\nArquivo: $nome.tar.gz\n\nAperte Enter para desligar." 18 74
+else
+    wt --msgbox "$aviso\n\nNenhum pendrive aceitou a gravação.\nColoque um pendrive comum (FAT32, exFAT ou NTFS) e escolha esta opção de novo.\n\nAperte Enter para desligar." 16 74
+fi
+clear
+poweroff
