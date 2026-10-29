@@ -9,11 +9,14 @@ no_pendrive() {
     local arq=$1 pasta=$2 pular=${3:-} m=/run/dj-os-pendrive linha parte fs disco rotulo ja dir tipo
     salvos=""
     mkdir -p "$m"
-    for linha in $(lsblk -nr -o NAME,TYPE,FSTYPE,PKNAME | awk '$2=="part" && $3~/^(vfat|exfat|ntfs|ext[234])$/ {print $1":"$3":"$4}'); do
-        IFS=: read -r parte fs disco <<<"$linha"
+    for linha in $(lsblk -nr -o NAME,TYPE,PKNAME | awk '$2=="part" {print $1":"$3}'); do
+        IFS=: read -r parte disco <<<"$linha"
+        # O tipo vem direto do disco (pelo Ventoy o lsblk mostra em branco).
+        fs=$(blkid -p -o value -s TYPE "/dev/$parte" 2>/dev/null)
+        case "$fs" in vfat|exfat|ntfs|ext2|ext3|ext4) ;; *) continue ;; esac
         [ "$disco" = "$pular" ] && continue
         [ "$(lsblk -dn -o TRAN "/dev/$disco" 2>/dev/null | tr -d ' ')" = usb ] || continue
-        rotulo=$(lsblk -no LABEL "/dev/$parte" | head -1)
+        rotulo=$(blkid -p -o value -s LABEL "/dev/$parte" 2>/dev/null)
         ja=$(findmnt -n -o TARGET -S "/dev/$parte" | head -1)
         if [ -n "$ja" ]; then
             mount -o remount,rw "$ja" 2>/dev/null || continue
@@ -62,5 +65,9 @@ info_maquina() {
     echo "== discos"; lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,TRAN,MODEL
     echo "== video"; lspci -nnk | grep -A3 -i -e vga -e display
     echo "== som"; lspci -nnk | grep -A3 -i audio
+    echo "== saude dos discos (SMART)"
+    for d in $(lsblk -dn -r -o NAME,TYPE | awk '$2=="disk" {print $1}'); do
+        echo "-- /dev/$d"; smartctl -H -A -l error "/dev/$d" 2>&1 | tail -n +4
+    done
     echo "== kernel"; dmesg | tail -n 150
 }

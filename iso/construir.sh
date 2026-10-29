@@ -47,7 +47,7 @@ PACOTES=(
     # Bluetooth, Wi-Fi e pendrives
     bluez rfkill network-manager wpasupplicant ntfs-3g exfatprogs dosfstools
     # Manutenção e o instalador (próxima etapa)
-    whiptail sudo openssl keyboard-configuration console-setup less nano pciutils usbutils parted gdisk rsync squashfs-tools
+    whiptail sudo openssl keyboard-configuration console-setup less nano pciutils usbutils smartmontools parted gdisk rsync squashfs-tools
     grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr
 )
 
