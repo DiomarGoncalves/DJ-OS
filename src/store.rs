@@ -9,11 +9,15 @@ use crate::shared::HOTCUES;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-const MAGIC: &[u8; 4] = b"DXJ1";
+/// DXJ1: formato antigo (sem o tom). DXJ2: igual, com 1 byte de tom logo depois do BPM.
+const MAGIC_V1: &[u8; 4] = b"DXJ1";
+const MAGIC: &[u8; 4] = b"DXJ2";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Saved {
     pub bpm: f64,
+    /// Tom como em `key::to_raw` (0 = ainda não analisado).
+    pub key: u8,
     pub first_beat: f64,
     pub low: Vec<u8>,
     pub mid: Vec<u8>,
@@ -29,6 +33,7 @@ impl Saved {
     pub fn from_track(t: &crate::track::Track) -> Self {
         Saved {
             bpm: t.bpm,
+            key: t.key,
             first_beat: t.first_beat,
             low: t.wave.low.clone(),
             mid: t.wave.mid.clone(),
@@ -67,6 +72,7 @@ fn encode(s: &Saved) -> Vec<u8> {
         b.extend_from_slice(&v.unwrap_or(0.0).to_le_bytes());
     };
     f(&mut b, s.bpm);
+    b.push(s.key);
     f(&mut b, s.first_beat);
     opt(&mut b, s.cue);
     for h in s.hotcues {
@@ -111,10 +117,13 @@ impl Reader<'_> {
 
 fn decode(b: &[u8]) -> Option<Saved> {
     let mut r = Reader { b, i: 0 };
-    if r.take(4)? != MAGIC {
-        return None;
-    }
+    let v2 = match r.take(4)? {
+        m if m == MAGIC => true,
+        m if m == MAGIC_V1 => false,
+        _ => return None,
+    };
     let bpm = r.f64()?;
+    let key = if v2 { r.take(1)?[0] } else { crate::key::RAW_UNKNOWN };
     let first_beat = r.f64()?;
     let cue = r.opt()?;
     let mut hotcues = [None; HOTCUES];
@@ -129,7 +138,7 @@ fn decode(b: &[u8]) -> Option<Saved> {
     if !bpm.is_finite() || low.len() != mid.len() || mid.len() != high.len() {
         return None;
     }
-    Some(Saved { bpm, first_beat, low, mid, high, cue, hotcues, loop_: has_loop.then_some((a, z, n)) })
+    Some(Saved { bpm, key, first_beat, low, mid, high, cue, hotcues, loop_: has_loop.then_some((a, z, n)) })
 }
 
 fn dir() -> PathBuf {
@@ -150,17 +159,18 @@ fn save_to(dir: &Path, track: &Path, s: &Saved) -> std::io::Result<()> {
     std::fs::rename(tmp, dir.join(format!("{k}.dxj")))
 }
 
-/// Só o BPM salvo (lê 12 bytes), para mostrar na lista sem carregar a waveform.
-pub fn peek_bpm(track: &Path) -> Option<f64> {
+/// Só o BPM e o tom salvos (lê 13 bytes), para mostrar na lista sem carregar a waveform.
+pub fn peek(track: &Path) -> Option<(f64, u8)> {
     use std::io::Read;
     let mut f = std::fs::File::open(dir().join(format!("{}.dxj", key(track)?))).ok()?;
-    let mut b = [0u8; 12];
-    f.read_exact(&mut b).ok()?;
-    if &b[..4] != MAGIC {
+    let mut b = [0u8; 13];
+    let n = f.read(&mut b).ok()?;
+    if n < 12 || (&b[..4] != MAGIC && &b[..4] != MAGIC_V1) {
         return None;
     }
     let bpm = f64::from_le_bytes(b[4..12].try_into().ok()?);
-    bpm.is_finite().then_some(bpm)
+    let k = if &b[..4] == MAGIC && n == 13 { b[12] } else { crate::key::RAW_UNKNOWN };
+    bpm.is_finite().then_some((bpm, k))
 }
 
 pub fn load(track: &Path) -> Option<Saved> {
@@ -183,6 +193,7 @@ mod tests {
         hotcues[7] = Some(99.0);
         Saved {
             bpm: 128.0,
+            key: crate::key::to_raw(Some(21)),
             first_beat: 1234.0,
             low: vec![1, 2, 3],
             mid: vec![4, 5, 6],
@@ -191,6 +202,18 @@ mod tests {
             hotcues,
             loop_: Some((1000.0, 2000.0, 4.0)),
         }
+    }
+
+    #[test]
+    fn le_o_formato_antigo_sem_tom() {
+        let s = sample();
+        // DXJ1 = DXJ2 sem o byte do tom (logo depois do BPM).
+        let mut old = encode(&s);
+        old[..4].copy_from_slice(MAGIC_V1);
+        old.remove(12);
+        let lido = decode(&old).expect("lê o formato antigo");
+        assert_eq!(lido.key, crate::key::RAW_UNKNOWN, "tom ainda não analisado");
+        assert_eq!((lido.bpm, lido.cue, lido.hotcues, lido.loop_), (s.bpm, s.cue, s.hotcues, s.loop_), "cues mantidos");
     }
 
     #[test]

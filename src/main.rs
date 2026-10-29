@@ -12,6 +12,7 @@ mod bluetooth;
 mod engine;
 mod firmware;
 mod import;
+mod key;
 mod library;
 mod midi;
 mod phone;
@@ -41,9 +42,10 @@ fn main() -> eframe::Result<()> {
             let t0 = std::time::Instant::now();
             match track::load(std::path::Path::new(path), true) {
                 Ok(t) => println!(
-                    "{}: {:.2} BPM, primeira batida {:.3} s, {:.1} s de música, analisado em {} ms",
+                    "{}: {:.2} BPM, tom {}, primeira batida {:.3} s, {:.1} s de música, analisado em {} ms",
                     t.display_name(),
                     t.bpm,
+                    key::from_raw(t.key).map_or("?".to_string(), |k| format!("{} ({})", key::label(k), key::name(k))),
                     t.first_beat / t.sr,
                     t.duration_secs(),
                     t0.elapsed().as_millis()

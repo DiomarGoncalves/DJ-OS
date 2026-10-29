@@ -44,13 +44,24 @@ pub struct TrackEntry {
     pub ext: String,
     /// BPM já analisado (memória da música), se houver.
     pub bpm: Option<f64>,
+    /// Tom já analisado (0-23, veja `key`), se houver.
+    pub key: Option<u8>,
 }
 
 impl TrackEntry {
     fn from_path(p: &Path) -> Self {
         let (title, artist) = names_from_path(p);
         let ext = p.extension().map(|e| e.to_string_lossy().to_uppercase()).unwrap_or_default();
-        Self { path: p.to_path_buf(), title, artist, ext, bpm: None }
+        Self { path: p.to_path_buf(), title, artist, ext, bpm: None, key: None }
+    }
+
+    /// Completa com o BPM e o tom guardados na memória da música (se já analisada).
+    fn with_saved(mut self) -> Self {
+        if let Some((bpm, key)) = crate::store::peek(&self.path) {
+            self.bpm = Some(bpm);
+            self.key = crate::key::from_raw(key);
+        }
+        self
     }
 }
 
@@ -116,7 +127,7 @@ fn list_tracks(p: &Path) -> Vec<TrackEntry> {
             rd.flatten()
                 .map(|e| e.path())
                 .filter(|p| is_audio(p))
-                .map(|p| TrackEntry { bpm: crate::store::peek_bpm(&p), ..TrackEntry::from_path(&p) })
+                .map(|p| TrackEntry::from_path(&p).with_saved())
                 .collect()
         })
         .unwrap_or_default();
@@ -301,8 +312,8 @@ impl Library {
         let n = self.analyzed.load(Ordering::Relaxed);
         if n != self.analyzed_seen {
             self.analyzed_seen = n;
-            for t in self.tracks.iter_mut().filter(|t| t.bpm.is_none()) {
-                t.bpm = crate::store::peek_bpm(&t.path);
+            for t in self.tracks.iter_mut().filter(|t| t.bpm.is_none() || t.key.is_none()) {
+                *t = t.clone().with_saved();
             }
         }
         if self.last_check.elapsed() < Duration::from_secs(2) {
@@ -422,7 +433,7 @@ impl Library {
     pub fn search(&mut self, query: &str) -> usize {
         let words = query_words(query);
         let found: Vec<TrackEntry> =
-            self.index.lock().entries.iter().filter(|(k, _)| matches(k, &words)).take(MAX_RESULTS).map(|(_, t)| TrackEntry { bpm: crate::store::peek_bpm(&t.path), ..t.clone() }).collect();
+            self.index.lock().entries.iter().filter(|(k, _)| matches(k, &words)).take(MAX_RESULTS).map(|(_, t)| t.clone().with_saved()).collect();
         let n = found.len();
         self.results = Some((query.trim().to_string(), found));
         self.folders.retain(|f| f.kind != NodeKind::Search);

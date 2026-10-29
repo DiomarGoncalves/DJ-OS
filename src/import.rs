@@ -183,13 +183,27 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>) {
                 let paths: Vec<PathBuf> = index.lock().entries.iter().map(|(_, t)| t.path.clone()).collect();
                 let mut did = 0;
                 for p in paths {
-                    if crate::store::peek_bpm(&p).is_some() {
-                        continue;
-                    }
-                    if let Ok(t) = crate::track::load(&p, true) {
-                        crate::store::save(&p, &crate::store::Saved::from_track(&t));
-                        counter.fetch_add(1, Ordering::Relaxed);
-                        did += 1;
+                    match crate::store::peek(&p) {
+                        // Já analisada, com o tom.
+                        Some((_, k)) if k != crate::key::RAW_UNKNOWN => continue,
+                        // Analisada antes do tom existir: calcula só o tom e mantém os cues.
+                        Some(_) => {
+                            if let Some(s) = crate::store::load(&p) {
+                                let cached = (crate::track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key);
+                                if let Ok(t) = crate::track::load_cached(&p, true, Some(cached)) {
+                                    crate::store::save(&p, &crate::store::Saved { key: t.key, ..s });
+                                    counter.fetch_add(1, Ordering::Relaxed);
+                                    did += 1;
+                                }
+                            }
+                        }
+                        None => {
+                            if let Ok(t) = crate::track::load(&p, true) {
+                                crate::store::save(&p, &crate::store::Saved::from_track(&t));
+                                counter.fetch_add(1, Ordering::Relaxed);
+                                did += 1;
+                            }
+                        }
                     }
                     // Folga entre músicas para nunca ocupar o processador de vez.
                     std::thread::sleep(Duration::from_millis(300));

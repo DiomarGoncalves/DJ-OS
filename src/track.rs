@@ -37,6 +37,8 @@ pub struct Track {
     pub bpm: f64,
     /// Posição (em frames) da primeira batida da grade.
     pub first_beat: f64,
+    /// Tom guardado como em `key::to_raw` (0 = não analisado).
+    pub key: u8,
     /// Identificador único desta carga.
     pub gen: u64,
 }
@@ -115,18 +117,71 @@ fn hermite(xm1: f32, x0: f32, x1: f32, x2: f32, t: f32) -> f32 {
 
 /// Separa "Artista - Título" a partir do nome do arquivo.
 pub fn names_from_path(path: &Path) -> (String, String) {
-    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-    match stem.split_once(" - ") {
+    let stem = compose_accents(&path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
+    // Número da faixa no começo ("018 - ", "01. ", "7 "): sai do nome. Arquivos numerados
+    // costumam vir como "número - música - artista"; sem número, "artista - música".
+    let digits = stem.chars().take_while(|c| c.is_ascii_digit()).count();
+    let rest = stem[digits..].trim_start_matches([' ', '-', '.', '_']);
+    let numbered = (1..=3).contains(&digits) && rest.len() < stem.len() - digits && !rest.is_empty();
+    let name = if numbered { rest } else { stem.as_str() };
+    match name.split_once(" - ") {
+        Some((a, b)) if numbered => (a.trim().to_string(), b.trim().to_string()),
         Some((a, t)) => (t.trim().to_string(), a.trim().to_string()),
-        None => (stem, String::new()),
+        None => (name.to_string(), String::new()),
     }
+}
+
+/// Junta letra + acento separado (ex.: "e" + acento agudo combinante → "é"). Alguns arquivos vêm
+/// assim e a fonte da tela mostraria um quadradinho no lugar do acento.
+pub fn compose_accents(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        let mark = match c {
+            '\u{0300}' => Some(0),
+            '\u{0301}' => Some(1),
+            '\u{0302}' => Some(2),
+            '\u{0303}' => Some(3),
+            '\u{0308}' => Some(4),
+            '\u{0327}' => Some(5),
+            _ => None,
+        };
+        let Some(m) = mark else {
+            out.push(c);
+            continue;
+        };
+        // Grave, agudo, circunflexo, til, trema, cedilha.
+        const TABLE: [(char, [char; 6]); 12] = [
+            ('a', ['à', 'á', 'â', 'ã', 'ä', 'a']),
+            ('e', ['è', 'é', 'ê', 'e', 'ë', 'e']),
+            ('i', ['ì', 'í', 'î', 'i', 'ï', 'i']),
+            ('o', ['ò', 'ó', 'ô', 'õ', 'ö', 'o']),
+            ('u', ['ù', 'ú', 'û', 'u', 'ü', 'u']),
+            ('c', ['c', 'c', 'c', 'c', 'c', 'ç']),
+            ('A', ['À', 'Á', 'Â', 'Ã', 'Ä', 'A']),
+            ('E', ['È', 'É', 'Ê', 'E', 'Ë', 'E']),
+            ('I', ['Ì', 'Í', 'Î', 'I', 'Ï', 'I']),
+            ('O', ['Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'O']),
+            ('U', ['Ù', 'Ú', 'Û', 'U', 'Ü', 'U']),
+            ('C', ['C', 'C', 'C', 'C', 'C', 'Ç']),
+        ];
+        let composed = out.chars().last().and_then(|base| TABLE.iter().find(|(b, _)| *b == base)).map(|(b, v)| (*b, v[m]));
+        match composed {
+            Some((base, done)) if done != base => {
+                out.pop();
+                out.push(done);
+            }
+            // Combinação que não existe aqui: descarta o acento solto (melhor que o quadradinho).
+            _ => {}
+        }
+    }
+    out
 }
 
 fn read_tags(rev: &MetadataRevision, title: &mut String, artist: &mut String) {
     for tag in rev.tags() {
         match tag.std_key {
-            Some(StandardTagKey::TrackTitle) => *title = tag.value.to_string(),
-            Some(StandardTagKey::Artist) => *artist = tag.value.to_string(),
+            Some(StandardTagKey::TrackTitle) => *title = compose_accents(&tag.value.to_string()),
+            Some(StandardTagKey::Artist) => *artist = compose_accents(&tag.value.to_string()),
             _ => {}
         }
     }
@@ -219,8 +274,12 @@ pub fn load(path: &Path, analyze: bool) -> Result<Track, String> {
     load_cached(path, analyze, None)
 }
 
-/// Como `load`, mas reaproveita a waveform, o BPM e a grade já salvos (sem analisar de novo).
-pub fn load_cached(path: &Path, analyze: bool, cached: Option<(Waveform, f64, f64)>) -> Result<Track, String> {
+/// Análise já salva: waveform, BPM, primeira batida e tom (0 = tom ainda não analisado).
+pub type Cached = (Waveform, f64, f64, u8);
+
+/// Como `load`, mas reaproveita a análise já salva (sem analisar de novo). Se a análise salva
+/// for de antes do tom existir, calcula só o tom.
+pub fn load_cached(path: &Path, analyze: bool, cached: Option<Cached>) -> Result<Track, String> {
     let (data, sr, mut title, mut artist) = decode(path)?;
     let (ft, fa) = names_from_path(path);
     if title.is_empty() {
@@ -230,12 +289,13 @@ pub fn load_cached(path: &Path, analyze: bool, cached: Option<(Waveform, f64, f6
         artist = fa;
     }
     let frames = data.len() / 2;
-    let (wave, bpm, first_beat) = match cached {
-        Some(c) => c,
+    let (wave, bpm, first_beat, key) = match cached {
+        Some((w, b, f, k)) => (w, b, f, if k == crate::key::RAW_UNKNOWN && analyze { crate::key::to_raw(crate::key::detect(&data, sr)) } else { k }),
         None => {
             let (wave, onset) = waveform(&data, sr);
             let (bpm, first_beat) = if analyze { detect_bpm(&onset, sr) } else { (0.0, 0.0) };
-            (wave, bpm, first_beat)
+            let key = if analyze { crate::key::to_raw(crate::key::detect(&data, sr)) } else { crate::key::RAW_UNKNOWN };
+            (wave, bpm, first_beat, key)
         }
     };
     Ok(Track {
@@ -248,6 +308,7 @@ pub fn load_cached(path: &Path, analyze: bool, cached: Option<(Waveform, f64, f6
         wave,
         bpm,
         first_beat,
+        key,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
     })
 }
@@ -384,6 +445,25 @@ pub fn synthetic(secs: f64, sr: f64, bpm: f64, first_beat_secs: f64) -> Track {
         wave: Waveform { low: Vec::new(), mid: Vec::new(), high: Vec::new() },
         bpm,
         first_beat: first_beat_secs * sr,
+        key: crate::key::RAW_UNKNOWN,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nomes_do_arquivo_com_numero_e_acento_separado() {
+        let (t, a) = names_from_path(Path::new("/x/018 - Vingança - Mc Jacare\u{0301}, dj andreoli.mp3"));
+        assert_eq!((t.as_str(), a.as_str()), ("Vingança", "Mc Jacaré, dj andreoli"));
+        let (t, a) = names_from_path(Path::new("/x/Artista - Noite Longa.flac"));
+        assert_eq!((t.as_str(), a.as_str()), ("Noite Longa", "Artista"));
+        let (t, a) = names_from_path(Path::new("/x/01. Faixa.mp3"));
+        assert_eq!((t.as_str(), a.as_str()), ("Faixa", ""));
+        let (t, _) = names_from_path(Path::new("/x/2024 Hits - DJ.mp3"));
+        assert_eq!(t, "DJ", "ano com 4 dígitos não é número de faixa");
+        assert_eq!(compose_accents("Sa\u{0303}o Joa\u{0303}o c\u{0327}"), "São João ç");
     }
 }

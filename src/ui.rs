@@ -118,6 +118,18 @@ fn mono(p: &Painter, pos: egui::Pos2, align: Align2, s: impl ToString, size: f32
     p.text(pos, align, s, FontId::monospace(size), color)
 }
 
+/// Etiqueta do tom (Camelot, ex.: "8A") na cor da roda, encostada à direita em `right_center`.
+fn key_badge(p: &Painter, right_center: egui::Pos2, key: u8, size: f32) -> Rect {
+    let [r, g, b] = crate::key::color(key);
+    let col = Color32::from_rgb(r, g, b);
+    let w = size * 2.6;
+    let rect = Rect::from_min_size(pos2(right_center.x - w, right_center.y - size * 0.75), vec2(w, size * 1.5));
+    p.rect_filled(rect, 4.0, col.gamma_multiply(0.22));
+    p.rect_stroke(rect, 4.0, Stroke::new(1.0_f32, col));
+    mono(p, rect.center(), Align2::CENTER_CENTER, crate::key::label(key), size, col);
+    rect
+}
+
 fn badge(p: &Painter, x: f32, cy: f32, label: &str, on: bool, color: Color32) -> f32 {
     let font = FontId::proportional(12.0);
     let g = p.layout_no_wrap(label.to_string(), font, if on { BG } else { DIM });
@@ -595,6 +607,11 @@ impl DjOsApp {
 
         let bpm_text = if s.loaded && s.bpm > 0.0 { format!("{:.2}", s.bpm) } else { "--.--".into() };
         let bpm_rect = mono(&p, pos2(r.right(), r.top() - 2.0), Align2::RIGHT_TOP, bpm_text, 30.0, TEXT);
+        // Tom da música ao lado do BPM (mostra "--" enquanto não foi analisado).
+        let bpm_rect = match t.as_ref().and_then(|t| crate::key::from_raw(t.key)).filter(|_| !s.live) {
+            Some(k) => key_badge(&p, pos2(bpm_rect.left() - 8.0, bpm_rect.center().y), k, 15.0).union(bpm_rect),
+            None => bpm_rect,
+        };
         let pitch = (s.rate - 1.0) * 100.0;
         // Sem estado do motor (áudio parado) mostra traços em vez de números sem sentido.
         let pitch_text = if s.rate > 0.0 { format!("{:+.2}%  ±{:.0}", pitch, s.pitch_range * 100.0) } else { "--".into() };
@@ -932,8 +949,11 @@ impl DjOsApp {
             }
             let cp = tp.with_clip_rect(Rect::from_min_max(rr.min, pos2(artist_x - 10.0, rr.bottom())));
             text(&cp, rr.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, &e.title, 14.0, TEXT);
-            let ap = tp.with_clip_rect(Rect::from_min_max(pos2(artist_x, rr.top()), pos2(rr.right() - 120.0, rr.bottom())));
+            let ap = tp.with_clip_rect(Rect::from_min_max(pos2(artist_x, rr.top()), pos2(rr.right() - 150.0, rr.bottom())));
             text(&ap, pos2(artist_x, rr.center().y), Align2::LEFT_CENTER, &e.artist, 14.0, DIM);
+            if let Some(k) = e.key {
+                key_badge(&tp, rr.right_center() - vec2(104.0, 0.0), k, 12.0);
+            }
             let bpm = e.bpm.filter(|b| *b > 0.0).map_or("--".to_string(), |b| format!("{b:.1}"));
             mono(&tp, rr.right_center() - vec2(52.0, 0.0), Align2::RIGHT_CENTER, bpm, 13.0, if e.bpm.is_some() { ACCENT } else { DIM });
             text(&tp, rr.right_center() - vec2(8.0, 0.0), Align2::RIGHT_CENTER, &e.ext, 11.0, DIM);

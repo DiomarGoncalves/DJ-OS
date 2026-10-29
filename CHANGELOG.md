@@ -11,11 +11,14 @@ para diferenciar firmwares de teste da mesma versão.
 - Tela de inicialização com a logo do DJ OS; menu de boot escondido no aparelho instalado (Esc mostra).
 - Botão power desliga com segurança; fechar a tampa ou teclas de suspender não fazem nada.
 - Limitador no master e no fone: o som nunca passa de -1 dBFS (aviso "LIM" na barra de cima).
+- Tom da música (key) no formato Camelot com cores, no browser e no deck; a análise automática
+  completa o tom das músicas já analisadas sem perder os cues.
 
 ### Corrigido
 - Eco na caixa Bluetooth (o master ia duas vezes para ela).
 - Scratch: o backspin segue o prato solto até ele parar.
 - Celular por Bluetooth: pareamento sem pedir código e nome "DJ OS"; visibilidade com prazo.
+- Nomes: acentos separados viravam quadradinho; número da faixa no nome do arquivo virava artista.
 
 ## [0.1.0] - 2026-10-29
 
