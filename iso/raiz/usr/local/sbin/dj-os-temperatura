@@ -26,7 +26,11 @@ while true; do
         esac
     done
     mem=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo)
-    linha="temperatura:${t:- ?} | carga $(cut -d' ' -f1-3 /proc/loadavg) | memória livre ${mem} MB |${energia:- energia ?}"
+    # Velocidade: o limite do controle de calor e a frequência atual do primeiro núcleo (MHz).
+    vel=""
+    [ -r /sys/devices/system/cpu/intel_pstate/max_perf_pct ] && vel=" limite=$(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct)%"
+    f=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null) && vel="$vel $((f / 1000))MHz"
+    linha="temperatura:${t:- ?} | carga $(cut -d' ' -f1-3 /proc/loadavg) |${vel:- velocidade ?} | memória livre ${mem} MB |${energia:- energia ?}"
     echo "$linha"
     # Também num arquivo na parte DADOS, gravado no disco na hora (sobrevive a um corte de energia).
     if [ -d /dados/sistema ]; then

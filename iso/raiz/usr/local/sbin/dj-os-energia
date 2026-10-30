@@ -1,11 +1,78 @@
 #!/bin/sh
-# Desliga o "turbo" do processador: para tocar música ele não faz falta, e os picos de consumo
-# dele podem derrubar máquinas sem bateria ou com fonte fraca (o aparelho apagava de uma vez
-# alguns minutos depois de começar a tocar). Também esquenta menos.
-if [ -w /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
-    echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo && echo "turbo desligado (intel_pstate)"
+# Controle de calor do processador.
+#
+# Desliga o "turbo" (para tocar música ele não faz falta) e, a cada 2 s, olha a temperatura: se
+# passar de 85 °C, baixa a velocidade máxima do processador; abaixo de 75 °C, devolve aos poucos.
+# Em notebooks com a refrigeração fraca o processador chegava a 95 °C tocando música e a placa
+# cortava a energia de uma vez (o aparelho apagava no meio do set). Cada mudança vai para o
+# registro de temperatura.
+P=/sys/devices/system/cpu/intel_pstate
+if [ -w $P/no_turbo ]; then
+    echo 1 > $P/no_turbo && echo "turbo desligado (intel_pstate)"
 elif [ -w /sys/devices/system/cpu/cpufreq/boost ]; then
     echo 0 > /sys/devices/system/cpu/cpufreq/boost && echo "turbo desligado (cpufreq)"
-else
-    echo "sem controle de turbo neste processador"
 fi
+
+# Temperatura de desligamento de cada sensor (para o registro).
+for z in /sys/class/thermal/thermal_zone*; do
+    for t in "$z"/trip_point_*_type; do
+        [ "$(cat "$t" 2>/dev/null)" = critical ] || continue
+        echo "desligamento por calor em $(cat "$z/type"): $(( $(cat "${t%_type}_temp") / 1000 )) °C"
+    done
+done
+
+anota() {
+    echo "$1"
+    if [ -d /dados/sistema ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >>/dados/sistema/temperatura.log
+        sync /dados/sistema/temperatura.log
+    fi
+}
+
+# Maior temperatura dos núcleos (coretemp) ou, sem ele, das zonas térmicas, em °C. Leituras vazias
+# ou absurdas (alguns sensores dão 127 °C fixo) ficam de fora.
+temperatura() {
+    m=0
+    arqs=""
+    for h in /sys/class/hwmon/hwmon*; do
+        [ "$(cat "$h/name" 2>/dev/null)" = coretemp ] && arqs="$arqs $h/temp*_input"
+    done
+    [ -n "$arqs" ] || arqs="/sys/class/thermal/thermal_zone*/temp"
+    for f in $arqs; do
+        v=$(cat "$f" 2>/dev/null)
+        case "$v" in ''|*[!0-9]*) continue ;; esac
+        [ "$v" -lt 120000 ] && [ "$v" -gt "$m" ] && m=$v
+    done
+    echo $((m / 1000))
+}
+
+# Velocidade máxima em % (intel_pstate) ou pelo limite de frequência de cada núcleo (cpufreq).
+if [ -w $P/max_perf_pct ]; then
+    limita() { echo "$1" > $P/max_perf_pct; }
+else
+    limita() {
+        for c in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
+            [ -r "$c/cpuinfo_max_freq" ] || continue
+            echo $(( $(cat "$c/cpuinfo_max_freq") * $1 / 100 )) > "$c/scaling_max_freq"
+        done
+    }
+fi
+
+limite=100
+limita $limite 2>/dev/null
+while true; do
+    t=$(temperatura)
+    novo=$limite
+    if [ "$t" -ge 90 ]; then novo=$((limite - 15))
+    elif [ "$t" -ge 85 ]; then novo=$((limite - 5))
+    elif [ "$t" -le 75 ]; then novo=$((limite + 5))
+    fi
+    [ $novo -lt 40 ] && novo=40
+    [ $novo -gt 100 ] && novo=100
+    if [ $novo -ne $limite ]; then
+        limite=$novo
+        limita $limite 2>/dev/null
+        anota "calor: ${t} °C, processador limitado a ${limite}%"
+    fi
+    sleep 2
+done

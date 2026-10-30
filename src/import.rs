@@ -183,10 +183,17 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>) {
         .name("analise".into())
         .spawn(move || {
             low_priority();
+            // Músicas que não deu para analisar ou guardar: não tenta de novo a cada volta (uma
+            // música que não salvava era decodificada inteira a cada 10 s, com o processador a
+            // 100% e o aparelho esquentando até desligar).
+            let mut failed: std::collections::HashSet<PathBuf> = Default::default();
             loop {
                 let paths: Vec<PathBuf> = index.lock().entries.iter().map(|(_, t)| t.path.clone()).collect();
                 let mut did = 0;
                 for p in paths {
+                    if failed.contains(&p) {
+                        continue;
+                    }
                     match crate::store::peek(&p) {
                         // Já analisada, com o tom e o volume.
                         Some(k) if k.key != crate::key::RAW_UNKNOWN && k.has_loudness => continue,
@@ -200,6 +207,9 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>) {
                                     counter.fetch_add(1, Ordering::Relaxed);
                                     did += 1;
                                 }
+                                if crate::store::peek(&p).is_none_or(|k| k.key == crate::key::RAW_UNKNOWN || !k.has_loudness) {
+                                    failed.insert(p.clone());
+                                }
                             }
                         }
                         None => {
@@ -207,6 +217,9 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>) {
                                 crate::store::save(&p, &crate::store::Saved::from_track(&t));
                                 counter.fetch_add(1, Ordering::Relaxed);
                                 did += 1;
+                            }
+                            if crate::store::peek(&p).is_none() {
+                                failed.insert(p.clone());
                             }
                         }
                     }
