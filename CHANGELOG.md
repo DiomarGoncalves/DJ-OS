@@ -16,6 +16,8 @@ programa do computador de casa.
   As músicas chegam ao aparelho já analisadas (BPM, grade, tom, volume, waveform).
 - Efeitos refeitos: reverb de placa (Dattorro/CAPS, como no Mixxx), eco que troca de tempo sem
   esticar e com repetições mais escuras, flanger mais fundo; sem estourar o volume.
+- Divisões de batida 1/32 e 1/64 (e 32) nos efeitos: descendo o eco até 1/64 com ele soando, a
+  voz fica "robotizada", como no VirtualDJ.
 - Medidores de volume dos canais acendem na controladora.
 - CONFIG → SISTEMA mostra a versão com a data do firmware; "Analisar todas as músicas".
 - CONFIG → CONTROLADORA → "Registrar os botões" (diagnóstico).

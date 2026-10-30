@@ -432,8 +432,10 @@ fn batidas_incluem_uma_e_meia() {
     assert_eq!(step_beats(1.0, 1), 1.5);
     assert_eq!(step_beats(1.5, 1), 2.0);
     assert_eq!(step_beats(1.0 / 8.0, -1), 1.0 / 16.0);
-    assert_eq!(step_beats(1.0 / 16.0, -1), 1.0 / 16.0, "não passa do mínimo");
-    assert_eq!(step_beats(16.0, 1), 16.0, "não passa do máximo");
+    assert_eq!(step_beats(1.0 / 16.0, -1), 1.0 / 32.0, "eco robô");
+    assert_eq!(step_beats(1.0 / 64.0, -1), 1.0 / 64.0, "não passa do mínimo");
+    assert_eq!(step_beats(32.0, 1), 32.0, "não passa do máximo");
+    assert_eq!(beats_label(1.0 / 64.0), "1/64");
     assert_eq!(beats_label(1.5), "1 1/2");
     assert_eq!(beats_label(0.125), "1/8");
     assert_eq!(beats_label(0.75), "3/4");

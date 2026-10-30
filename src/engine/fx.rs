@@ -72,11 +72,13 @@ impl FxKind {
     }
 }
 
-/// Tamanhos de batida disponíveis para os efeitos.
-pub const BEATS: [f32; 11] = [1.0 / 16.0, 1.0 / 8.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0];
+/// Tamanhos de batida disponíveis para os efeitos. Os bem curtos (1/32, 1/64) são o "eco
+/// robotizado": descendo a divisão com o eco soando, as repetições ficam tão rápidas que viram um
+/// zumbido afinado na voz.
+pub const BEATS: [f32; 14] = [1.0 / 64.0, 1.0 / 32.0, 1.0 / 16.0, 1.0 / 8.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0, 32.0];
 
 pub fn step_beats(b: f32, dir: i32) -> f32 {
-    let i = BEATS.iter().position(|x| (x - b).abs() < 1e-4).unwrap_or(3) as i32;
+    let i = BEATS.iter().position(|x| (x - b).abs() < 1e-6).unwrap_or(5) as i32;
     BEATS[(i + dir).clamp(0, BEATS.len() as i32 - 1) as usize]
 }
 
@@ -273,9 +275,13 @@ impl FxSlot {
                     self.fb_hp.set(Coefs::highpass(fs, 140.0, 0.7071));
                     self.wet_hp.set(Coefs::highpass(fs, 110.0, 0.7071));
                 }
-                let fbk = 0.35 + 0.35 * lvl;
+                // Eco curto (até 1/16 de batida): realimentação mais alta e mais brilhante, para o
+                // zumbido "robô" sustentar; nos tempos normais as repetições somem mais rápido.
+                let short = (1.0 - (self.delay_time / (ctx.beat_len / 16.0).max(1.0) - 1.0).clamp(0.0, 1.0)).max(0.0);
+                let fbk = 0.35 + 0.35 * lvl + short * (0.15 + 0.1 * lvl);
+                let lp = 0.6 + 0.3 * short;
                 for c in 0..2 {
-                    self.fb_lp[c] += (r[c] - self.fb_lp[c]) * 0.6;
+                    self.fb_lp[c] += (r[c] - self.fb_lp[c]) * lp;
                 }
                 let fb = self.fb_hp.process(self.fb_lp);
                 let w = if self.kind == FxKind::Echo {
@@ -412,5 +418,30 @@ pub fn demo(track: &crate::track::Track, dir: &std::path::Path) -> std::io::Resu
         f.write_all(&pcm)?;
         println!("{name:14} pico {:+5.1} dB, {over} amostras estourando", 20.0 * peak.max(1e-9).log10());
     }
+    // Eco "robô": liga em 1/8 e vai descendo a divisão com o eco soando (1/16, 1/32, 1/64), como no
+    // VirtualDJ; desliga e deixa a cauda.
+    let mut fx = FxSlot::new(FxKind::Echo, fs);
+    fx.set_level(0.8);
+    fx.beats = 0.125;
+    let mut pcm = Vec::with_capacity(n * 4);
+    for i in 0..n {
+        match i {
+            _ if i == secs(6.0) => fx.set_active(true),
+            _ if i == secs(9.0) => fx.beats = 1.0 / 16.0,
+            _ if i == secs(11.5) => fx.beats = 1.0 / 32.0,
+            _ if i == secs(14.0) => fx.beats = 1.0 / 64.0,
+            _ if i == secs(17.0) => fx.set_active(false),
+            _ => {}
+        }
+        let f = start + i;
+        let ctx = FxCtx { beat_len: (track.beat_len() as f32).max(1.0), beat_pos: track.beats_at(f as f64) };
+        for v in fx.process([track.data[f * 2], track.data[f * 2 + 1]], &ctx) {
+            pcm.extend_from_slice(&((v.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+        }
+    }
+    let mut f = std::fs::File::create(dir.join("echo-robo.wav"))?;
+    f.write_all(&crate::record::wav_header(fs as u32, pcm.len() as u32))?;
+    f.write_all(&pcm)?;
+    println!("echo-robo      1/8 → 1/16 → 1/32 → 1/64 → desliga");
     Ok(())
 }
