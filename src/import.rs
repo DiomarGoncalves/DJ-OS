@@ -3,6 +3,7 @@
 
 use crate::app::{data_dir, SharedApp};
 use crate::library::Index;
+use crate::shared::SharedSnap;
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -178,7 +179,12 @@ pub fn delete_internal(path: &Path) -> Result<(), String> {
 
 /// Analisa sozinho, com prioridade baixa, toda música do índice que ainda não tem análise salva.
 /// `counter` sobe a cada música analisada (a lista usa para mostrar o BPM novo).
-pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>) {
+///
+/// Para enquanto algum deck estiver tocando: analisar é o que mais gasta processador, e em
+/// máquinas fracas ou com refrigeração ruim o processador esquentava até desligar no meio do set.
+/// A música carregada num deck é analisada na hora do LOAD, então tocar não depende disto.
+pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>, snap: SharedSnap) {
+    let playing = move || snap.lock().decks.iter().any(|d| d.playing);
     std::thread::Builder::new()
         .name("analise".into())
         .spawn(move || {
@@ -193,6 +199,9 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>) {
                 for p in paths {
                     if failed.contains(&p) {
                         continue;
+                    }
+                    while playing() {
+                        std::thread::sleep(Duration::from_secs(2));
                     }
                     match crate::store::peek(&p) {
                         // Já analisada, com o tom e o volume.

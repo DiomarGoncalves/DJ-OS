@@ -116,7 +116,7 @@ fn main() -> eframe::Result<()> {
     {
         // Análise automática das músicas novas (prioridade baixa).
         let a = app.lock();
-        import::start_analyzer(a.lib.index.clone(), a.lib.analyzed.clone());
+        import::start_analyzer(a.lib.index.clone(), a.lib.analyzed.clone(), snap.clone());
     }
     midi::start(app.clone(), cmd.clone(), snap.clone(), loader.clone());
     if let Ok(m) = std::env::var("DJOS_BT") {
