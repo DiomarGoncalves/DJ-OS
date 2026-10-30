@@ -116,7 +116,7 @@ impl Rev1 {
         if msg.len() < 3 {
             return;
         }
-        if self.debug {
+        if self.debug || super::log_left() > 0 {
             eprintln!("[midi] {:02X} {:02X} {:02X}", msg[0], msg[1], msg[2]);
         }
         let (st, d1, d2) = (msg[0], msg[1], msg[2]);
@@ -197,6 +197,7 @@ impl Rev1 {
                     for (n, ns, mode, mode_s) in PAD_MODE_NOTES {
                         if note == n || note == ns {
                             let m = if note == n { mode } else { mode_s };
+                            eprintln!("[djos] deck {}: pads em {}", d + 1, m.name());
                             self.app.lock().pad_mode[d] = m;
                             self.tracking[d] = m == PadMode::Tracking;
                             self.went_back[d] = false;

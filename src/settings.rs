@@ -194,6 +194,7 @@ pub enum Action {
     LightMode,
     FourDecks,
     AnalyzeAll,
+    MidiLog,
 }
 
 pub enum Row {
@@ -326,6 +327,9 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Item { label: "Faixa de pitch".into(), value: format!("±{:.0}%", PITCH_RANGES[s.pitch_range] * 100.0), action: Action::PitchRange });
             v.push(Row::Item { label: "Curva do crossfader".into(), value: XF_CURVES[s.xf_curve].into(), action: Action::XfCurve });
             v.push(Row::Item { label: "Keylock ao carregar".into(), value: if s.keylock { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Keylock });
+            let left = crate::midi::log_left();
+            let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
+            v.push(Row::Item { label: "Registrar os botões (diagnóstico, 5 min)".into(), value, action: Action::MidiLog });
             v.push(Row::Info(format!("Controladora: {}", app.midi_status)));
         }
         Tab::Screen => {
@@ -479,6 +483,12 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::AmbientDuck => a.settings.ambient_duck = !a.settings.ambient_duck,
         Action::LightMode => a.settings.light_mode = next(a.settings.light_mode, LIGHT_MODES.len()),
         Action::FourDecks => a.settings.four_decks = !a.settings.four_decks,
+        Action::MidiLog => {
+            let on = crate::midi::log_left() == 0;
+            crate::midi::log_for(if on { 300 } else { 0 });
+            a.toast(if on { "Registrando os botões por 5 min: aperte o que não funciona" } else { "Registro dos botões desligado" }.to_string());
+            return;
+        }
         Action::AnalyzeAll => {
             crate::import::ANALYZE_ALL.store(true, std::sync::atomic::Ordering::Relaxed);
             a.toast("Analisando todas as músicas: pode demorar; para sozinho enquanto um deck toca".to_string());

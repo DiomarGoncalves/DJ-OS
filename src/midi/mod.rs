@@ -35,6 +35,24 @@ pub struct Model {
     pub create: fn(SharedApp, CmdTx, SharedSnap, Loader) -> Box<dyn Controller>,
 }
 
+/// Diagnóstico (CONFIG → CONTROLADORA): até quando (segundos desde 1970) cada mensagem que a
+/// controladora manda vai para o registro da sessão.
+pub static LOG_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+/// Liga o registro dos botões por `secs` segundos.
+pub fn log_for(secs: u64) {
+    LOG_UNTIL.store(now_secs() + secs, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Segundos que faltam do registro dos botões (0 = desligado).
+pub fn log_left() -> u64 {
+    LOG_UNTIL.load(std::sync::atomic::Ordering::Relaxed).saturating_sub(now_secs())
+}
+
 /// Catálogo das controladoras suportadas (a primeira que bater com uma porta ligada é usada).
 pub const MODELS: &[Model] = &[Model { name: "DDJ-REV1", matches: rev1::matches, create: rev1::create }];
 
