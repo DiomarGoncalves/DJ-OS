@@ -65,6 +65,7 @@ fn main() -> eframe::Result<()> {
     if std::env::var_os("DJOS_DEBUG_SNAP").is_some() {
         eprintln!("[djos] início {}", chrono::Local::now().format("%H:%M:%S%.3f"));
     }
+    watch_deadlocks();
     let snap = Arc::new(Mutex::new(Snapshot::default()));
     let (cmd_prod, cmd_cons) = rtrb::RingBuffer::new(8192);
     let (trash_prod, trash_cons) = rtrb::RingBuffer::new(64);
@@ -147,4 +148,27 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| Ok(Box::new(ui::DjOsApp::new(cc, app, cmd, snap, loader, trash_cons)))),
     )
+}
+
+/// Vigia de travamento: se duas threads ficarem esperando uma pela outra (tela e controladora
+/// paradas, só o som seguindo), anota no registro onde cada uma parou e fecha o programa. A sessão
+/// do aparelho o reabre com as músicas de volta nos decks, em vez de ficar congelado o resto do set.
+fn watch_deadlocks() {
+    std::thread::Builder::new()
+        .name("vigia".into())
+        .spawn(|| loop {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            let stuck = parking_lot::deadlock::check_deadlock();
+            if stuck.is_empty() {
+                continue;
+            }
+            eprintln!("[djos] TRAVAMENTO: {} grupo(s) de threads presas esperando uma pela outra", stuck.len());
+            for (i, threads) in stuck.iter().enumerate() {
+                for t in threads {
+                    eprintln!("[djos] grupo {i}, thread {:?}:\n{:?}", t.thread_id(), t.backtrace());
+                }
+            }
+            std::process::abort();
+        })
+        .expect("thread vigia");
 }

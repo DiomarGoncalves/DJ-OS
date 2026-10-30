@@ -10,7 +10,7 @@ eframe = "0.29"
 cpal = "0.15"
 midir = "0.10"
 symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "wav", "pcm", "ogg", "vorbis", "alac"] }
-parking_lot = "0.12"
+parking_lot = { version = "0.12", features = ["deadlock_detection"] }
 rtrb = "0.3"
 libloading = "0.8"
 libc = "0.2"

@@ -213,8 +213,16 @@ if [ -z "$auto" ]; then
     done
 fi
 # Desliga em vez de reiniciar: o sistema da instalação roda do pendrive, então o pendrive só pode
-# sair com o computador desligado (tirar antes dá aquelas mensagens de erro no desligamento).
-msg "Instalação concluída!\n\nAperte Enter: o computador vai DESLIGAR.\nCom ele desligado, tire o pendrive e ligue de novo: já abre o DJ OS."
+# sair com o computador desligado.
+msg "Instalação concluída!\n\nNÃO tire o pendrive ainda.\n\nAperte Enter: o computador vai DESLIGAR.\nCom ele desligado, tire o pendrive e ligue de novo: já abre o DJ OS."
 [ -n "$auto" ] && { echo "INSTALADO"; poweroff; exit 0; }
 clear
+# Desliga pelo kernel, sem ler mais nada do pendrive: se ele for tirado antes da hora, o desligamento
+# normal travava numa tela cheia de "SQUASHFS error". Tudo já foi gravado (sync e discos só leitura).
+sync
+echo 1 >/proc/sys/kernel/sysrq
+echo s >/proc/sysrq-trigger
+echo u >/proc/sysrq-trigger
+sleep 2
+echo o >/proc/sysrq-trigger
 poweroff

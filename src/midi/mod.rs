@@ -132,10 +132,13 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
                 let blink = (start.elapsed().as_millis() / 400) % 2 == 0;
                 list.clear();
                 {
+                    // Mesma ordem da entrada MIDI (mapeamento, depois app): na ordem contrária, um
+                    // botão mexido bem nessa hora travava as duas threads para sempre (tela e
+                    // controladora paradas, só o som seguindo).
                     let s = *snap.lock();
-                    let a = app.lock();
-                    if let Some(m) = mapping.lock().as_ref() {
-                        m.leds(&a, &s, blink, &mut list);
+                    let m = mapping.lock();
+                    if let Some(m) = m.as_ref() {
+                        m.leds(&app.lock(), &s, blink, &mut list);
                     }
                 }
                 let mut c = cache.lock();
