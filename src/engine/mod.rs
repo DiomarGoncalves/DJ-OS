@@ -4,6 +4,7 @@ pub mod deck;
 pub mod dsp;
 pub mod fx;
 pub mod keylock;
+pub mod plate;
 #[cfg(test)]
 mod tests;
 

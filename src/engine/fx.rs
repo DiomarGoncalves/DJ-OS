@@ -102,55 +102,14 @@ pub struct FxCtx {
     pub beat_pos: f64,
 }
 
-struct Comb {
-    buf: Vec<f32>,
-    i: usize,
-    store: f32,
+/// Saturação suave (aproximação de tanh): segura a realimentação sem estalar.
+#[inline]
+fn soft(x: f32) -> f32 {
+    x / (1.0 + x * x / (3.0 + x * x / 5.0))
 }
 
-impl Comb {
-    fn new(n: usize) -> Self {
-        Self { buf: vec![0.0; n.max(2)], i: 0, store: 0.0 }
-    }
-
-    #[inline]
-    fn process(&mut self, x: f32, feedback: f32, damp: f32) -> f32 {
-        let out = self.buf[self.i];
-        self.store = out * (1.0 - damp) + self.store * damp;
-        self.buf[self.i] = x + self.store * feedback;
-        self.i += 1;
-        if self.i == self.buf.len() {
-            self.i = 0;
-        }
-        out
-    }
-}
-
-struct Allpass {
-    buf: Vec<f32>,
-    i: usize,
-}
-
-impl Allpass {
-    fn new(n: usize) -> Self {
-        Self { buf: vec![0.0; n.max(2)], i: 0 }
-    }
-
-    #[inline]
-    fn process(&mut self, x: f32) -> f32 {
-        let b = self.buf[self.i];
-        self.buf[self.i] = x + b * 0.5;
-        self.i += 1;
-        if self.i == self.buf.len() {
-            self.i = 0;
-        }
-        b - x
-    }
-}
-
-const COMBS: [usize; 8] = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
-const ALLPASSES: [usize; 4] = [556, 441, 341, 225];
-const SPREAD: usize = 23;
+/// Troca de tempo do eco: as duas leituras (tempo velho e novo) se cruzam neste tempo.
+const ECHO_XFADE: f32 = 2048.0;
 
 pub struct FxSlot {
     pub kind: FxKind,
@@ -161,14 +120,16 @@ pub struct FxSlot {
     tail: f32,
     fs: f32,
     ctr: u32,
-    // echo / ping pong
+    // echo / ping pong: tempo atual, tempo antigo e quanto falta da troca entre os dois
     delay: DelayLine,
     delay_time: f32,
+    delay_old: f32,
+    xfade: f32,
     fb_lp: [f32; 2],
+    fb_hp: StereoBiquad,
     wet_hp: StereoBiquad,
     // reverb
-    combs: [Vec<Comb>; 2],
-    aps: [Vec<Allpass>; 2],
+    plate: Box<super::plate::Plate>,
     // flanger
     mod_line: DelayLine,
     // phaser
@@ -186,9 +147,6 @@ pub struct FxSlot {
 
 impl FxSlot {
     pub fn new(kind: FxKind, fs: f32) -> Self {
-        let scale = fs / 44100.0;
-        let combs = [0, SPREAD].map(|off| COMBS.iter().map(|&n| Comb::new(((n + off) as f32 * scale) as usize)).collect());
-        let aps = [0, SPREAD].map(|off| ALLPASSES.iter().map(|&n| Allpass::new(((n + off) as f32 * scale) as usize)).collect());
         Self {
             kind,
             active: false,
@@ -200,10 +158,12 @@ impl FxSlot {
             ctr: 0,
             delay: DelayLine::new((fs * 4.0) as usize),
             delay_time: 0.0,
+            delay_old: 0.0,
+            xfade: 0.0,
             fb_lp: [0.0; 2],
+            fb_hp: StereoBiquad::default(),
             wet_hp: StereoBiquad::default(),
-            combs,
-            aps,
+            plate: Box::new(super::plate::Plate::new(fs)),
             mod_line: DelayLine::new((fs * 0.02) as usize),
             ap: [[0.0; 2]; 6],
             ph_a: 0.0,
@@ -249,19 +209,11 @@ impl FxSlot {
     fn reset_state(&mut self) {
         self.delay.clear();
         self.delay_time = 0.0;
+        self.xfade = 0.0;
         self.fb_lp = [0.0; 2];
+        self.fb_hp.reset();
         self.wet_hp.reset();
-        for side in self.combs.iter_mut() {
-            for c in side.iter_mut() {
-                c.buf.iter_mut().for_each(|s| *s = 0.0);
-                c.store = 0.0;
-            }
-        }
-        for side in self.aps.iter_mut() {
-            for a in side.iter_mut() {
-                a.buf.iter_mut().for_each(|s| *s = 0.0);
-            }
-        }
+        self.plate.clear();
         self.mod_line.clear();
         self.ap = [[0.0; 2]; 6];
         self.ph_fb = [0.0; 2];
@@ -295,64 +247,74 @@ impl FxSlot {
         let fs = self.fs;
 
         match self.kind {
+            // Eco (base: echo do Mixxx). O tempo é a divisão de batida; ao trocar, a leitura no
+            // tempo velho cruza com a do novo em ~40 ms (sem o "fita esticando"). A força aumenta o
+            // volume do eco e quantas repetições ele faz. A realimentação passa por um corte de
+            // grave e de agudo (cada repetição fica um pouco mais escura, como num eco de verdade)
+            // e por uma saturação suave, que segura o volume sem estalar.
             FxKind::Echo | FxKind::PingPong => {
                 let max = self.delay.len() as f32 - 4.0;
-                let target = (self.beats * ctx.beat_len).clamp(16.0, max);
+                let target = (self.beats * ctx.beat_len).round().clamp(16.0, max);
                 if self.delay_time <= 0.0 {
                     self.delay_time = target;
+                } else if self.xfade <= 0.0 && (target - self.delay_time).abs() >= 1.0 {
+                    self.delay_old = self.delay_time;
+                    self.delay_time = target;
+                    self.xfade = ECHO_XFADE;
                 }
-                // Mudança de tempo desliza devagar, como fita.
-                self.delay_time += (target - self.delay_time) * 0.0007;
-                let r = self.delay.read(self.delay_time);
-                let fbk = 0.5 + 0.2 * lvl;
-                self.fb_lp[0] += (r[0] - self.fb_lp[0]) * 0.45;
-                self.fb_lp[1] += (r[1] - self.fb_lp[1]) * 0.45;
-                let fb = self.fb_lp;
-                let w = if self.kind == FxKind::Echo {
-                    [x[0] * inp + fb[0] * fbk, x[1] * inp + fb[1] * fbk]
-                } else {
-                    [(x[0] + x[1]) * 0.5 * inp + fb[1] * fbk, fb[0] * fbk]
-                };
-                self.delay.write(w);
+                let mut r = self.delay.read(self.delay_time);
+                if self.xfade > 0.0 {
+                    let t = self.xfade / ECHO_XFADE;
+                    let o = self.delay.read(self.delay_old);
+                    r = [r[0] * (1.0 - t) + o[0] * t, r[1] * (1.0 - t) + o[1] * t];
+                    self.xfade -= 1.0;
+                }
                 if update {
-                    // Corte fixo de grave no eco para não embolar o grave da música.
+                    self.fb_hp.set(Coefs::highpass(fs, 140.0, 0.7071));
                     self.wet_hp.set(Coefs::highpass(fs, 110.0, 0.7071));
                 }
-                let wet = self.wet_hp.process([r[0] * lvl, r[1] * lvl]);
+                let fbk = 0.35 + 0.35 * lvl;
+                for c in 0..2 {
+                    self.fb_lp[c] += (r[c] - self.fb_lp[c]) * 0.6;
+                }
+                let fb = self.fb_hp.process(self.fb_lp);
+                let w = if self.kind == FxKind::Echo {
+                    [soft(x[0] * inp + fb[0] * fbk), soft(x[1] * inp + fb[1] * fbk)]
+                } else {
+                    // Ping pong: a entrada vai para a esquerda e cada repetição troca de lado.
+                    [soft((x[0] + x[1]) * 0.5 * inp + fb[1] * fbk), soft(fb[0] * fbk)]
+                };
+                self.delay.write(w);
+                let g = 0.6 * lvl;
+                let wet = self.wet_hp.process([r[0] * g, r[1] * g]);
                 self.track_tail(wet);
                 [x[0] + wet[0], x[1] + wet[1]]
             }
+            // Reverb de placa (Dattorro/CAPS, como no Mixxx). A força aumenta o volume e o tamanho
+            // da cauda; os graves ficam fora do reverb para não embolar o grave da música.
             FxKind::Reverb => {
-                let m = (x[0] + x[1]) * 0.015 * inp;
-                let room = 0.70 + 0.27 * lvl;
-                let damp = 0.25;
-                let mut out = [0.0f32; 2];
-                for ch in 0..2 {
-                    let mut acc = 0.0;
-                    for c in self.combs[ch].iter_mut() {
-                        acc += c.process(m, room, damp);
-                    }
-                    for a in self.aps[ch].iter_mut() {
-                        acc = a.process(acc);
-                    }
-                    out[ch] = acc;
-                }
+                let send = lvl.powf(1.53) * inp;
+                let decay = 0.89 * (0.5 + 0.35 * lvl);
+                let out = self.plate.process((x[0] + x[1]) * 0.5 * send, decay);
                 if update {
                     self.wet_hp.set(Coefs::highpass(fs, 160.0, 0.7071));
                 }
-                let g = lvl * 2.5;
-                let wet = self.wet_hp.process([out[0] * g, out[1] * g]);
+                let wet = self.wet_hp.process([out[0] * 0.55, out[1] * 0.55]);
                 self.track_tail(wet);
                 [x[0] + wet[0], x[1] + wet[1]]
             }
+            // Flanger (base: flanger do Mixxx). Um atraso de 0,3 a 8 ms varrendo no ritmo da
+            // divisão de batida; a força é a mistura e a realimentação (o "jato"). O volume é
+            // compensado para não subir com o efeito.
             FxKind::Flanger => {
                 let l = self.lfo(ctx);
-                let d = (0.0007 + 0.0045 * l) * fs;
+                let d = (0.0003 + 0.0077 * l) * fs;
                 let r = self.mod_line.read(d);
-                let fb = 0.6 * lvl;
-                self.mod_line.write([x[0] + r[0] * fb, x[1] + r[1] * fb]);
-                let m = 0.5 * lvl * inp;
-                [x[0] * (1.0 - m) + r[0] * m, x[1] * (1.0 - m) + r[1] * m]
+                let regen = 0.25 + 0.45 * lvl;
+                self.mod_line.write([soft(x[0] + r[0] * regen), soft(x[1] + r[1] * regen)]);
+                let m = lvl * inp;
+                let norm = 1.0 / (1.0 - m + 1.41253754 * m);
+                [(x[0] + r[0] * m) * norm, (x[1] + r[1] * m) * norm]
             }
             FxKind::Phaser => {
                 if self.ctr % 8 == 0 {
