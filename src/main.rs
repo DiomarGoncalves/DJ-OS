@@ -62,6 +62,12 @@ fn main() -> eframe::Result<()> {
         }
         return Ok(());
     }
+    if args.len() == 4 && args[1] == "--demo-efeitos" {
+        let t = track::load(std::path::Path::new(&args[2]), true).unwrap_or_else(|e| panic!("{}: {e}", args[2]));
+        println!("{} ({:.1} BPM)", t.display_name(), t.bpm());
+        engine::fx::demo(&t, std::path::Path::new(&args[3])).expect("gravar os WAVs");
+        return Ok(());
+    }
     // Prepara um pendrive no PC (estilo rekordbox): a análise vai para dentro dele.
     if args.len() == 3 && args[1] == "--preparar-pendrive" {
         let root = std::path::Path::new(&args[2]);

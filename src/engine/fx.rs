@@ -409,3 +409,46 @@ impl FxSlot {
         }
     }
 }
+
+/// Demonstração para ouvir os efeitos fora do aparelho (`dj-os --demo-efeitos <música> <pasta>`):
+/// para cada efeito grava um WAV de 30 s do meio da música, 8 s sem efeito, 12 s com o efeito
+/// (força 70%, divisão padrão) e 10 s desligado (a cauda). Mostra o pico de cada um: acima de
+/// 0 dB a saída estouraria (o limitador do master teria que apertar).
+pub fn demo(track: &crate::track::Track, dir: &std::path::Path) -> std::io::Result<()> {
+    use std::io::Write;
+    std::fs::create_dir_all(dir)?;
+    let fs = track.sr as f32;
+    let secs = |s: f32| (s * fs) as usize;
+    let start = (track.frames / 3).min(track.frames.saturating_sub(secs(30.0)));
+    let n = secs(30.0).min(track.frames - start);
+    for kind in [None, Some(FxKind::Echo), Some(FxKind::PingPong), Some(FxKind::Reverb), Some(FxKind::Flanger)] {
+        let mut fx = FxSlot::new(kind.unwrap_or_default(), fs);
+        fx.set_level(0.7);
+        let (mut peak, mut over) = (0.0f32, 0usize);
+        let mut pcm = Vec::with_capacity(n * 4);
+        for i in 0..n {
+            if kind.is_some() {
+                if i == secs(8.0) {
+                    fx.set_active(true);
+                } else if i == secs(20.0) {
+                    fx.set_active(false);
+                }
+            }
+            let f = start + i;
+            let x = [track.data[f * 2], track.data[f * 2 + 1]];
+            let ctx = FxCtx { beat_len: (track.beat_len() as f32).max(1.0), beat_pos: track.beats_at(f as f64) };
+            let y = if kind.is_some() { fx.process(x, &ctx) } else { x };
+            for v in y {
+                peak = peak.max(v.abs());
+                over += (v.abs() > 1.0) as usize;
+                pcm.extend_from_slice(&((v.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+            }
+        }
+        let name = kind.map_or("0-sem-efeito".to_string(), |k| k.name().to_lowercase().replace(' ', "-"));
+        let mut f = std::fs::File::create(dir.join(format!("{name}.wav")))?;
+        f.write_all(&crate::record::wav_header(fs as u32, pcm.len() as u32))?;
+        f.write_all(&pcm)?;
+        println!("{name:14} pico {:+5.1} dB, {over} amostras estourando", 20.0 * peak.max(1e-9).log10());
+    }
+    Ok(())
+}

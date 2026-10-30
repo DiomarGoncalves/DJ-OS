@@ -61,7 +61,7 @@ fn destination(target: usize) -> Result<(PathBuf, Option<PathBuf>), String> {
 }
 
 /// Cabeçalho WAV PCM 16 bits estéreo com `data_bytes` de áudio.
-fn wav_header(rate: u32, data_bytes: u32) -> [u8; 44] {
+pub fn wav_header(rate: u32, data_bytes: u32) -> [u8; 44] {
     let mut h = [0u8; 44];
     let mut put = |at: usize, b: &[u8]| h[at..at + b.len()].copy_from_slice(b);
     put(0, b"RIFF");
