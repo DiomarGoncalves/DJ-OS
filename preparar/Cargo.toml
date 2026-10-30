@@ -1,6 +1,6 @@
 [package]
 name = "dj-os-preparar"
-version = "0.1.0"
+version = "0.1.1"
 license = "GPL-3.0-or-later"
 edition = "2021"
 description = "DJ OS Preparar: analisa as músicas do pendrive no computador (Windows e Linux) para o aparelho DJ OS já tocar com tudo pronto"

@@ -6,6 +6,28 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+## [0.1.1] - 2026-10-30
+
+Correções do primeiro teste na máquina de verdade (notebook de 2011, i5-2430M, Intel HD 3000) e o
+programa do computador de casa.
+
+### Novo
+- **DJ OS Preparar** (Windows e Linux): prepara o pendrive no computador de casa, como o rekordbox.
+  As músicas chegam ao aparelho já analisadas (BPM, grade, tom, volume, waveform).
+- Efeitos refeitos: reverb de placa (Dattorro/CAPS, como no Mixxx), eco que troca de tempo sem
+  esticar e com repetições mais escuras, flanger mais fundo; sem estourar o volume.
+- Medidores de volume dos canais acendem na controladora.
+- CONFIG → SISTEMA mostra a versão com a data do firmware; "Analisar todas as músicas".
+- CONFIG → CONTROLADORA → "Registrar os botões" (diagnóstico).
+
+### Corrigido
+- Tela e controladora congelavam no meio do set (só o som seguia).
+- O aparelho desligava sozinho por calor: controle de temperatura do processador, sem turbo, e a
+  análise das músicas não roda mais em segundo plano (só no LOAD).
+- Nomes com acento no pendrive (ç, ã, é) apareciam quebrados.
+- Atualização de firmware mais leve (não esquenta) e com erro claro quando o arquivo está incompleto.
+- Desligar no fim da instalação não trava se o pendrive for tirado antes da hora.
+
 ## [0.1.0] - 2026-10-29
 
 Primeira versão funcional, em teste com a Pioneer DDJ-REV1.

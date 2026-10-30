@@ -1,6 +1,6 @@
 [package]
 name = "dj-os-analise"
-version = "0.1.0"
+version = "0.1.1"
 license = "GPL-3.0-or-later"
 edition = "2021"
 description = "Análise das músicas do DJ OS (BPM, grade, tom, volume, waveform) e o formato do pendrive preparado"

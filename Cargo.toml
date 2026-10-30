@@ -1,6 +1,6 @@
 [package]
 name = "dj-os"
-version = "0.1.0"
+version = "0.1.1"
 license = "GPL-3.0-or-later"
 edition = "2021"
 description = "Sistema de DJ all-in-one para a Pioneer DDJ-REV1"
