@@ -193,6 +193,7 @@ pub enum Action {
     AmbientDuck,
     LightMode,
     FourDecks,
+    AnalyzeAll,
 }
 
 pub enum Row {
@@ -344,6 +345,9 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
                 let act = Action::FwInstall(f.clone());
                 v.push(Row::Item { label: format!("   {name}"), value: confirm(&act, "instalar".into()), action: act });
             }
+            let analyzing = crate::import::ANALYZE_ALL.load(std::sync::atomic::Ordering::Relaxed);
+            let value = if analyzing { "ANALISANDO… (para enquanto um deck toca)" } else { "ANALISAR" };
+            v.push(Row::Item { label: "Analisar todas as músicas (BPM, tom, volume)".into(), value: value.into(), action: Action::AnalyzeAll });
             v.push(Row::Item { label: "Reiniciar".into(), value: confirm(&Action::Restart, String::new()), action: Action::Restart });
             v.push(Row::Item { label: "Desligar".into(), value: confirm(&Action::PowerOff, String::new()), action: Action::PowerOff });
         }
@@ -472,6 +476,11 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::AmbientDuck => a.settings.ambient_duck = !a.settings.ambient_duck,
         Action::LightMode => a.settings.light_mode = next(a.settings.light_mode, LIGHT_MODES.len()),
         Action::FourDecks => a.settings.four_decks = !a.settings.four_decks,
+        Action::AnalyzeAll => {
+            crate::import::ANALYZE_ALL.store(true, std::sync::atomic::Ordering::Relaxed);
+            a.toast("Analisando todas as músicas: pode demorar; para sozinho enquanto um deck toca".to_string());
+            return;
+        }
         Action::AutoGain => a.settings.auto_gain = !a.settings.auto_gain,
         Action::RecTarget => a.settings.rec_target = next(a.settings.rec_target, crate::record::TARGETS.len()),
         Action::PhoneIn => {

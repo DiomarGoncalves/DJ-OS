@@ -6,7 +6,7 @@ use crate::library::Index;
 use crate::shared::SharedSnap;
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -177,12 +177,16 @@ pub fn delete_internal(path: &Path) -> Result<(), String> {
     }
 }
 
-/// Analisa sozinho, com prioridade baixa, toda música do índice que ainda não tem análise salva.
-/// `counter` sobe a cada música analisada (a lista usa para mostrar o BPM novo).
+/// Pedido de "Analisar todas as músicas" (CONFIG → SISTEMA): fica ligado enquanto analisa.
+pub static ANALYZE_ALL: AtomicBool = AtomicBool::new(false);
+
+/// Análise de todas as músicas do índice que ainda não têm análise salva, só quando pedida
+/// (`ANALYZE_ALL`), com prioridade baixa. `counter` sobe a cada música analisada (a lista usa
+/// para mostrar o BPM novo).
 ///
-/// Para enquanto algum deck estiver tocando: analisar é o que mais gasta processador, e em
-/// máquinas fracas ou com refrigeração ruim o processador esquentava até desligar no meio do set.
-/// A música carregada num deck é analisada na hora do LOAD, então tocar não depende disto.
+/// Não roda sozinha e para enquanto algum deck estiver tocando: analisar é o que mais gasta
+/// processador, e em máquinas fracas ou com refrigeração ruim o processador esquentava até
+/// desligar no meio do set. Cada música é analisada de qualquer jeito na hora do LOAD.
 pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>, snap: SharedSnap) {
     let playing = move || snap.lock().decks.iter().any(|d| d.playing);
     std::thread::Builder::new()
@@ -194,6 +198,10 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>, snap: S
             // 100% e o aparelho esquentando até desligar).
             let mut failed: std::collections::HashSet<PathBuf> = Default::default();
             loop {
+                if !ANALYZE_ALL.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
                 let paths: Vec<PathBuf> = index.lock().entries.iter().map(|(_, t)| t.path.clone()).collect();
                 let mut did = 0;
                 for p in paths {
@@ -235,10 +243,8 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>, snap: S
                     // Folga entre músicas para nunca ocupar o processador de vez.
                     std::thread::sleep(Duration::from_millis(300));
                 }
-                if did > 0 {
-                    eprintln!("[djos] análise automática: {did} música(s) analisadas");
-                }
-                std::thread::sleep(Duration::from_secs(10));
+                eprintln!("[djos] analisar todas: {did} música(s) analisadas");
+                ANALYZE_ALL.store(false, Ordering::Relaxed);
             }
         })
         .expect("thread de análise");
