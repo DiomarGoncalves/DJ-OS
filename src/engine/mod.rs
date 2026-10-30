@@ -42,6 +42,9 @@ pub struct Engine {
     rec: Option<rtrb::Producer<[f32; 2]>>,
     bt_source: u8,
     xf_curve: u8,
+    /// Lado de cada deck no crossfader (0 A, 1 fora, 2 B).
+    xf_side: [u8; NUM_DECKS],
+    hp_split: bool,
     line_in: Option<LineIn>,
     line_route: Option<usize>,
     ambient_vol: f32,
@@ -133,6 +136,8 @@ impl Engine {
             rec: None,
             bt_source: 1,
             xf_curve: 0,
+            xf_side: std::array::from_fn(|d| if d % 2 == 0 { 0 } else { 2 }),
+            hp_split: false,
             line_in: None,
             line_route: Some(3),
             ambient_vol: 0.7,
@@ -199,6 +204,10 @@ impl Engine {
             Cmd::PitchRangeCycle(d) if ok(d) => self.decks[d].cycle_pitch_range(),
             Cmd::SetPitchRange { deck, range } if ok(deck) => self.decks[deck].set_pitch_range(range),
             Cmd::XfCurve(c) => self.xf_curve = c,
+            Cmd::XfAssign { deck, side } if ok(deck) => self.xf_side[deck] = side.min(2),
+            Cmd::EqIso(on) => self.decks.iter_mut().for_each(|d| d.set_eq_iso(on)),
+            Cmd::FaderCurve(c) => self.decks.iter_mut().for_each(|d| d.set_fader_curve(c)),
+            Cmd::HpSplit(on) => self.hp_split = on,
             Cmd::PitchReset(d) if ok(d) => self.decks[d].pitch_reset(),
             Cmd::Sync(d) if ok(d) => self.sync(d),
             Cmd::Vinyl { deck, on } if ok(deck) => self.decks[deck].vinyl = on,
@@ -366,13 +375,18 @@ impl Engine {
             // Som ambiente abaixa sozinho (em ~1 s) quando algum deck está tocando com o fader aberto.
             let dj_playing = self.decks.iter().any(|d| d.playing && d.fader_v > 0.05);
             let sp_target = if self.ambient_duck && dj_playing { 0.0 } else { self.ambient_vol };
+            let any_cue = self.decks.iter().any(|d| d.pfl);
             self.ambient_gain.set(sp_target);
             for i in 0..n {
                 let (ga, gb) = xf_gains(self.xf.next(), self.xf_curve);
                 let mut m = [0.0f32; 2];
                 let mut c = [0.0f32; 2];
                 for d in 0..NUM_DECKS {
-                    let g = if d % 2 == 0 { ga } else { gb };
+                    let g = match self.xf_side[d] {
+                        0 => ga,
+                        2 => gb,
+                        _ => 1.0,
+                    };
                     let p = self.post[d][i];
                     m[0] += p[0] * g;
                     m[1] += p[1] * g;
@@ -408,7 +422,14 @@ impl Engine {
                 let mo = [soft_clip(l[0]), soft_clip(l[1])];
                 let mix = self.hp_mix.next();
                 let hg = self.hp.next();
-                let hl = self.lim_phones.process([(c[0] * (1.0 - mix) + mo[0] * mix) * hg, (c[1] * (1.0 - mix) + mo[1] * mix) * hg]);
+                let hin = if self.hp_split {
+                    // Mono dividido: cue no ouvido esquerdo (sem CUE ligado, o master), master no direito.
+                    let mm = (mo[0] + mo[1]) * 0.5;
+                    [if any_cue { (c[0] + c[1]) * 0.5 } else { mm }, mm]
+                } else {
+                    [c[0] * (1.0 - mix) + mo[0] * mix, c[1] * (1.0 - mix) + mo[1] * mix]
+                };
+                let hl = self.lim_phones.process([hin[0] * hg, hin[1] * hg]);
                 let h = [soft_clip(hl[0]), soft_clip(hl[1])];
                 // Bluetooth: master (sem o atraso) ou fone; se a fila encher, o quadro é descartado.
                 // Gravação do set: o master como sai (sem o atraso do Bluetooth).

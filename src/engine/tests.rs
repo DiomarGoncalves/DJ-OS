@@ -241,6 +241,37 @@ fn eq_no_minimo_corta() {
 }
 
 #[test]
+fn modo_eq_corta_tudo_ou_ate_26_db() {
+    use super::deck::eq_gain;
+    assert_eq!(eq_gain(0.0, true), 0.0);
+    let g = 20.0 * eq_gain(0.0, false).log10();
+    assert!((g + 26.0).abs() < 0.1, "EQ no mínimo: {g} dB");
+    for iso in [true, false] {
+        assert!((eq_gain(0.5, iso) - 1.0).abs() < 1e-6, "centro em 0 dB");
+    }
+    // Trocar o modo com o EQ já no mínimo vale na hora.
+    let mut d = deck_with(128.0);
+    for b in 0..3 {
+        d.set_eq(b, 0.0);
+    }
+    d.set_eq_iso(false);
+    d.play_toggle();
+    let out = render(&mut d, 48000);
+    let peak = out[24000..].iter().fold(0.0f32, |a, s| a.max(s[0].abs()));
+    assert!(peak > 0.005, "modo EQ: o som baixa, mas não some ({peak})");
+}
+
+#[test]
+fn curvas_do_fader_de_canal() {
+    use super::deck::fader_gain;
+    for c in 0..3 {
+        assert_eq!(fader_gain(0.0, c), 0.0);
+        assert_eq!(fader_gain(1.0, c), 1.0);
+    }
+    assert!(fader_gain(0.5, 0) < fader_gain(0.5, 1) && fader_gain(0.5, 1) < fader_gain(0.5, 2));
+}
+
+#[test]
 fn fader_no_zero_cala() {
     let mut d = deck_with(128.0);
     d.set_fader(0.0);
@@ -373,6 +404,36 @@ fn crossfader_corta_o_lado_oposto() {
     r.run(24000);
     let p = r.run(24000);
     assert!(p[0] > 0.1, "crossfader à direita deveria tocar o deck 2");
+}
+
+#[test]
+fn deck_fora_do_crossfader_ignora_o_crossfader() {
+    let mut r = rig();
+    r.send(Cmd::Load { deck: 1, track: track(128.0) });
+    r.send(Cmd::PlayToggle(1));
+    r.send(Cmd::Crossfader(0.0));
+    r.send(Cmd::XfAssign { deck: 1, side: 1 });
+    r.run(48000);
+    let p = r.run(24000);
+    assert!(p[0] > 0.1, "THRU: o deck 2 toca com o crossfader todo à esquerda");
+    r.send(Cmd::XfAssign { deck: 1, side: 0 });
+    r.run(24000);
+    let p = r.run(24000);
+    assert!(p[0] > 0.1, "deck 2 no lado A: toca com o crossfader à esquerda");
+}
+
+#[test]
+fn fone_mono_dividido() {
+    let mut r = rig();
+    r.send(Cmd::Load { deck: 0, track: track(128.0) });
+    r.send(Cmd::PlayToggle(0));
+    r.send(Cmd::Pfl { deck: 0, on: true });
+    r.send(Cmd::Fader { deck: 0, v: 0.0 });
+    r.send(Cmd::HpSplit(true));
+    r.run(48000);
+    let p = r.run(24000);
+    assert!(p[2] > 0.1, "esquerdo: o CUE");
+    assert!(p[3] < 1e-3, "direito: o master (mudo com o fader fechado)");
 }
 
 #[test]

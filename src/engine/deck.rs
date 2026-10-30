@@ -61,6 +61,11 @@ pub struct Deck {
     auto_gain_on: bool,
     auto_gain: Smooth,
     eq: [Smooth; 3],
+    eq_v: [f32; 3],
+    /// Isolador (corte total no mínimo) ou EQ (-26 dB no mínimo).
+    pub eq_iso: bool,
+    /// Curva do fader de canal: 0 lenta, 1 normal, 2 rápida.
+    pub fader_curve: u8,
     pub filter_v: f32,
     filt_amt: Smooth,
     filt_lp: StereoBiquad,
@@ -87,12 +92,24 @@ pub fn trim_gain(v: f32) -> f32 {
     }
 }
 
-/// EQ com corte total no mínimo, 0 dB no centro e +6 dB no máximo.
-pub fn eq_gain(v: f32) -> f32 {
+/// EQ com 0 dB no centro e +6 dB no máximo. No mínimo: corte total (isolador) ou -26 dB (EQ).
+pub fn eq_gain(v: f32, iso: bool) -> f32 {
     if v < 0.5 {
-        (v / 0.5).powi(2)
+        let floor = if iso { 0.0 } else { db(-26.0) };
+        floor + (1.0 - floor) * (v / 0.5).powi(2)
     } else {
         1.0 + (v - 0.5) / 0.5 * (db(6.0) - 1.0)
+    }
+}
+
+/// Curva do fader de canal. 0 lenta: o som só aparece de verdade no fim do curso; 1 normal;
+/// 2 rápida: quase cheio já na metade (corte, bom para scratch).
+pub fn fader_gain(v: f32, curve: u8) -> f32 {
+    let v = v.clamp(0.0, 1.0);
+    match curve {
+        0 => v * v * v,
+        2 => 1.0 - (1.0 - v) * (1.0 - v),
+        _ => v * v,
     }
 }
 
@@ -136,6 +153,9 @@ impl Deck {
             auto_gain_on: true,
             auto_gain: Smooth::new(1.0, 0.002),
             eq: [Smooth::new(1.0, 0.002); 3],
+            eq_v: [0.5; 3],
+            eq_iso: true,
+            fader_curve: 1,
             filter_v: 0.5,
             filt_amt: Smooth::new(0.0, 0.003),
             filt_lp: StereoBiquad::default(),
@@ -539,13 +559,26 @@ impl Deck {
 
     pub fn set_eq(&mut self, band: usize, v: f32) {
         if band < 3 {
-            self.eq[band].set(eq_gain(v));
+            self.eq_v[band] = v;
+            self.eq[band].set(eq_gain(v, self.eq_iso));
+        }
+    }
+
+    pub fn set_eq_iso(&mut self, on: bool) {
+        self.eq_iso = on;
+        for b in 0..3 {
+            self.set_eq(b, self.eq_v[b]);
         }
     }
 
     pub fn set_fader(&mut self, v: f32) {
         self.fader_v = v;
-        self.fader.set(v * v);
+        self.fader.set(fader_gain(v, self.fader_curve));
+    }
+
+    pub fn set_fader_curve(&mut self, c: u8) {
+        self.fader_curve = c;
+        self.set_fader(self.fader_v);
     }
 
     fn update_filter(&mut self) {

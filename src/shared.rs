@@ -34,6 +34,14 @@ pub enum Cmd {
     SetPitchRange { deck: usize, range: f64 },
     /// Curva do crossfader: 0 = suave (os dois cheios no meio), 1 = corte (scratch), 2 = potência constante.
     XfCurve(u8),
+    /// Lado do deck no crossfader: 0 = A, 1 = fora do crossfader (THRU), 2 = B.
+    XfAssign { deck: usize, side: u8 },
+    /// Modo do EQ: true = isolador (corte total no mínimo), false = EQ (-26 dB no mínimo).
+    EqIso(bool),
+    /// Curva do fader de canal: 0 = lenta, 1 = normal, 2 = rápida.
+    FaderCurve(u8),
+    /// Fone em mono dividido: cue no lado esquerdo, master no direito.
+    HpSplit(bool),
     PitchReset(usize),
     Sync(usize),
     Vinyl { deck: usize, on: bool },

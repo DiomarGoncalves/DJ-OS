@@ -12,6 +12,10 @@ pub const PALETTES: [&str; 3] = ["AZUL/LARANJA", "RGB", "AZUL"];
 pub const SCALES: [f32; 3] = [1.0, 1.15, 1.3];
 pub const PITCH_RANGES: [f64; 3] = [0.08, 0.16, 0.50];
 pub const XF_CURVES: [&str; 3] = ["SUAVE", "CORTE (SCRATCH)", "POTÊNCIA CONSTANTE"];
+pub const FADER_CURVES: [&str; 3] = ["LENTA", "NORMAL", "RÁPIDA (CORTE)"];
+/// Lado de cada deck no crossfader (o índice vai para o motor: 0 A, 1 fora, 2 B).
+pub const XF_SIDES: [&str; 3] = ["A (ESQUERDA)", "THRU (FORA DO CROSSFADER)", "B (DIREITA)"];
+const XF_SIDE_CHARS: [char; 3] = ['A', 'T', 'B'];
 pub const LIGHT_MODES: [&str; 3] = ["AUTOMÁTICO", "LIGADO", "DESLIGADO"];
 pub const AMBIENT_VOLS: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
 const BT_DELAYS: [f32; 9] = [0.0, 50.0, 100.0, 150.0, 200.0, 250.0, 300.0, 400.0, 500.0];
@@ -39,6 +43,13 @@ pub struct Settings {
     pub rec_target: usize,
     /// Tela principal com os 4 decks (senão, os 2 da frente).
     pub four_decks: bool,
+    /// EQ como isolador (corte total no mínimo) ou EQ (-26 dB).
+    pub eq_iso: bool,
+    pub fader_curve: usize,
+    /// Lado de cada deck no crossfader: índice em XF_SIDES.
+    pub xf_side: [usize; NUM_DECKS],
+    /// Fone em mono dividido (cue à esquerda, master à direita).
+    pub hp_split: bool,
 }
 
 impl Default for Settings {
@@ -59,6 +70,10 @@ impl Default for Settings {
             auto_gain: true,
             rec_target: 0,
             four_decks: true,
+            eq_iso: true,
+            fader_curve: 1,
+            xf_side: std::array::from_fn(|d| if d % 2 == 0 { 0 } else { 2 }),
+            hp_split: false,
         }
     }
 }
@@ -96,6 +111,16 @@ impl Settings {
                 "ganho_automatico" => s.auto_gain = v == "sim",
                 "gravar_em" => s.rec_target = num(crate::record::TARGETS.len()).unwrap_or(0),
                 "quatro_decks" => s.four_decks = v == "sim",
+                "eq_isolador" => s.eq_iso = v != "nao",
+                "curva_fader" => s.fader_curve = num(FADER_CURVES.len()).unwrap_or(1),
+                "lado_crossfader" => {
+                    for (d, c) in v.chars().take(NUM_DECKS).enumerate() {
+                        if let Some(i) = XF_SIDE_CHARS.iter().position(|x| *x == c) {
+                            s.xf_side[d] = i;
+                        }
+                    }
+                }
+                "fone_dividido" => s.hp_split = v == "sim",
                 _ => {}
             }
         }
@@ -111,7 +136,8 @@ impl Settings {
         };
         format!(
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
-             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n",
+             volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
+             eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -125,7 +151,11 @@ impl Settings {
             self.phone_in,
             yn(self.auto_gain),
             self.rec_target,
-            yn(self.four_decks)
+            yn(self.four_decks),
+            yn(self.eq_iso),
+            self.fader_curve,
+            self.xf_side.iter().map(|&i| XF_SIDE_CHARS[i]).collect::<String>(),
+            yn(self.hp_split)
         )
     }
 
@@ -149,8 +179,12 @@ impl Settings {
             cmd.send(Cmd::Vinyl { deck, on: self.vinyl });
             cmd.send(Cmd::SetPitchRange { deck, range: PITCH_RANGES[self.pitch_range] });
             cmd.send(Cmd::Keylock { deck, on: self.keylock });
+            cmd.send(Cmd::XfAssign { deck, side: self.xf_side[deck] as u8 });
         }
         cmd.send(Cmd::XfCurve(self.xf_curve as u8));
+        cmd.send(Cmd::EqIso(self.eq_iso));
+        cmd.send(Cmd::FaderCurve(self.fader_curve as u8));
+        cmd.send(Cmd::HpSplit(self.hp_split));
         cmd.send(Cmd::AmbientVolume(AMBIENT_VOLS[self.ambient_vol]));
         cmd.send(Cmd::AmbientDuck(self.ambient_duck));
         cmd.send(Cmd::LineInRoute(crate::phone::route_target(self.phone_in)));
@@ -186,6 +220,10 @@ pub enum Action {
     Vinyl,
     PitchRange,
     XfCurve,
+    XfSide(usize),
+    EqMode,
+    FaderCurve,
+    HpSplit,
     Keylock,
     Palette,
     Scale,
@@ -223,6 +261,7 @@ pub struct SettingsUi {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tab {
     Audio,
+    Mixer,
     Bluetooth,
     Phone,
     Wifi,
@@ -232,11 +271,12 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 7] = [Tab::Audio, Tab::Bluetooth, Tab::Phone, Tab::Wifi, Tab::Controller, Tab::Screen, Tab::System];
+    pub const ALL: [Tab; 8] = [Tab::Audio, Tab::Mixer, Tab::Bluetooth, Tab::Phone, Tab::Wifi, Tab::Controller, Tab::Screen, Tab::System];
 
     pub fn name(self) -> &'static str {
         match self {
             Tab::Audio => "ÁUDIO",
+            Tab::Mixer => "MIXER",
             Tab::Bluetooth => "CAIXA BLUETOOTH",
             Tab::Phone => "CELULAR",
             Tab::Wifi => "WI-FI",
@@ -252,6 +292,7 @@ pub fn tab_summary(app: &AppState, tab: Tab) -> String {
     let s = &app.settings;
     match tab {
         Tab::Audio => if app.audio_status.contains("DDJ-REV1") { "DDJ-REV1".into() } else if app.audio_status.starts_with(crate::pw_out::NO_OUTPUT) { "sem saída".into() } else { "sem a REV1".into() },
+        Tab::Mixer => format!("{} · fone {}", if s.eq_iso { "isolador" } else { "eq" }, if s.hp_split { "dividido" } else { "estéreo" }),
         Tab::Bluetooth => app.bt_mode.name().to_lowercase(),
         Tab::Phone => crate::phone::ROUTES[s.phone_in].to_lowercase(),
         Tab::Wifi => app.settings_ui.as_ref().and_then(|u| u.wifi.iter().find(|n| n.active)).map_or("—".into(), |n| n.ssid.clone()),
@@ -296,6 +337,29 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Item { label: "Gravar em".into(), value: crate::record::TARGETS[s.rec_target].into(), action: Action::RecTarget });
             v.push(Row::Info("Arquivo WAV na pasta \"records\" (≈11 MB por minuto).".into()));
         }
+        Tab::Mixer => {
+            v.push(Row::Item {
+                label: "Modo do EQ".into(),
+                value: if s.eq_iso { "ISOLADOR (corta tudo)" } else { "EQ (até -26 dB)" }.into(),
+                action: Action::EqMode,
+            });
+            v.push(Row::Info("Isolador: girar o grave todo para a esquerda some com o grave, como nos mixers de clube.".into()));
+            v.push(Row::Item { label: "Curva do fader de canal".into(), value: FADER_CURVES[s.fader_curve].into(), action: Action::FaderCurve });
+            v.push(Row::Item { label: "Curva do crossfader".into(), value: XF_CURVES[s.xf_curve].into(), action: Action::XfCurve });
+            v.push(Row::Header("LADO DE CADA DECK NO CROSSFADER"));
+            let decks = if s.four_decks { NUM_DECKS } else { 2 };
+            for d in 0..decks {
+                v.push(Row::Item { label: format!("Deck {}", d + 1), value: XF_SIDES[s.xf_side[d]].into(), action: Action::XfSide(d) });
+            }
+            v.push(Row::Info("THRU: o deck não passa pelo crossfader (só o fader de canal manda).".into()));
+            v.push(Row::Header("FONE DE OUVIDO"));
+            v.push(Row::Item {
+                label: "Fone".into(),
+                value: if s.hp_split { "MONO DIVIDIDO" } else { "ESTÉREO" }.into(),
+                action: Action::HpSplit,
+            });
+            v.push(Row::Info("Mono dividido: o CUE no ouvido esquerdo e o master no direito.".into()));
+        }
         Tab::Bluetooth => {
             v.push(Row::Item { label: "Caixa Bluetooth toca".into(), value: app.bt_mode.name().into(), action: Action::BtMode });
             v.push(Row::Item { label: "Atraso do master com fio".into(), value: format!("{:.0} ms", s.bt_delay_ms), action: Action::BtDelay });
@@ -325,7 +389,6 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
         Tab::Controller => {
             v.push(Row::Item { label: "Jog ao ligar".into(), value: if s.vinyl { "VINIL (scratch)" } else { "CDJ (bend)" }.into(), action: Action::Vinyl });
             v.push(Row::Item { label: "Faixa de pitch".into(), value: format!("±{:.0}%", PITCH_RANGES[s.pitch_range] * 100.0), action: Action::PitchRange });
-            v.push(Row::Item { label: "Curva do crossfader".into(), value: XF_CURVES[s.xf_curve].into(), action: Action::XfCurve });
             v.push(Row::Item { label: "Keylock ao carregar".into(), value: if s.keylock { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Keylock });
             let left = crate::midi::log_left();
             let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
@@ -476,6 +539,10 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::Vinyl => a.settings.vinyl = !a.settings.vinyl,
         Action::PitchRange => a.settings.pitch_range = next(a.settings.pitch_range, PITCH_RANGES.len()),
         Action::XfCurve => a.settings.xf_curve = next(a.settings.xf_curve, XF_CURVES.len()),
+        Action::XfSide(d) => a.settings.xf_side[d] = next(a.settings.xf_side[d], XF_SIDES.len()),
+        Action::EqMode => a.settings.eq_iso = !a.settings.eq_iso,
+        Action::FaderCurve => a.settings.fader_curve = next(a.settings.fader_curve, FADER_CURVES.len()),
+        Action::HpSplit => a.settings.hp_split = !a.settings.hp_split,
         Action::Keylock => a.settings.keylock = !a.settings.keylock,
         Action::Palette => a.settings.palette = next(a.settings.palette, PALETTES.len()),
         Action::Scale => a.settings.scale = next(a.settings.scale, SCALES.len()),
@@ -678,6 +745,10 @@ mod tests {
             auto_gain: false,
             rec_target: 2,
             four_decks: true,
+            eq_iso: false,
+            fader_curve: 2,
+            xf_side: [1, 2, 0, 1],
+            hp_split: true,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");
@@ -699,8 +770,8 @@ mod tests {
         let cmd = CmdTx::new(tx);
         let app = std::sync::Arc::new(parking_lot::Mutex::new(AppState::new()));
         open(&mut app.lock());
-        // Aba CONTROLADORA: acha o item "Curva do crossfader" e aciona.
-        select_tab(&mut app.lock(), Tab::ALL.iter().position(|t| *t == Tab::Controller).unwrap());
+        // Aba MIXER: acha o item "Curva do crossfader" e aciona.
+        select_tab(&mut app.lock(), Tab::ALL.iter().position(|t| *t == Tab::Mixer).unwrap());
         let idx = {
             let a = app.lock();
             let r = rows(&a);
@@ -723,7 +794,7 @@ mod tests {
         let mut app = AppState::new();
         open(&mut app);
         assert!(app.settings_ui.as_ref().unwrap().on_tabs, "abre com o BROWSE nas abas");
-        scroll(&mut app, 2);
+        scroll(&mut app, 3);
         assert_eq!(current_tab(&app), Tab::Phone);
         // Apertar o BROWSE entra na aba.
         focus_tabs(&mut app, false);

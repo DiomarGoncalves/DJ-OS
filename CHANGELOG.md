@@ -6,6 +6,14 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+### Novo
+- Aba **MIXER** nas configurações (inspirada nos mixers de clube):
+  - modo do EQ: isolador (corta tudo no mínimo) ou EQ (até -26 dB);
+  - curva do fader de canal: lenta, normal ou rápida (corte);
+  - curva do crossfader (saiu da aba Controladora);
+  - lado de cada deck no crossfader: A, B ou THRU (fora do crossfader);
+  - fone em estéreo ou mono dividido (CUE no ouvido esquerdo, master no direito).
+
 ## [0.1.1] - 2026-10-30
 
 Correções do primeiro teste na máquina de verdade (notebook de 2011, i5-2430M, Intel HD 3000) e o
