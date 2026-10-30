@@ -21,6 +21,9 @@ para diferenciar firmwares de teste da mesma versão.
 - Scratch e backspin dentro do loop: para trás, o som volta pelo fim do loop em vez de sair dele.
 - Mão no prato: o som freia liso e fica mudo com a mão parada (antes chiava e deixava um zumbido);
   o scratch segue a mão sem o "serrilhado" digital e para exatamente onde a mão parou.
+- HD e SSD externos (em case USB) não apareciam na biblioteca, só pendrives.
+- Dois discos com o mesmo nome (ex.: "Novo volume" do Windows) aparecem os dois; a partição de
+  boot (EFI) de um disco com sistema instalado não aparece mais.
 
 ## [0.1.1] - 2026-10-30
 

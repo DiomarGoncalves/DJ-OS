@@ -6,6 +6,11 @@ dev="$1"; label="$2"; uuid="$3"; fstype="$4"
 [ "$label" = VTOYEFI ] && exit 0
 name=$(printf '%s' "${label:-$uuid}" | tr -c 'A-Za-z0-9._-' '_')
 [ -n "$name" ] || name=pendrive
+# Dois discos com o mesmo nome (o "Novo volume" do Windows): o segundo não teria onde montar.
+# O fim do UUID diferencia os dois e é sempre o mesmo para cada disco.
+if [ -n "$label" ] && [ "$(blkid -c /dev/null -t LABEL="$label" -o device 2>/dev/null | wc -l)" -gt 1 ]; then
+    name="${name}_$(printf '%s' "$uuid" | tr -cd 'A-Za-z0-9' | tail -c 4)"
+fi
 opts=ro,nosuid,nodev,noexec
 # Nomes com acento (ç, ã, é...) em UTF-8: sem isto o FAT vinha em latin-1 e "divulgação" virava
 # "divulga��o" na lista (e a análise da música não conseguia ser guardada).
