@@ -3,6 +3,11 @@
 //!
 //! A chave é o nome do arquivo + tamanho + data de modificação: continua valendo se o pendrive
 //! for montado em outro lugar, e muda se o arquivo for trocado.
+//!
+//! Pendrive preparado no PC (`dj-os --preparar-pendrive`, estilo rekordbox): a análise de cada
+//! música fica no próprio pendrive, em `DJOS/analise/`, com a chave nome + tamanho (a data dos
+//! arquivos do pendrive muda conforme o fuso de quem monta). O aparelho lê de lá e não precisa
+//! analisar; o que for marcado no aparelho (cues) continua indo para `~/DJOS/dados/`.
 
 use crate::app::data_dir;
 use crate::shared::HOTCUES;
@@ -154,6 +159,42 @@ fn dir() -> PathBuf {
     data_dir().join("dados")
 }
 
+/// Pasta da análise dentro do pendrive preparado.
+pub const PENDRIVE_DIR: &str = "DJOS/analise";
+
+/// Chave da análise no pendrive: nome + tamanho (sem a data).
+fn portable_key(track: &Path) -> Option<String> {
+    let md = std::fs::metadata(track).ok()?;
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    fnv(&mut h, b"pendrive");
+    fnv(&mut h, track.file_name()?.to_string_lossy().as_bytes());
+    fnv(&mut h, &md.len().to_le_bytes());
+    Some(format!("{h:016x}"))
+}
+
+/// Arquivo da análise da música no pendrive dela, se o pendrive foi preparado.
+fn pendrive_file(track: &Path) -> Option<PathBuf> {
+    let root = track.ancestors().skip(1).find(|a| a.join(PENDRIVE_DIR).is_dir())?;
+    Some(root.join(PENDRIVE_DIR).join(format!("{}.dxj", portable_key(track)?)))
+}
+
+/// Grava a análise de uma música no pendrive preparado em `root`.
+pub fn save_portable(root: &Path, track: &Path, s: &Saved) -> std::io::Result<()> {
+    let k = portable_key(track).ok_or_else(|| std::io::Error::other("sem chave"))?;
+    let dir = root.join(PENDRIVE_DIR);
+    std::fs::create_dir_all(&dir)?;
+    let tmp = dir.join(format!("{k}.tmp"));
+    std::fs::write(&tmp, encode(s))?;
+    std::fs::rename(tmp, dir.join(format!("{k}.dxj")))
+}
+
+/// A música já tem análise completa (com tom e volume) no pendrive preparado em `root`.
+pub fn has_portable(root: &Path, track: &Path) -> bool {
+    portable_key(track)
+        .and_then(|k| peek_file(&root.join(PENDRIVE_DIR).join(format!("{k}.dxj"))))
+        .is_some_and(|p| p.key != crate::key::RAW_UNKNOWN && p.has_loudness)
+}
+
 fn load_from(dir: &Path, track: &Path) -> Option<Saved> {
     let bytes = std::fs::read(dir.join(format!("{}.dxj", key(track)?))).ok()?;
     decode(&bytes)
@@ -177,8 +218,13 @@ pub struct Peek {
 }
 
 pub fn peek(track: &Path) -> Option<Peek> {
+    let own = key(track).and_then(|k| peek_file(&dir().join(format!("{k}.dxj"))));
+    own.or_else(|| peek_file(&pendrive_file(track)?))
+}
+
+fn peek_file(path: &Path) -> Option<Peek> {
     use std::io::Read;
-    let mut f = std::fs::File::open(dir().join(format!("{}.dxj", key(track)?))).ok()?;
+    let mut f = std::fs::File::open(path).ok()?;
     let mut b = [0u8; 13];
     let n = f.read(&mut b).ok()?;
     let m = b.get(..4)?;
@@ -190,8 +236,9 @@ pub fn peek(track: &Path) -> Option<Peek> {
     bpm.is_finite().then_some(Peek { bpm, key, has_loudness: m == MAGIC })
 }
 
+/// O que o aparelho guardou da música; se não tiver nada, a análise do pendrive preparado.
 pub fn load(track: &Path) -> Option<Saved> {
-    load_from(&dir(), track)
+    load_from(&dir(), track).or_else(|| decode(&std::fs::read(pendrive_file(track)?).ok()?))
 }
 
 pub fn save(track: &Path, s: &Saved) {
@@ -269,5 +316,27 @@ mod tests {
         save_to(&dir, &f, &sample()).unwrap();
         assert_eq!(load_from(&dir, &f), Some(sample()));
         let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn pendrive_preparado() {
+        let root = std::env::temp_dir().join(format!("dj-os-pendrive-{}", std::process::id()));
+        let f = root.join("house antigo").join("Artista - Música.mp3");
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(&f, b"abc").unwrap();
+        assert_eq!(pendrive_file(&f), None, "pendrive sem preparar");
+        assert!(!has_portable(&root, &f));
+        save_portable(&root, &f, &sample()).unwrap();
+        assert!(has_portable(&root, &f));
+        // O aparelho acha a análise subindo as pastas a partir da música.
+        let arq = pendrive_file(&f).expect("acha a pasta DJOS/analise na raiz");
+        assert_eq!(decode(&std::fs::read(&arq).unwrap()), Some(sample()));
+        let p = peek_file(&arq).unwrap();
+        assert_eq!((p.bpm, p.has_loudness), (128.0, true));
+        // A data do arquivo não entra na chave (muda com o fuso de quem monta o pendrive).
+        let k = portable_key(&f).unwrap();
+        std::fs::File::options().write(true).open(&f).unwrap().set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000)).unwrap();
+        assert_eq!(portable_key(&f).unwrap(), k);
+        let _ = std::fs::remove_dir_all(root);
     }
 }

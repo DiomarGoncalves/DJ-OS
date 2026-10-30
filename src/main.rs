@@ -62,6 +62,17 @@ fn main() -> eframe::Result<()> {
         }
         return Ok(());
     }
+    // Prepara um pendrive no PC (estilo rekordbox): a análise vai para dentro dele.
+    if args.len() == 3 && args[1] == "--preparar-pendrive" {
+        let root = std::path::Path::new(&args[2]);
+        println!("Preparando {} …", root.display());
+        let (done, had, failed) = import::prepare_drive(root, |i, n, f, msg| {
+            let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            println!("[{i}/{n}] {name}: {msg}");
+        });
+        println!("PRONTO: {done} analisadas agora, {had} já estavam, {failed} com erro.");
+        std::process::exit(if failed > 0 { 1 } else { 0 });
+    }
     if std::env::var_os("DJOS_DEBUG_SNAP").is_some() {
         eprintln!("[djos] início {}", chrono::Local::now().format("%H:%M:%S%.3f"));
     }
