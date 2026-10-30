@@ -550,6 +550,15 @@ fn scratch_bank(app: &SharedApp, cmd: &CmdTx, pos: f64, d: usize, idx: usize, re
 }
 
 /// Estado dos LEDs: lista de (status, nota, valor).
+/// Pico do canal (0 a 1) no valor do medidor da controladora: -40 dB apagado, 0 dB tudo aceso.
+pub fn meter(peak: f32) -> u8 {
+    if peak <= 0.0 {
+        return 0;
+    }
+    let db = 20.0 * peak.log10();
+    ((db + 40.0) / 40.0 * 127.0).clamp(0.0, 127.0) as u8
+}
+
 pub fn leds(app: &crate::app::AppState, snap: &Snapshot, blink: bool, out: &mut Vec<(u8, u8, u8)>) {
     let b = |x: bool| if x { 0x7F } else { 0x00 };
     for d in 0..NUM_DECKS {
@@ -595,6 +604,13 @@ pub fn leds(app: &crate::app::AppState, snap: &Snapshot, blink: bool, out: &mut 
     // Camada de cada lado (deck 3/4 aceso).
     out.push((0x92, 0x72, b(app.side[0] == 2)));
     out.push((0x93, 0x72, b(app.side[1] == 3)));
+    // Medidor de cada canal (CC 02, 0 a 127): o deck que está daquele lado, de -40 dB a 0 dB.
+    // Vai nos dois canais MIDI do lado (1 e 3 / 2 e 4), valha qual camada estiver acesa.
+    for u in 0..2 {
+        let v = meter(snap.decks[app.side[u]].peak);
+        out.push((0xB0 + u as u8, 0x02, v));
+        out.push((0xB2 + u as u8, 0x02, v));
+    }
     // Botão FX 1 fica aceso (assim o knob central e a alavanca mandam os códigos do "slot 1");
     // pisca enquanto o efeito está ligado. FX 2 e FX 3 ficam apagados.
     for u in 0..2 {

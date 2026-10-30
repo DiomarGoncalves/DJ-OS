@@ -43,6 +43,7 @@ esquerda (deck 1 ou 3) e direita (deck 2 ou 4).
 | MASTER LEVEL / HEADPHONES LEVEL | B6 08/28, 0D/2D | Volume do master / do fone |
 | CUE do fone (PFL) | 9n 54 | Liga/desliga o canal no fone. Com MASTER CUE ligado: fone 50/50 (ou 100% master se nenhum PFL) |
 | MASTER CUE | 96 63 | Liga: master no fone (100%, ou 50% se houver PFL). Desliga: fone só com os PFLs |
+| Medidor do canal (LEDs, saída) | Bn 02 | Nível do deck daquele lado antes do fader: 0 = apagado (-40 dB ou menos), 127 = tudo aceso (0 dB). Vai nos dois canais do lado (B0 e B2 / B1 e B3) |
 
 ## Efeitos (um por deck; FX1 = lado esquerdo, canal 5; FX2 = lado direito, canal 6)
 

@@ -1,6 +1,6 @@
 //! Testes do mapeamento da DDJ-REV1: cada mensagem da lista MIDI oficial gera o comando certo.
 
-use super::rev1::{leds, Rev1};
+use super::rev1::{leds, meter, Rev1};
 use crate::app::{AppState, Loader, PadMode};
 use crate::shared::{Cmd, CmdTx, Snapshot};
 use parking_lot::Mutex;
@@ -289,4 +289,22 @@ fn reconhece_a_controladora_pelo_nome_da_porta() {
     let outra = super::detect_names(&n(&["DDJ-400:DDJ-400 MIDI 1 24:0"]));
     assert_eq!(outra.and_then(|r| r.err()).as_deref(), Some("DDJ-400"), "desconhecida: mostra o nome");
     assert!(super::detect_names(&n(&["Midi Through:Midi Through Port-0 14:0"])).is_none(), "só portas do sistema");
+}
+
+#[test]
+fn medidor_dos_canais() {
+    assert_eq!(meter(0.0), 0, "silêncio apagado");
+    assert_eq!(meter(0.005), 0, "abaixo de -40 dB apagado");
+    assert_eq!(meter(1.0), 127, "0 dB tudo aceso");
+    assert!((60..=66).contains(&meter(0.1)), "-20 dB no meio: {}", meter(0.1));
+    // Vai para o deck que está de cada lado, nos dois canais MIDI do lado.
+    let mut app = AppState::new();
+    app.side = [2, 1];
+    let mut snap = Snapshot::default();
+    snap.decks[2].peak = 1.0;
+    let mut out = Vec::new();
+    leds(&app, &snap, false, &mut out);
+    for (st, v) in [(0xB0, 127), (0xB2, 127), (0xB1, 0), (0xB3, 0)] {
+        assert!(out.contains(&(st, 0x02, v)), "{st:02X} 02 {v}");
+    }
 }

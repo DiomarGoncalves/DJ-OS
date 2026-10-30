@@ -71,6 +71,7 @@ pub struct Deck {
     lo: [StereoBiquad; 2],
     hi: [StereoBiquad; 2],
     pub fx: [FxSlot; FX_SLOTS],
+    /// Pico do canal antes do fader (o medidor do canal na controladora, como nas Pioneer).
     pub peak: f32,
     /// Posição em batidas da entrada ao vivo (para os efeitos com LFO).
     live_beat: f64,
@@ -666,7 +667,7 @@ impl Deck {
             }
 
             (pre[i], post[i]) = self.channel(x);
-            peak = peak.max(post[i][0].abs()).max(post[i][1].abs());
+            peak = peak.max(pre[i][0].abs()).max(pre[i][1].abs());
         }
         self.peak = peak.max(self.peak * 0.85);
     }
@@ -713,7 +714,7 @@ impl Deck {
             }
             ctx.beat_pos += 1.0 / beat_len as f64;
             (pre[i], post[i]) = self.channel(x);
-            peak = peak.max(post[i][0].abs()).max(post[i][1].abs());
+            peak = peak.max(pre[i][0].abs()).max(pre[i][1].abs());
         }
         self.live_beat = ctx.beat_pos % 64.0;
         self.peak = peak.max(self.peak * 0.85);
