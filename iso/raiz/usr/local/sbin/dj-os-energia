@@ -1,0 +1,11 @@
+#!/bin/sh
+# Desliga o "turbo" do processador: para tocar música ele não faz falta, e os picos de consumo
+# dele podem derrubar máquinas sem bateria ou com fonte fraca (o aparelho apagava de uma vez
+# alguns minutos depois de começar a tocar). Também esquenta menos.
+if [ -w /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
+    echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo && echo "turbo desligado (intel_pstate)"
+elif [ -w /sys/devices/system/cpu/cpufreq/boost ]; then
+    echo 0 > /sys/devices/system/cpu/cpufreq/boost && echo "turbo desligado (cpufreq)"
+else
+    echo "sem controle de turbo neste processador"
+fi

@@ -1,0 +1,9 @@
+[Unit]
+Description=DJ OS: processador sem turbo (menos pico de consumo e menos calor)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dj-os-energia
+
+[Install]
+WantedBy=multi-user.target
