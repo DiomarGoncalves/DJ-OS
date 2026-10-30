@@ -58,7 +58,7 @@ atualizar)
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
     diga "PASSO conferindo a assinatura"
-    tar -xf "$arq" -C "$tmp" manifesto manifesto.sig 2>/dev/null || falha "arquivo de firmware inválido"
+    tar -xf "$arq" -C "$tmp" manifesto manifesto.sig 2>/dev/null || falha "arquivo incompleto ou estragado: copie de novo para o pendrive"
     openssl pkeyutl -verify -pubin -inkey "$CHAVE" -rawin -in "$tmp/manifesto" -sigfile "$tmp/manifesto.sig" >/dev/null 2>&1 \
         || falha "assinatura inválida: este firmware não é oficial"
     versao=$(sed -n 's/^versao=//p' "$tmp/manifesto")

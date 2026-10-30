@@ -7,12 +7,23 @@ com waveforms, efeitos, pendrive, Bluetooth e atualização de firmware.
 > **Estado:** em desenvolvimento (versão 0.1). Hoje funciona com a **Pioneer DDJ-REV1**; outras
 > controladoras estão no [roteiro](docs/ROADMAP.md).
 
+![Tela principal: dois decks tocando com waveforms, efeitos, hot cues e os quatro decks embaixo](docs/imagens/tela-principal.png)
+
+| Pesquisa e browser | Configurações |
+|---|---|
+| ![Pesquisa de músicas com tom e BPM](docs/imagens/tela-busca.png) | ![Configurações em abas](docs/imagens/tela-config.png) |
+
 ## O que tem
 - 4 decks com waveform colorida, cue estilo CDJ, hotcues, loops, roll, beat jump, sync, keylock
   e scratch.
 - Mixer com EQ, filtro e efeitos por canal sincronizados à batida.
 - Browser com pesquisa por teclado virtual; músicas direto do pendrive ou guardadas no aparelho,
-  com BPM analisado automaticamente.
+  com BPM, tom e volume analisados ao carregar no deck.
+- Pendrive preparado no computador de casa, como no rekordbox: a análise vai junto no pendrive e
+  o aparelho não precisa analisar nada na hora de tocar (o app com janela para Windows e Linux está
+  sendo feito; hoje é `dj-os --preparar-pendrive <pasta do pendrive>`).
+- Leve: feito para rodar em computador velho (testado num notebook de 2011 com Intel HD 3000),
+  com controle de temperatura do processador.
 - Saídas da controladora (master e fone) e caixa Bluetooth ao mesmo tempo (master ou retorno).
 - Celular por Bluetooth como fonte de som (num deck ou no master).
 - Aparelho: liga direto no sistema, instala pelo pendrive e se atualiza por firmware assinado,
@@ -27,7 +38,8 @@ com waveforms, efeitos, pendrive, Bluetooth e atualização de firmware.
 3. Para atualizar um aparelho instalado: coloque o `dj-os-firmware-<versão>.djos` num pendrive e
    use **CONFIG → SISTEMA → Atualizar firmware**.
 
-Requisitos: PC x86-64 (BIOS ou UEFI) com 4 GB de RAM e disco de 16 GB ou mais.
+Requisitos: PC x86-64 com 4 GB de RAM e disco de 16 GB ou mais. Ligue o computador no modo
+**UEFI** (em algumas máquinas o modo antigo Legacy/CSM não liga o sistema instalado).
 
 ## Para quem desenvolve
 - Programa em Rust (`src/`): `cargo run --release`. Guia da controladora em
