@@ -220,9 +220,7 @@ impl AppState {
 pub type SharedApp = Arc<Mutex<AppState>>;
 
 /// Pasta do sistema na casa do usuário (samples, scratch bank, configurações).
-pub fn data_dir() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/")).join("DJOS")
-}
+pub use dj_os_analise::data_dir;
 
 /// O sistema se chamava "Diomar XDJ": a pasta de dados antiga (~/DiomarXDJ) vira ~/DJOS.
 pub fn migrate_old_data_dir() {

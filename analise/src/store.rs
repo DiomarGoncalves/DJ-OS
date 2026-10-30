@@ -9,8 +9,8 @@
 //! arquivos do pendrive muda conforme o fuso de quem monta). O aparelho lê de lá e não precisa
 //! analisar; o que for marcado no aparelho (cues) continua indo para `~/DJOS/dados/`.
 
-use crate::app::data_dir;
-use crate::shared::HOTCUES;
+use crate::data_dir;
+use crate::HOTCUES;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 

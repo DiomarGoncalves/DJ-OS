@@ -998,6 +998,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cpal",
+ "dj-os-analise",
  "eframe",
  "libc",
  "libloading",
@@ -1005,6 +1006,13 @@ dependencies = [
  "parking_lot",
  "rtrb",
  "serde_json",
+ "symphonia",
+]
+
+[[package]]
+name = "dj-os-analise"
+version = "0.1.0"
+dependencies = [
  "symphonia",
 ]
 

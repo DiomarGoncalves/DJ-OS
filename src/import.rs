@@ -177,62 +177,6 @@ pub fn delete_internal(path: &Path) -> Result<(), String> {
     }
 }
 
-/// Prepara um pendrive no PC, como o rekordbox: analisa cada música (BPM, grade, tom, volume e
-/// waveform) e grava em `DJOS/analise/` dentro do próprio pendrive. No aparelho a música já entra
-/// analisada, sem gastar processador. Músicas já preparadas são puladas; se o PC já tinha a
-/// análise (com cues marcados no PC), ela vai junto.
-///
-/// `progress` recebe (música atual, total, arquivo, resultado). Devolve (preparadas, já estavam,
-/// falharam).
-pub fn prepare_drive(root: &Path, mut progress: impl FnMut(usize, usize, &Path, &str)) -> (usize, usize, usize) {
-    let mut files = Vec::new();
-    let mut dirs = vec![root.to_path_buf()];
-    while let Some(d) = dirs.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else { continue };
-        for e in rd.flatten() {
-            let p = e.path();
-            let name = e.file_name();
-            if name.to_string_lossy().starts_with('.') || p == root.join("DJOS") {
-                continue;
-            }
-            if p.is_dir() {
-                dirs.push(p);
-            } else if crate::library::is_audio(&p) {
-                files.push(p);
-            }
-        }
-    }
-    files.sort();
-    let (mut done, mut had, mut failed) = (0, 0, 0);
-    let total = files.len();
-    for (i, f) in files.iter().enumerate() {
-        if crate::store::has_portable(root, f) {
-            had += 1;
-            progress(i + 1, total, f, "já estava");
-            continue;
-        }
-        let saved = match crate::store::load(f) {
-            Some(s) if s.key != crate::key::RAW_UNKNOWN && !s.loudness.is_nan() => Ok(s),
-            _ => crate::track::load(f, true).map(|t| crate::store::Saved::from_track(&t)),
-        };
-        let res = saved.map_err(|e| e.to_string()).and_then(|s| {
-            crate::store::save_portable(root, f, &s).map_err(|e| e.to_string())?;
-            Ok(format!("{:.1} BPM", s.bpm))
-        });
-        match res {
-            Ok(msg) => {
-                done += 1;
-                progress(i + 1, total, f, &msg);
-            }
-            Err(e) => {
-                failed += 1;
-                progress(i + 1, total, f, &format!("ERRO: {e}"));
-            }
-        }
-    }
-    (done, had, failed)
-}
-
 /// Pedido de "Analisar todas as músicas" (CONFIG → SISTEMA): fica ligado enquanto analisa.
 pub static ANALYZE_ALL: AtomicBool = AtomicBool::new(false);
 

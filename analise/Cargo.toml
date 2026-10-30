@@ -1,0 +1,9 @@
+[package]
+name = "dj-os-analise"
+version = "0.1.0"
+license = "GPL-3.0-or-later"
+edition = "2021"
+description = "Análise das músicas do DJ OS (BPM, grade, tom, volume, waveform) e o formato do pendrive preparado"
+
+[dependencies]
+symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "wav", "pcm", "ogg", "vorbis", "alac"] }

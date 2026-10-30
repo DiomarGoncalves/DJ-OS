@@ -14,20 +14,19 @@ mod firmware;
 mod grid;
 mod history;
 mod import;
-mod key;
 mod library;
-mod loudness;
 mod midi;
 mod phone;
 mod record;
 mod resume;
 mod pw_out;
 mod search;
-mod store;
 mod settings;
 mod shared;
-mod track;
 mod ui;
+
+// Análise das músicas: biblioteca compartilhada com o DJ OS Preparar (analise/).
+use dj_os_analise::{key, loudness, store, track};
 
 use parking_lot::Mutex;
 use shared::{CmdTx, Snapshot};
@@ -71,13 +70,22 @@ fn main() -> eframe::Result<()> {
     // Prepara um pendrive no PC (estilo rekordbox): a análise vai para dentro dele.
     if args.len() == 3 && args[1] == "--preparar-pendrive" {
         let root = std::path::Path::new(&args[2]);
-        println!("Preparando {} …", root.display());
-        let (done, had, failed) = import::prepare_drive(root, |i, n, f, msg| {
+        let files = dj_os_analise::prepare::list_tracks(root);
+        println!("Preparando {} ({} músicas)…", root.display(), files.len());
+        let n = std::sync::atomic::AtomicUsize::new(0);
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let t = dj_os_analise::prepare::prepare_files(root, &files, dj_os_analise::prepare::default_threads(), &stop, |f, out| {
+            let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
             let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            println!("[{i}/{n}] {name}: {msg}");
+            let msg = match out {
+                dj_os_analise::prepare::Outcome::Done(bpm) => format!("{bpm:.1} BPM"),
+                dj_os_analise::prepare::Outcome::Had => "já estava".into(),
+                dj_os_analise::prepare::Outcome::Failed(e) => format!("ERRO: {e}"),
+            };
+            println!("[{i}/{}] {name}: {msg}", files.len());
         });
-        println!("PRONTO: {done} analisadas agora, {had} já estavam, {failed} com erro.");
-        std::process::exit(if failed > 0 { 1 } else { 0 });
+        println!("PRONTO: {} analisadas agora, {} já estavam, {} com erro.", t.done, t.had, t.failed);
+        std::process::exit(if t.failed > 0 { 1 } else { 0 });
     }
     if std::env::var_os("DJOS_DEBUG_SNAP").is_some() {
         eprintln!("[djos] início {}", chrono::Local::now().format("%H:%M:%S%.3f"));

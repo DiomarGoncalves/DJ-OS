@@ -8,7 +8,7 @@ use std::sync::Arc;
 pub const NUM_DECKS: usize = 4;
 /// Um efeito por deck (como na DDJ-REV1).
 pub const FX_SLOTS: usize = 1;
-pub const HOTCUES: usize = 8;
+pub use dj_os_analise::HOTCUES;
 pub const SAMPLER_SLOTS: usize = 8;
 
 /// Comandos para o motor de áudio. Valores de knob/fader vão de 0.0 a 1.0.

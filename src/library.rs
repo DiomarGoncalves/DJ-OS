@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-const AUDIO_EXT: [&str; 9] = ["mp3", "flac", "wav", "m4a", "aac", "ogg", "aiff", "aif", "mp4"];
+pub use dj_os_analise::prepare::is_audio;
 const MAX_RESULTS: usize = 500;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -128,9 +128,6 @@ fn list_dirs(p: &Path) -> Vec<PathBuf> {
     v
 }
 
-pub fn is_audio(p: &Path) -> bool {
-    p.is_file() && p.extension().is_some_and(|e| AUDIO_EXT.contains(&e.to_string_lossy().to_lowercase().as_str()))
-}
 
 fn list_tracks(p: &Path) -> Vec<TrackEntry> {
     let mut v: Vec<TrackEntry> = std::fs::read_dir(p)

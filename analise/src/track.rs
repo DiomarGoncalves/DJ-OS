@@ -1,6 +1,6 @@
 //! Leitura de arquivos de áudio e análise (waveform em 3 bandas, BPM e grade de batidas).
 
-use crate::engine::dsp::{Biquad, Coefs};
+use crate::dsp::{Biquad, Coefs};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use symphonia::core::audio::SampleBuffer;
@@ -448,7 +448,7 @@ fn detect_bpm(onset: &[f32], sr: f64) -> (f64, f64) {
 }
 
 /// Música sintética para os testes: senoide com um clique em cada batida, BPM e grade conhecidos.
-#[cfg(test)]
+#[doc(hidden)]
 pub fn synthetic(secs: f64, sr: f64, bpm: f64, first_beat_secs: f64) -> Track {
     let frames = (secs * sr) as usize;
     let beat = 60.0 / bpm;

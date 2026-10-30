@@ -1,7 +1,7 @@
 //! Motor de áudio: roda dentro da thread de áudio, sem alocar memória nem travar.
 
 pub mod deck;
-pub mod dsp;
+pub use dj_os_analise::dsp;
 pub mod fx;
 pub mod keylock;
 pub mod plate;
