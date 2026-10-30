@@ -1,0 +1,31 @@
+#!/bin/sh
+# Anota no registro do sistema, a cada 30 s, a temperatura (°C), o uso do processador, a memória
+# e a bateria/tomada: se o aparelho desligar sozinho, dá para ver se foi calor (o registro fica no
+# disco e vai para o pendrive pela opção "copiar registros" do menu da ISO).
+while true; do
+    t=""
+    # Sensores sem leitura (ou que dão erro) ficam de fora.
+    for z in /sys/class/thermal/thermal_zone*; do
+        v=$(cat "$z/temp" 2>/dev/null)
+        case "$v" in ''|*[!0-9-]*) continue ;; esac
+        t="$t $(cat "$z/type" 2>/dev/null)=$((v / 1000))"
+    done
+    for h in /sys/class/hwmon/hwmon*; do
+        [ "$(cat "$h/name" 2>/dev/null)" = coretemp ] || continue
+        for f in "$h"/temp*_input; do
+            v=$(cat "$f" 2>/dev/null)
+            case "$v" in ''|*[!0-9-]*) continue ;; esac
+            t="$t core=$((v / 1000))"
+        done
+    done
+    energia=""
+    for p in /sys/class/power_supply/*; do
+        case "$(cat "$p/type" 2>/dev/null)" in
+            Mains) energia="$energia tomada=$(cat "$p/online" 2>/dev/null)" ;;
+            Battery) energia="$energia bateria=$(cat "$p/capacity" 2>/dev/null)%($(cat "$p/status" 2>/dev/null))" ;;
+        esac
+    done
+    mem=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo)
+    echo "temperatura:${t:- ?} | carga $(cut -d' ' -f1-3 /proc/loadavg) | memória livre ${mem} MB |${energia:- energia ?}"
+    sleep 30
+done

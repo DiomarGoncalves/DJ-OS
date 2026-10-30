@@ -1,0 +1,9 @@
+[Unit]
+Description=DJ OS: anota temperatura, uso do processador e energia no registro a cada 30 s
+
+[Service]
+ExecStart=/usr/local/sbin/dj-os-temperatura
+Nice=19
+
+[Install]
+WantedBy=multi-user.target
