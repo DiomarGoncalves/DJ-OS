@@ -82,7 +82,9 @@ atualizar)
     mkdir -p "$SIS/$destino.novo"
     total=$(stat -c %s "$arq")
     # Extrai mostrando o andamento (em %, pelo tamanho já gravado).
-    tar -xf "$arq" -C "$SIS/$destino.novo" $ARQUIVOS &
+    # Prioridade baixa (processador e disco): em máquina com refrigeração fraca a atualização
+    # esquentava até desligar.
+    nice -n 19 ionice -c 3 tar -xf "$arq" -C "$SIS/$destino.novo" $ARQUIVOS &
     pid=$!
     while kill -0 $pid 2>/dev/null; do
         feito=$(du -sb "$SIS/$destino.novo" | cut -f1)
@@ -96,7 +98,7 @@ atualizar)
     echo 3 > /proc/sys/vm/drop_caches
     for f in $ARQUIVOS; do
         esperado=$(sed -n "s/^$f \([0-9a-f]*\)$/\1/p" "$tmp/manifesto")
-        lido=$(sha256sum "$SIS/$destino.novo/$f" | cut -d' ' -f1)
+        lido=$(nice -n 19 ionice -c 3 sha256sum "$SIS/$destino.novo/$f" | cut -d' ' -f1)
         [ -n "$esperado" ] && [ "$esperado" = "$lido" ] || falha "$f veio diferente do assinado"
     done
     echo "$versao" > "$SIS/$destino.novo/versao"

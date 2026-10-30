@@ -7,8 +7,11 @@ dev="$1"; label="$2"; uuid="$3"; fstype="$4"
 name=$(printf '%s' "${label:-$uuid}" | tr -c 'A-Za-z0-9._-' '_')
 [ -n "$name" ] || name=pendrive
 opts=ro,nosuid,nodev,noexec
+# Nomes com acento (ç, ã, é...) em UTF-8: sem isto o FAT vinha em latin-1 e "divulgação" virava
+# "divulga��o" na lista (e a análise da música não conseguia ser guardada).
 case "$fstype" in
-    vfat|exfat|ntfs|ntfs3) opts="$opts,uid=1000,gid=1000" ;;
+    vfat) opts="$opts,uid=1000,gid=1000,utf8,shortname=mixed" ;;
+    exfat|ntfs|ntfs3) opts="$opts,uid=1000,gid=1000,iocharset=utf8" ;;
 esac
 [ "$fstype" = ntfs ] && fstype=ntfs3 && opts="$opts,force"
 # Pendrive do Ventoy (de onde o sistema ligou): a partição fica presa pelo Ventoy enquanto a ISO
