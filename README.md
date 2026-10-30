@@ -19,9 +19,8 @@ com waveforms, efeitos, pendrive, Bluetooth e atualização de firmware.
 - Mixer com EQ, filtro e efeitos por canal sincronizados à batida.
 - Browser com pesquisa por teclado virtual; músicas direto do pendrive ou guardadas no aparelho,
   com BPM, tom e volume analisados ao carregar no deck.
-- Pendrive preparado no computador de casa, como no rekordbox: a análise vai junto no pendrive e
-  o aparelho não precisa analisar nada na hora de tocar (o app com janela para Windows e Linux está
-  sendo feito; hoje é `dj-os --preparar-pendrive <pasta do pendrive>`).
+- Pendrive preparado no computador de casa com o **DJ OS Preparar** (Windows e Linux), como no
+  rekordbox: a análise vai junto no pendrive e o aparelho não precisa analisar nada na hora de tocar.
 - Leve: feito para rodar em computador velho (testado num notebook de 2011 com Intel HD 3000),
   com controle de temperatura do processador.
 - Saídas da controladora (master e fone) e caixa Bluetooth ao mesmo tempo (master ou retorno).
@@ -38,11 +37,21 @@ com waveforms, efeitos, pendrive, Bluetooth e atualização de firmware.
 3. Para atualizar um aparelho instalado: coloque o `dj-os-firmware-<versão>.djos` num pendrive e
    use **CONFIG → SISTEMA → Atualizar firmware**.
 
-Requisitos: PC x86-64 com 4 GB de RAM e disco de 16 GB ou mais. Ligue o computador no modo
-**UEFI** (em algumas máquinas o modo antigo Legacy/CSM não liga o sistema instalado).
+Requisitos do aparelho: PC x86-64 com 4 GB de RAM e disco de 16 GB ou mais. Ligue o computador no
+modo **UEFI** (em algumas máquinas o modo antigo Legacy/CSM não liga o sistema instalado).
+
+### DJ OS Preparar (computador de casa)
+
+![DJ OS Preparar: escolha o pendrive e clique em Preparar](docs/imagens/preparar.png)
+
+Baixe em Releases o **`DJ-OS-Preparar-….exe`** (Windows) ou o **`DJ-OS-Preparar-….AppImage`**
+(Linux: clique com o botão direito → Propriedades → "Permitir executar", depois dois cliques).
+Escolha o pendrive e clique em **PREPARAR**. Músicas já preparadas são puladas; dá para parar e
+continuar depois.
 
 ## Para quem desenvolve
-- Programa em Rust (`src/`): `cargo run --release`. Guia da controladora em
+- Programa em Rust: o aparelho em `src/` (`cargo run --release`), a análise das músicas em
+  `analise/` (compartilhada) e o DJ OS Preparar em `preparar/` (`cargo run --release -p dj-os-preparar`). Guia da controladora em
   [docs/mapeamento-ddj-rev1.md](docs/mapeamento-ddj-rev1.md); para acrescentar outra controladora,
   [docs/controladoras.md](docs/controladoras.md).
 - ISO e firmware: `iso/construir.sh` (Ubuntu 24.04 mínimo, sem precisar de sudo). Versões e

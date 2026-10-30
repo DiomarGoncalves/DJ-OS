@@ -6,7 +6,7 @@ edition = "2021"
 description = "Sistema de DJ all-in-one para a Pioneer DDJ-REV1"
 
 [workspace]
-members = [".", "analise"]
+members = [".", "analise", "preparar"]
 
 [dependencies]
 dj-os-analise = { path = "analise" }

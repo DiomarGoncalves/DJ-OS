@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=DJ OS Preparar
+Comment=Analisa as músicas do pendrive para o aparelho DJ OS
+Exec=dj-os-preparar
+Icon=dj-os-preparar
+Categories=AudioVideo;Audio;
+Terminal=false

@@ -41,7 +41,7 @@ jobs:
           echo "VERSAO=$cargo_v" >> "$GITHUB_ENV"
 
       - name: Testes
-        run: cargo test --release
+        run: cargo test --release --workspace
 
       - name: Chave do firmware
         env:
@@ -66,6 +66,7 @@ jobs:
             echo "### Arquivos"
             echo "- **dj-os-…iso**: instalar do zero ou testar sem instalar (pendrive / Ventoy)."
             echo "- **dj-os-firmware-…djos**: atualizar um aparelho já instalado (CONFIG → SISTEMA → Atualizar firmware)."
+            echo "- **DJ-OS-Preparar…AppImage** (Linux) e **DJ-OS-Preparar.exe** (Windows): prepara o pendrive no computador de casa, como o rekordbox (as músicas já chegam analisadas no aparelho)."
           } >> notas.md
           cat notas.md
 
@@ -77,3 +78,47 @@ jobs:
           files: |
             saida/dj-os-*.iso
             saida/dj-os-firmware-*.djos
+
+  # DJ OS Preparar (o "rekordbox" do DJ OS) para Linux: um AppImage (um arquivo só, dois cliques).
+  # Montado num Ubuntu mais antigo para abrir também em distribuições mais velhas.
+  preparar-linux:
+    needs: iso
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compilar
+        run: cargo build --release -p dj-os-preparar
+      - name: Empacotar (AppImage)
+        run: |
+          sudo apt-get update && sudo apt-get install -y libfuse2
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          export OUTPUT="DJ-OS-Preparar-${GITHUB_REF_NAME}-x86_64.AppImage"
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run --appdir AppDir \
+            -e target/release/dj-os-preparar \
+            -d preparar/pacote/dj-os-preparar.desktop \
+            -i preparar/pacote/dj-os-preparar.png \
+            --output appimage
+          ls -lh "$OUTPUT"
+      - name: Publicar em Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DJ-OS-Preparar-*.AppImage
+
+  # DJ OS Preparar para Windows: um .exe que abre direto (sem instalar).
+  preparar-windows:
+    needs: iso
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compilar
+        run: cargo build --release -p dj-os-preparar
+      - name: Nome do arquivo
+        shell: bash
+        run: cp target/release/dj-os-preparar.exe "DJ-OS-Preparar-${GITHUB_REF_NAME}.exe"
+      - name: Publicar em Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DJ-OS-Preparar-*.exe

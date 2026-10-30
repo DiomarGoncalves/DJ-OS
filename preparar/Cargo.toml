@@ -1,0 +1,13 @@
+[package]
+name = "dj-os-preparar"
+version = "0.1.0"
+license = "GPL-3.0-or-later"
+edition = "2021"
+description = "DJ OS Preparar: analisa as músicas do pendrive no computador (Windows e Linux) para o aparelho DJ OS já tocar com tudo pronto"
+
+[dependencies]
+dj-os-analise = { path = "../analise" }
+eframe = "0.29"
+# Seletor de pasta: no Linux pelo "portal" do sistema (funciona também dentro do Flatpak), no
+# Windows pela janela nativa.
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
