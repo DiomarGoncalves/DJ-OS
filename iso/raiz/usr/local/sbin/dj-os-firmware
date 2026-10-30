@@ -20,7 +20,8 @@ ARQUIVOS="vmlinuz initrd.img filesystem.squashfs"
 slot=$(sed -n 's/.*djos\.slot=\([ab]\).*/\1/p' /proc/cmdline)
 outro() { [ "$1" = a ] && echo b || echo a; }
 diga() { echo "$*"; }
-falha() { echo "ERRO $*"; exit 1; }
+# Erros também vão para o registro do sistema (o pendrive leva com "copiar registros").
+falha() { echo "ERRO $*"; logger -t dj-os-firmware "ERRO $*"; exit 1; }
 
 # Parte BOOT do mesmo disco do sistema em uso (não a de outro disco com DJ OS).
 parte_boot() {
@@ -58,7 +59,9 @@ atualizar)
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
     diga "PASSO conferindo a assinatura"
-    tar -xf "$arq" -C "$tmp" manifesto manifesto.sig 2>/dev/null || falha "arquivo incompleto ou estragado: copie de novo para o pendrive"
+    logger -t dj-os-firmware "atualizar $arq ($(stat -c %s "$arq") bytes) em $tmp"
+    err=$(tar -xf "$arq" -C "$tmp" manifesto manifesto.sig 2>&1) \
+        || falha "arquivo incompleto ou estragado: copie de novo para o pendrive ($(printf '%s' "$err" | tail -n 1))"
     openssl pkeyutl -verify -pubin -inkey "$CHAVE" -rawin -in "$tmp/manifesto" -sigfile "$tmp/manifesto.sig" >/dev/null 2>&1 \
         || falha "assinatura inválida: este firmware não é oficial"
     versao=$(sed -n 's/^versao=//p' "$tmp/manifesto")

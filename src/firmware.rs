@@ -97,6 +97,7 @@ pub fn install(shared: &SharedApp, file: PathBuf) {
                 } else if let Some(w) = line.strip_prefix("AVISO ") {
                     a.toast(format!("Atenção: {w}"));
                 } else if let Some(e) = line.strip_prefix("ERRO ") {
+                    eprintln!("[djos] atualização de firmware: ERRO {e}");
                     a.fw.msg = format!("ERRO: {e}");
                 }
             }
