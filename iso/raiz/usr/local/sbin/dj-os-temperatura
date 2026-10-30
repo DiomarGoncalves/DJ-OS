@@ -1,5 +1,5 @@
 #!/bin/sh
-# Anota no registro do sistema, a cada 30 s, a temperatura (°C), o uso do processador, a memória
+# Anota no registro do sistema, a cada 15 s, a temperatura (°C), o uso do processador, a memória
 # e a bateria/tomada: se o aparelho desligar sozinho, dá para ver se foi calor (o registro fica no
 # disco e vai para o pendrive pela opção "copiar registros" do menu da ISO).
 while true; do
@@ -26,6 +26,14 @@ while true; do
         esac
     done
     mem=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo)
-    echo "temperatura:${t:- ?} | carga $(cut -d' ' -f1-3 /proc/loadavg) | memória livre ${mem} MB |${energia:- energia ?}"
-    sleep 30
+    linha="temperatura:${t:- ?} | carga $(cut -d' ' -f1-3 /proc/loadavg) | memória livre ${mem} MB |${energia:- energia ?}"
+    echo "$linha"
+    # Também num arquivo na parte DADOS, gravado no disco na hora (sobrevive a um corte de energia).
+    if [ -d /dados/sistema ]; then
+        arq=/dados/sistema/temperatura.log
+        [ "$(stat -c %s "$arq" 2>/dev/null || echo 0)" -gt 2000000 ] && mv -f "$arq" "$arq.1"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') $linha" >>"$arq"
+        sync "$arq"
+    fi
+    sleep 15
 done

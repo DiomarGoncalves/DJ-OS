@@ -45,7 +45,7 @@ junta_instalado() {
         achou=0
         d=$R/instalado-$(basename "$dev")
         mkdir -p "$d"
-        cp "$m"/dj/sessao.log* "$m"/dj/config.txt "$d/" 2>/dev/null
+        cp "$m"/dj/sessao.log* "$m"/dj/config.txt "$m"/sistema/temperatura.log* "$d/" 2>/dev/null
         ls -la "$m/dj" >"$d/arquivos.txt" 2>&1
         if [ -d "$m/sistema/journal" ]; then
             journalctl -D "$m/sistema/journal" --list-boots --no-pager >"$d/boots.txt" 2>&1
