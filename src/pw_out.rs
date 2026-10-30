@@ -389,9 +389,19 @@ pub struct PwOutput {
 }
 
 fn pw_dump() -> Vec<serde_json::Value> {
-    let Ok(out) = std::process::Command::new("pw-dump").output() else { return Vec::new() };
-    serde_json::from_slice::<Vec<serde_json::Value>>(&out.stdout).unwrap_or_default()
+    pw_dump_checked().unwrap_or_default()
 }
+
+/// O grafo do PipeWire, ou `None` se a consulta falhou (o `pw-dump` não rodou, saiu com erro ou
+/// devolveu algo cortado). Com o processador sobrecarregado isso acontece de vez em quando, e não
+/// quer dizer que as saídas sumiram.
+fn pw_dump_checked() -> Option<Vec<serde_json::Value>> {
+    let out = std::process::Command::new("pw-dump").output().ok().filter(|o| o.status.success())?;
+    serde_json::from_slice::<Vec<serde_json::Value>>(&out.stdout).ok().filter(|d| !d.is_empty())
+}
+
+/// Vezes seguidas (a cada 3 s) que uma troca de saída precisa ser vista antes de valer.
+const CONFIRM_CHANGE: u32 = 3;
 
 fn props(o: &serde_json::Value) -> &serde_json::Value {
     &o["info"]["props"]
@@ -612,55 +622,71 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
     // Sem nenhuma saída, o motor roda no relógio silencioso até aparecer uma.
     std::thread::Builder::new()
         .name("audio-vigia".into())
-        .spawn(move || loop {
-            std::thread::sleep(Duration::from_secs(3));
-            let dump = pw_dump();
-            let now = if has_output(&dump) { pick_main(&dump) } else { None };
-            let any = now.is_some();
-            let changed = match &stream {
-                None => any,
-                Some(_) => match (&sink, &now) {
-                    (None, None) => false,
-                    (Some(a), Some(b)) => a.name != b.name || (a.rev1 && a.positions.len() < 4 && b.positions.len() >= 4),
-                    _ => true,
-                },
-            };
-            if !changed {
-                continue;
-            }
-            if let Some(old) = stream.take() {
-                old.close();
-            }
-            if !any {
-                eprintln!("[djos] nenhuma saída de som: relógio silencioso");
-                silent.get_or_insert_with(|| SilentClock::start(&slot));
-                *st.lock() = NO_OUTPUT.to_string();
-                sink = None;
-                continue;
-            }
-            // Para o relógio silencioso antes de abrir: o motor não pode rodar em dois lugares.
-            if let Some(c) = silent.take() {
-                c.stop();
-            }
-            let next = if now.as_ref().is_some_and(|s| s.rev1) { prepare_rev1().or(now) } else { now };
-            eprintln!("[djos] saída mudou: {:?} → {:?}", sink.as_ref().map(|s| &s.name), next.as_ref().map(|s| &s.name));
-            // Se a REV1 não abrir, fica na placa com fio e tenta de novo na próxima volta.
-            let opened = match open_main(&slot, next.as_ref()) {
-                Ok(v) => Some((v, next)),
-                Err(_) => {
-                    let wired = find_wired_in(&pw_dump());
-                    wired.as_ref().and_then(|w| open_main(&slot, Some(w)).ok()).map(|v| (v, wired))
+        .spawn(move || {
+            // Troca vista nas últimas consultas (nome da saída nova) e quantas vezes seguidas.
+            let mut pending: (Option<String>, u32) = (None, 0);
+            loop {
+                std::thread::sleep(Duration::from_secs(3));
+                // Consulta que falhou: não sabemos nada, então não mexe no som.
+                let Some(dump) = pw_dump_checked() else { continue };
+                let now = if has_output(&dump) { pick_main(&dump) } else { None };
+                let any = now.is_some();
+                let changed = match &stream {
+                    None => any,
+                    Some(_) => match (&sink, &now) {
+                        (None, None) => false,
+                        (Some(a), Some(b)) => a.name != b.name || (a.rev1 && a.positions.len() < 4 && b.positions.len() >= 4),
+                        _ => true,
+                    },
+                };
+                if !changed {
+                    pending = (None, 0);
+                    continue;
                 }
-            };
-            match opened {
-                Some(((s, d), used)) => {
-                    *st.lock() = d;
-                    stream = Some(s);
-                    sink = used;
+                // Tocando: só fecha ou troca a saída depois de ver a mudança algumas vezes seguidas.
+                // Uma falha de um instante fechava e reabria o som (o "som caindo" no meio do set).
+                if stream.is_some() {
+                    let name = now.as_ref().map(|s| s.name.clone());
+                    pending = if pending.0 == name { (name, pending.1 + 1) } else { (name, 1) };
+                    if pending.1 < CONFIRM_CHANGE {
+                        continue;
+                    }
                 }
-                None => {
-                    silent = Some(SilentClock::start(&slot));
+                pending = (None, 0);
+                if let Some(old) = stream.take() {
+                    old.close();
+                }
+                if !any {
+                    eprintln!("[djos] nenhuma saída de som: relógio silencioso");
+                    silent.get_or_insert_with(|| SilentClock::start(&slot));
                     *st.lock() = NO_OUTPUT.to_string();
+                    sink = None;
+                    continue;
+                }
+                // Para o relógio silencioso antes de abrir: o motor não pode rodar em dois lugares.
+                if let Some(c) = silent.take() {
+                    c.stop();
+                }
+                let next = if now.as_ref().is_some_and(|s| s.rev1) { prepare_rev1().or(now) } else { now };
+                eprintln!("[djos] saída mudou: {:?} → {:?}", sink.as_ref().map(|s| &s.name), next.as_ref().map(|s| &s.name));
+                // Se a REV1 não abrir, fica na placa com fio e tenta de novo na próxima volta.
+                let opened = match open_main(&slot, next.as_ref()) {
+                    Ok(v) => Some((v, next)),
+                    Err(_) => {
+                        let wired = find_wired_in(&pw_dump());
+                        wired.as_ref().and_then(|w| open_main(&slot, Some(w)).ok()).map(|v| (v, wired))
+                    }
+                };
+                match opened {
+                    Some(((s, d), used)) => {
+                        *st.lock() = d;
+                        stream = Some(s);
+                        sink = used;
+                    }
+                    None => {
+                        silent = Some(SilentClock::start(&slot));
+                        *st.lock() = NO_OUTPUT.to_string();
+                    }
                 }
             }
         })

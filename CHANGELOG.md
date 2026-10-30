@@ -22,6 +22,8 @@ programa do computador de casa.
 
 ### Corrigido
 - Tela e controladora congelavam no meio do set (só o som seguia).
+- O som da DDJ-REV1 caía e voltava sozinho: uma consulta ao PipeWire que falhava por um instante
+  fechava a saída. Agora a troca de saída só vale depois de confirmada.
 - O aparelho desligava sozinho por calor: controle de temperatura do processador, sem turbo, e a
   análise das músicas não roda mais em segundo plano (só no LOAD).
 - Nomes com acento no pendrive (ç, ã, é) apareciam quebrados.
