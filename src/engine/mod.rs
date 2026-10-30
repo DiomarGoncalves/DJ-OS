@@ -70,6 +70,17 @@ fn xf_gains(x: f32, curve: u8) -> (f32, f32) {
     }
 }
 
+/// Botão MASTER: 0 dB (o volume da música) no meio e +6 dB no máximo; a metade de baixo vai do
+/// silêncio até 0 dB (-12 dB em 1/4), para ela também servir.
+pub fn master_gain(v: f32) -> f32 {
+    let v = v.clamp(0.0, 1.0);
+    if v < 0.5 {
+        (v / 0.5).powi(2)
+    } else {
+        1.0 + (v - 0.5) / 0.5 * (dsp::db(6.0) - 1.0)
+    }
+}
+
 /// Leitura do som do celular. O relógio do celular é outro: a fila fica perto de 200 ms e a
 /// leitura anda um pouco mais rápido ou mais devagar (no máximo 0,5%) para não encher nem esvaziar.
 struct LineIn {
@@ -240,7 +251,7 @@ impl Engine {
             Cmd::Fader { deck, v } if ok(deck) => self.decks[deck].set_fader(v),
             Cmd::Pfl { deck, on } if ok(deck) => self.decks[deck].pfl = on,
             Cmd::Crossfader(v) => self.xf.set(v.clamp(0.0, 1.0)),
-            Cmd::MasterLevel(v) => self.master.set(v * v * 2.0),
+            Cmd::MasterLevel(v) => self.master.set(master_gain(v)),
             Cmd::HeadphoneLevel(v) => self.hp.set(v * v * 2.0),
             Cmd::HeadphoneMix(v) => self.hp_mix.set(v.clamp(0.0, 1.0)),
             Cmd::FxKind { deck, slot, kind } if ok(deck) => {

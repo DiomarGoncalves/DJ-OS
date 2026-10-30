@@ -14,6 +14,11 @@ para diferenciar firmwares de teste da mesma versão.
   - lado de cada deck no crossfader: A, B ou THRU (fora do crossfader);
   - fone em estéreo ou mono dividido (CUE no ouvido esquerdo, master no direito).
 
+### Corrigido
+- Som baixo na REV1 mesmo com tudo no máximo: o sistema agora deixa a saída da REV1 em 100%
+  (no PipeWire e na placa) e registra como estava.
+- Botão MASTER: o meio agora é 0 dB (antes -6 dB), e a metade de baixo também tem volume.
+
 ## [0.1.1] - 2026-10-30
 
 Correções do primeiro teste na máquina de verdade (notebook de 2011, i5-2430M, Intel HD 3000) e o

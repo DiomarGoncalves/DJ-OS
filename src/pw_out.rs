@@ -502,6 +502,57 @@ fn prepare_rev1() -> Option<Sink> {
     find_rev1_in(&pw_dump()).or(sink)
 }
 
+/// Volume da saída da REV1 em 100% e sem mudo, no PipeWire e na placa (ALSA). Quem manda no
+/// volume é o MASTER da controladora; ligada pela primeira vez, a saída costuma vir em ~40%
+/// (-24 dB) e o som fica baixo mesmo com tudo no máximo. Registra como estava.
+fn rev1_full_volume(name: &str) {
+    let dump = pw_dump();
+    let Some(node) = dump.iter().find(|o| prop(o, "node.name") == name) else { return };
+    let p = &node["info"]["params"]["Props"][0];
+    let vols: Vec<f64> = p["channelVolumes"].as_array().map(|v| v.iter().filter_map(|x| x.as_f64()).collect()).unwrap_or_default();
+    let db = |v: f64| if v > 0.0 { format!("{:+.1} dB", 20.0 * v.log10()) } else { "mudo".into() };
+    eprintln!(
+        "[djos] volume da saída da REV1: {} (mudo: {}, volume: {})",
+        vols.iter().map(|v| db(*v)).collect::<Vec<_>>().join(" "),
+        p["mute"].as_bool().unwrap_or(false),
+        p["volume"].as_f64().map_or("?".into(), db)
+    );
+    if let Some(id) = node["id"].as_u64() {
+        let id = id.to_string();
+        let run = |args: &[&str]| std::process::Command::new("wpctl").args(args).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
+        let ok = run(&["set-volume", &id, "1.0"]) & run(&["set-mute", &id, "0"]);
+        eprintln!("[djos] saída da REV1 em 100%: {}", if ok { "ok" } else { "falhou" });
+    }
+    // Controles de saída da própria placa (ALSA), se ela tiver: no máximo e ligados.
+    let card = ["api.alsa.card", "alsa.card"].iter().find_map(|k| {
+        let v = &props(node)[*k];
+        v.as_str().map(str::to_string).or_else(|| v.as_i64().map(|n| n.to_string()))
+    });
+    let Some(card) = card else { return };
+    let Ok(out) = std::process::Command::new("amixer").args(["-c", &card, "scontents"]).output() else { return };
+    let text = String::from_utf8_lossy(&out.stdout);
+    for ctl in playback_controls(&text) {
+        let set = std::process::Command::new("amixer").args(["-c", &card, "-q", "sset", &ctl, "100%", "unmute"]).status().is_ok_and(|s| s.success());
+        eprintln!("[djos] placa da REV1 (ALSA {card}): '{ctl}' no máximo: {}", if set { "ok" } else { "erro" });
+    }
+}
+
+/// Nomes dos controles com volume de saída na lista do `amixer scontents`.
+fn playback_controls(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut cur: Option<String> = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("Simple mixer control '") {
+            cur = rest.rsplit_once('\'').map(|(name, _)| name.to_string());
+        } else if let (Some(caps), Some(name)) = (line.trim().strip_prefix("Capabilities:"), cur.as_ref()) {
+            if caps.split_whitespace().any(|c| c == "pvolume") {
+                found.push(name.clone());
+            }
+        }
+    }
+    found
+}
+
 /// Canais do fluxo para a saída escolhida: os da REV1 (se forem 4 conhecidos) ou estéreo.
 fn stream_positions(sink: Option<&Sink>) -> Vec<u32> {
     let ids: Option<Vec<u32>> = sink.filter(|s| s.rev1).and_then(|s| s.positions.iter().map(|c| channel_id(c)).collect::<Option<Vec<u32>>>());
@@ -532,6 +583,10 @@ fn open_main(slot: &EngineSlot, sink: Option<&Sink>) -> Result<(Stream, String),
     });
     let target = sink.map(|s| s.name.as_str());
     let stream = Stream::open("dj-os", "DJ OS", target, &positions, 256, render)?;
+    if let Some(s) = sink.filter(|s| s.rev1) {
+        let name = s.name.clone();
+        std::thread::spawn(move || rev1_full_volume(&name));
+    }
     Ok((stream, describe(sink, positions.len())))
 }
 
@@ -816,6 +871,14 @@ mod tests {
         assert_eq!(stream_positions(Some(&s)), STEREO.to_vec());
         assert!(describe(Some(&s), 2).contains("FONE SEM SOM"));
         assert!(find_rev1_in(&[sink("alsa_output.pci-0000.analog-stereo", "FL,FR")]).is_none());
+    }
+
+    #[test]
+    fn controles_de_saida_da_placa() {
+        let t = "Simple mixer control 'PCM',0\n  Capabilities: pvolume pswitch\n  Playback channels: Front Left\n\
+                 Simple mixer control 'Mic',0\n  Capabilities: cvolume cswitch\n\
+                 Simple mixer control 'Master Out',1\n  Capabilities: pvolume\n";
+        assert_eq!(playback_controls(t), ["PCM", "Master Out"]);
     }
 
     #[test]

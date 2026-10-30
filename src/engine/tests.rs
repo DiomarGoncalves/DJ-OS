@@ -407,6 +407,16 @@ fn crossfader_corta_o_lado_oposto() {
 }
 
 #[test]
+fn master_no_meio_e_0_db() {
+    use super::master_gain;
+    assert_eq!(master_gain(0.0), 0.0);
+    assert!((master_gain(0.5) - 1.0).abs() < 1e-6);
+    let db = |g: f32| 20.0 * g.log10();
+    assert!((db(master_gain(1.0)) - 6.0).abs() < 0.1);
+    assert!((db(master_gain(0.25)) + 12.0).abs() < 0.1);
+}
+
+#[test]
 fn deck_fora_do_crossfader_ignora_o_crossfader() {
     let mut r = rig();
     r.send(Cmd::Load { deck: 1, track: track(128.0) });
