@@ -13,6 +13,13 @@ pub const SECS_PER_REV: f64 = 1.8;
 const SPIN_STOP_SECS: f64 = 0.06;
 /// Retomada da velocidade normal depois do scratch (constante de tempo, ~0,3 s até chegar).
 const RESUME_SECS: f64 = 0.08;
+/// Com a mão no prato, o som segue o prato por um filtro de 2ª ordem (amortecimento crítico) de
+/// ~20 Hz: a velocidade fica lisa, sem o chiado das mensagens do jog (centenas por segundo), e o
+/// som chega onde a mão parou. Mão parada = som parado e mudo, como no vinil e nas CDJ.
+const FOLLOW_W: f64 = 2.0 * std::f64::consts::PI * 20.0;
+/// Abaixo desta velocidade o som some aos poucos (prato quase parado não faz barulho nem deixa
+/// tensão contínua na saída).
+const QUIET_SPEED: f64 = 0.04;
 
 pub const PITCH_RANGES: [f64; 3] = [0.08, 0.16, 0.50];
 
@@ -53,6 +60,11 @@ pub struct Deck {
     scratching: bool,
     scr_rate: f64,
     scr_ticks: f64,
+    /// Distância (em segundos de música) entre onde o som está e onde a mão deixou o prato.
+    scr_err: f64,
+    /// Passo e volume do bloco anterior (o próximo bloco vai de um ao outro, sem degrau).
+    last_step: f64,
+    last_gain: f32,
     bend: f64,
     bend_ticks: f64,
     // canal do mixer
@@ -147,6 +159,9 @@ impl Deck {
             scratching: false,
             scr_rate: 0.0,
             scr_ticks: 0.0,
+            scr_err: 0.0,
+            last_step: 0.0,
+            last_gain: 0.0,
             bend: 0.0,
             bend_ticks: 0.0,
             trim: Smooth::new(1.0, 0.002),
@@ -384,6 +399,8 @@ impl Deck {
             }
             self.scratching = true;
             self.scr_ticks = 0.0;
+            // A mão segura o prato: o som freia até parar, sem passar do ponto e voltar.
+            self.scr_err = -self.scr_rate / FOLLOW_W;
         }
     }
 
@@ -611,7 +628,13 @@ impl Deck {
         // Velocidade do bloco.
         let mut speed = if self.scratching {
             let (target, k) = if self.touched {
-                ((self.scr_ticks / TICKS_PER_REV * SECS_PER_REV) / block_secs, 0.3)
+                // Segue o prato: a mão andou `moved`; acelera em direção a ela sem tranco.
+                let moved = self.scr_ticks / TICKS_PER_REV * SECS_PER_REV;
+                self.scr_err -= moved;
+                let acc = -FOLLOW_W * FOLLOW_W * self.scr_err - 2.0 * FOLLOW_W * self.scr_rate;
+                let v = self.scr_rate + acc * block_secs;
+                self.scr_err += v * block_secs;
+                (v, 1.0)
             } else if self.scr_ticks != 0.0 {
                 // Prato solto ainda girando: segue o prato (velocidade desde o último movimento).
                 let v = (self.scr_ticks / TICKS_PER_REV * SECS_PER_REV) / (self.spin_idle + block_secs);
@@ -642,6 +665,11 @@ impl Deck {
             speed += self.bend * self.rate;
         }
         let step = speed * ratio;
+        let step0 = if self.scratching { self.last_step } else { step };
+        self.last_step = step;
+        let gain1 = (speed.abs() / QUIET_SPEED).min(1.0) as f32;
+        let gain0 = self.last_gain;
+        self.last_gain = gain1;
         // Keylock só quando faz diferença: tocando sem scratch, pitch fora do zero e sem o tom
         // dos pads de Tracking (que muda o tom de propósito).
         let use_kl = self.keylock && self.playing && !self.scratching && self.key_semis == 0.0 && (speed - 1.0).abs() > 0.0005;
@@ -657,15 +685,39 @@ impl Deck {
         let mut peak = 0.0f32;
 
         for i in 0..n {
-            if self.loop_on && step > 0.0 {
+            let frac = (i + 1) as f64 / n as f64;
+            let step = step0 + (step - step0) * frac;
+            // Dentro do loop também no scratch e no backspin: para trás, sai no fim do loop.
+            if self.loop_on {
                 if let (Some(a), Some(b)) = (self.loop_in, self.loop_out) {
-                    if self.pos >= b && b > a {
+                    if b > a && step > 0.0 && self.pos >= b {
                         self.pos = a + (self.pos - b) % (b - a);
+                    } else if b > a && step < 0.0 && self.pos < a {
+                        self.pos = b - (a - self.pos) % (b - a);
                     }
                 }
             }
-            let (l, r) = if use_kl { self.kl.next(&t, self.pos, ratio) } else { t.sample(self.pos) };
+            let (l, r) = if use_kl {
+                self.kl.next(&t, self.pos, ratio)
+            } else if step.abs() > 1.5 {
+                // Scratch rápido: média das amostras do caminho (tira o chiado de "digital").
+                let k = (step.abs().ceil() as usize).min(8);
+                let (mut l, mut r) = (0.0f32, 0.0f32);
+                for j in 0..k {
+                    let (a, b) = t.sample(self.pos + step * j as f64 / k as f64);
+                    l += a;
+                    r += b;
+                }
+                (l / k as f32, r / k as f32)
+            } else {
+                t.sample(self.pos)
+            };
+            let quiet = gain0 + (gain1 - gain0) * frac as f32;
+            let (l, r) = (l * quiet, r * quiet);
             self.pos += step;
+            if self.pos < 0.0 {
+                self.pos = 0.0;
+            }
             if let Some(roll) = &mut self.roll {
                 roll.virt += step;
                 if self.pos >= roll.start + roll.len {

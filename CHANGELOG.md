@@ -18,6 +18,9 @@ para diferenciar firmwares de teste da mesma versão.
 - Som baixo na REV1 mesmo com tudo no máximo: o sistema agora deixa a saída da REV1 em 100%
   (no PipeWire e na placa) e registra como estava.
 - Botão MASTER: o meio agora é 0 dB (antes -6 dB), e a metade de baixo também tem volume.
+- Scratch e backspin dentro do loop: para trás, o som volta pelo fim do loop em vez de sair dele.
+- Mão no prato: o som freia liso e fica mudo com a mão parada (antes chiava e deixava um zumbido);
+  o scratch segue a mão sem o "serrilhado" digital e para exatamente onde a mão parou.
 
 ## [0.1.1] - 2026-10-30
 

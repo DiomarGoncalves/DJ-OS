@@ -703,6 +703,58 @@ fn backspin_segue_o_prato_solto_e_depois_volta_a_tocar() {
 }
 
 #[test]
+fn backspin_dentro_do_loop_fica_no_loop() {
+    let mut d = deck_with(128.0);
+    d.play_toggle();
+    render(&mut d, 48000);
+    d.loop_auto(4.0);
+    let (a, b) = (d.loop_in.unwrap(), d.loop_out.unwrap());
+    render(&mut d, 4800);
+    // Backspin forte: puxa para trás e solta girando por mais de um loop inteiro.
+    d.jog_touch(true);
+    d.jog_scratch(-200.0);
+    render(&mut d, 256);
+    d.jog_touch(false);
+    for i in 0..60 {
+        d.jog_bend(-(60.0 - i as f64) * 2.0);
+        render(&mut d, 480);
+        assert!(d.pos >= a - 1.0 && d.pos <= b + 1.0, "saiu do loop no backspin: {} fora de {a}..{b}", d.pos);
+    }
+    render(&mut d, 48000);
+    assert!(d.loop_on && d.pos >= a && d.pos <= b, "continua no loop depois do backspin");
+}
+
+#[test]
+fn mao_parada_no_prato_fica_muda_e_freia_sem_voltar() {
+    let mut d = deck_with(128.0);
+    d.play_toggle();
+    render(&mut d, 48000);
+    d.jog_touch(true);
+    // Freando: a música só anda para a frente (não passa do ponto e volta).
+    let mut last = d.pos;
+    for _ in 0..40 {
+        render(&mut d, 64);
+        assert!(d.pos >= last - 1e-6, "voltou para trás ao segurar o prato");
+        last = d.pos;
+    }
+    // Mão parada: silêncio (nada de zumbido nem de tensão contínua na saída).
+    render(&mut d, 4800);
+    let out = render(&mut d, 24000);
+    let peak = out.iter().fold(0.0f32, |m, s| m.max(s[0].abs()));
+    assert!(peak < 1e-3, "mão parada no prato deveria ficar muda ({peak})");
+    // Mexendo devagar com a mão, o som anda junto e chega onde a mão parou.
+    let start = d.pos;
+    for _ in 0..20 {
+        d.jog_scratch(3.0);
+        render(&mut d, 240);
+    }
+    render(&mut d, 9600);
+    let moved = (d.pos - start) / 48000.0;
+    let hand = 60.0 / 720.0 * 1.8;
+    assert!((moved - hand).abs() < 0.002, "o som parou onde a mão parou ({moved:.4} s × {hand:.4} s)");
+}
+
+#[test]
 fn limitador_segura_o_master_sem_distorcer() {
     // Dois decks no máximo, EQ de grave em cima e master no máximo: soma muito acima de 0 dB.
     let mut r = rig();
