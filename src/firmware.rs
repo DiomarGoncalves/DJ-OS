@@ -28,6 +28,17 @@ fn run(args: &[&str]) -> Option<String> {
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).to_string())
 }
 
+/// "0.1.0-20261029.2128" → "0.1.0 · firmware de 29/10/2026 21:28" (a data é quando foi montado).
+pub fn pretty_version(v: &str) -> String {
+    let Some((base, stamp)) = v.split_once('-') else { return v.to_string() };
+    let d: Vec<char> = stamp.chars().filter(|c| c.is_ascii_digit()).collect();
+    if d.len() != 12 {
+        return v.to_string();
+    }
+    let s = |a: usize, b: usize| d[a..b].iter().collect::<String>();
+    format!("{base} · firmware de {}/{}/{} {}:{}", s(6, 8), s(4, 6), s(0, 4), s(8, 10), s(10, 12))
+}
+
 /// Lê a versão e o modo (instalado ou teste).
 pub fn refresh_info(shared: &SharedApp) {
     let shared = shared.clone();
@@ -36,11 +47,11 @@ pub fn refresh_info(shared: &SharedApp) {
             None => format!("DJ OS {} · desenvolvimento (firmware só no aparelho)", env!("CARGO_PKG_VERSION")),
             Some(out) => {
                 let get = |k: &str| out.lines().find_map(|l| l.strip_prefix(k).map(|v| v.trim().to_string()));
-                let versao = get("VERSAO").unwrap_or_default();
+                let versao = pretty_version(&get("VERSAO").unwrap_or_default());
                 match get("SLOT") {
                     None => format!("Versão {versao} · modo de teste (ISO): nada é guardado ao desligar"),
                     Some(slot) => {
-                        let reserva = get("OUTRA").map_or(String::new(), |o| format!(" · reserva: {o}"));
+                        let reserva = get("OUTRA").map_or(String::new(), |o| format!(" · reserva: {}", pretty_version(&o)));
                         format!("Versão {versao} · instalado (parte {}){reserva}", slot.to_uppercase())
                     }
                 }
@@ -151,4 +162,13 @@ pub fn power(shared: &SharedApp, what: &'static str) {
             shared.lock().toast("Reiniciar/desligar só funciona no aparelho".to_string());
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn versao_legivel() {
+        assert_eq!(super::pretty_version("0.1.0-20261029.2128"), "0.1.0 · firmware de 29/10/2026 21:28");
+        assert_eq!(super::pretty_version("0.1.0"), "0.1.0");
+    }
 }

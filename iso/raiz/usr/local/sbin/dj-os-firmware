@@ -46,7 +46,9 @@ info)
     diga "MODO instalado"
     diga "SLOT $slot"
     o=$(outro "$slot")
-    [ -f "$SIS/$o/versao" ] && diga "OUTRA $(cat "$SIS/$o/versao")"
+    # Instalação nova: a parte reserva ainda está vazia (sem isto o "info" saía com erro e a tela
+    # mostrava só "0.1.0").
+    if [ -f "$SIS/$o/versao" ]; then diga "OUTRA $(cat "$SIS/$o/versao")"; fi
     ;;
 procurar)
     find /media/dj -maxdepth 3 -iname '*.djos' -type f 2>/dev/null | sort -r

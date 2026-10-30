@@ -256,7 +256,10 @@ pub fn tab_summary(app: &AppState, tab: Tab) -> String {
         Tab::Wifi => app.settings_ui.as_ref().and_then(|u| u.wifi.iter().find(|n| n.active)).map_or("—".into(), |n| n.ssid.clone()),
         Tab::Controller => format!("{} · ±{:.0}%", if s.vinyl { "vinil" } else { "cdj" }, PITCH_RANGES[s.pitch_range] * 100.0),
         Tab::Screen => PALETTES[s.palette].to_lowercase(),
-        Tab::System => app.fw.info.split(" · ").next().unwrap_or("").replace("Versão ", "v"),
+        Tab::System => match app.fw.info.split(" · ").find_map(|p| p.strip_prefix("firmware de ")) {
+            Some(date) => format!("firmware {date}"),
+            None => app.fw.info.split(" · ").next().unwrap_or("").replace("Versão ", "v"),
+        },
     }
 }
 
