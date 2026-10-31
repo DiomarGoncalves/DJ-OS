@@ -230,8 +230,8 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>, snap: S
                             }
                         }
                         None => {
-                            if let Ok(t) = crate::track::load(&p, true) {
-                                crate::store::save(&p, &crate::store::Saved::from_track(&t));
+                            if let Ok((_, s)) = crate::rekordbox::first_analysis(&p) {
+                                crate::store::save(&p, &s);
                                 counter.fetch_add(1, Ordering::Relaxed);
                                 did += 1;
                             }

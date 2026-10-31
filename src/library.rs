@@ -25,12 +25,22 @@ pub enum NodeKind {
     Search,
     /// "Tocadas hoje": o histórico da noite (nó virtual, sem pasta).
     History,
+    /// Pendrive do rekordbox: todas as músicas, uma pasta de playlists ou uma playlist (pelo
+    /// número no banco). O caminho do nó é a raiz do pendrive.
+    RbRoot,
+    RbFolder(u32),
+    RbPlaylist(u32),
 }
 
 impl NodeKind {
     /// Nó sem pasta de verdade por trás (pesquisa, histórico).
     pub fn is_virtual(self) -> bool {
         matches!(self, NodeKind::Search | NodeKind::History)
+    }
+
+    /// Item das playlists do rekordbox (não é uma pasta: não se copia nem se abre como pasta).
+    pub fn is_rekordbox(self) -> bool {
+        matches!(self, NodeKind::RbRoot | NodeKind::RbFolder(_) | NodeKind::RbPlaylist(_))
     }
 }
 
@@ -73,6 +83,19 @@ impl TrackEntry {
             self.key = crate::key::from_raw(p.key);
         }
         self
+    }
+
+    /// Música do banco do rekordbox: nome, artista, BPM e tom dele. Não abre nada no pendrive
+    /// (a lista de todas as músicas pode ter milhares).
+    fn from_rekordbox(t: &crate::rekordbox::RbTrack) -> Self {
+        let mut e = Self::from_path(&t.path);
+        e.title = t.title.clone();
+        if !t.artist.is_empty() {
+            e.artist = t.artist.clone();
+        }
+        e.bpm = (t.bpm > 0.0).then_some(t.bpm);
+        e.key = crate::key::from_raw(t.key);
+        e
     }
 }
 
@@ -117,7 +140,8 @@ fn home() -> PathBuf {
 }
 
 fn is_hidden(p: &Path) -> bool {
-    p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'))
+    // PIONEER: análise e banco do rekordbox (as playlists aparecem no item "rekordbox").
+    p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.') || n == "PIONEER")
 }
 
 fn list_dirs(p: &Path) -> Vec<PathBuf> {
@@ -130,17 +154,40 @@ fn list_dirs(p: &Path) -> Vec<PathBuf> {
 
 
 fn list_tracks(p: &Path) -> Vec<TrackEntry> {
+    // Pasta de um pendrive do rekordbox: nome, artista, BPM e tom vêm do banco dele.
+    let rb = crate::rekordbox::find_root(p).and_then(|r| crate::rekordbox::library(&r));
     let mut v: Vec<TrackEntry> = std::fs::read_dir(p)
         .map(|rd| {
             rd.flatten()
                 .map(|e| e.path())
                 .filter(|p| is_audio(p))
-                .map(|p| TrackEntry::from_path(&p).with_saved())
+                .map(|p| match rb.as_ref().and_then(|l| l.by_path(&p)) {
+                    Some(t) => TrackEntry::from_rekordbox(t).with_saved(),
+                    None => TrackEntry::from_path(&p).with_saved(),
+                })
                 .collect()
         })
         .unwrap_or_default();
     v.sort_by_key(|t| (t.artist.to_lowercase(), t.title.to_lowercase()));
     v
+}
+
+/// Músicas de um item do rekordbox: todas (em ordem de artista), as da playlist (na ordem dela)
+/// ou nenhuma (pasta de playlists).
+fn rb_tracks(root: &Path, kind: NodeKind) -> Vec<TrackEntry> {
+    let Some(lib) = crate::rekordbox::library(root) else { return Vec::new() };
+    match kind {
+        NodeKind::RbRoot => {
+            let mut v: Vec<TrackEntry> = lib.tracks.values().map(TrackEntry::from_rekordbox).collect();
+            v.sort_by_key(|t| (t.artist.to_lowercase(), t.title.to_lowercase()));
+            v
+        }
+        NodeKind::RbPlaylist(id) => match lib.node(id) {
+            Some(crate::rekordbox::Node::Playlist { tracks, .. }) => tracks.iter().filter_map(|t| lib.tracks.get(t)).map(|t| TrackEntry::from_rekordbox(t).with_saved()).collect(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
 }
 
 /// Unidades: pendrives/SSDs montados pelo sistema (`/media/<usuário>`, `/run/media/<usuário>`)
@@ -271,8 +318,29 @@ impl Library {
     }
 
     fn node(name: String, path: PathBuf, depth: usize, kind: NodeKind) -> Node {
-        let has_children = !kind.is_virtual() && !list_dirs(&path).is_empty();
+        let has_children = !kind.is_virtual() && (!list_dirs(&path).is_empty() || crate::rekordbox::is_export(&path));
         Node { name, path, depth, kind, expanded: false, has_children }
+    }
+
+    /// Itens das playlists do rekordbox (pastas e playlists, na ordem dele).
+    fn rb_nodes(root: &Path, nodes: &[crate::rekordbox::Node], depth: usize) -> Vec<Node> {
+        use crate::rekordbox::Node as Rb;
+        nodes
+            .iter()
+            .map(|n| match n {
+                Rb::Folder { id, name, children } => {
+                    Node { name: format!("📁 {name}"), path: root.to_path_buf(), depth, kind: NodeKind::RbFolder(*id), expanded: false, has_children: !children.is_empty() }
+                }
+                Rb::Playlist { id, name, tracks } => Node {
+                    name: format!("☰ {name} ({})", tracks.len()),
+                    path: root.to_path_buf(),
+                    depth,
+                    kind: NodeKind::RbPlaylist(*id),
+                    expanded: false,
+                    has_children: false,
+                },
+            })
+            .collect()
     }
 
     /// Recria a árvore com as unidades atuais e reindexa as músicas.
@@ -308,6 +376,7 @@ impl Library {
             NodeKind::Search => self.results.as_ref().map(|(_, r)| r.clone()).unwrap_or_default(),
             // A mais recente em cima.
             NodeKind::History => self.history.iter().rev().cloned().collect(),
+            NodeKind::RbRoot | NodeKind::RbFolder(_) | NodeKind::RbPlaylist(_) => rb_tracks(&n.path, n.kind),
             _ => list_tracks(&n.path),
         };
         self.track_sel = 0;
@@ -326,7 +395,7 @@ impl Library {
     /// Música ou pasta selecionada no painel em foco (para apagar/importar).
     pub fn selected_path(&self) -> Option<PathBuf> {
         match self.focus {
-            Focus::Folders => self.folders.get(self.folder_sel).filter(|n| !n.kind.is_virtual()).map(|n| n.path.clone()),
+            Focus::Folders => self.folders.get(self.folder_sel).filter(|n| !n.kind.is_virtual() && !n.kind.is_rekordbox()).map(|n| n.path.clone()),
             _ => self.selected_track().map(|t| t.path),
         }
     }
@@ -392,13 +461,30 @@ impl Library {
             self.folders.drain(i + 1..end);
             self.folders[i].expanded = false;
         } else {
-            let children: Vec<Node> = list_dirs(&n.path)
-                .into_iter()
-                .map(|d| {
-                    let name = d.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                    Self::node(name, d, n.depth + 1, NodeKind::Dir)
-                })
-                .collect();
+            let children: Vec<Node> = match n.kind {
+                NodeKind::RbRoot => crate::rekordbox::library(&n.path).map_or(Vec::new(), |l| Self::rb_nodes(&n.path, &l.playlists, n.depth + 1)),
+                NodeKind::RbFolder(id) => match crate::rekordbox::library(&n.path).as_deref().and_then(|l| l.node(id)) {
+                    Some(crate::rekordbox::Node::Folder { children, .. }) => Self::rb_nodes(&n.path, children, n.depth + 1),
+                    _ => Vec::new(),
+                },
+                _ => {
+                    // Pendrive do rekordbox: as playlists dele em primeiro.
+                    let rb = crate::rekordbox::library(&n.path).map(|l| Node {
+                        name: format!("📀 rekordbox ({} músicas)", l.tracks.len()),
+                        path: n.path.clone(),
+                        depth: n.depth + 1,
+                        kind: NodeKind::RbRoot,
+                        expanded: false,
+                        has_children: !l.playlists.is_empty(),
+                    });
+                    rb.into_iter()
+                        .chain(list_dirs(&n.path).into_iter().map(|d| {
+                            let name = d.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                            Self::node(name, d, n.depth + 1, NodeKind::Dir)
+                        }))
+                        .collect()
+                }
+            };
             self.folders.splice(i + 1..i + 1, children);
             self.folders[i].expanded = true;
         }
@@ -411,7 +497,7 @@ impl Library {
                 .folders
                 .iter()
                 .enumerate()
-                .filter(|(_, n)| !n.kind.is_virtual() && !n.path.as_os_str().is_empty() && target.starts_with(&n.path))
+                .filter(|(_, n)| !n.kind.is_virtual() && !n.kind.is_rekordbox() && !n.path.as_os_str().is_empty() && target.starts_with(&n.path))
                 .max_by_key(|(_, n)| n.depth)
                 .map(|(i, _)| i)
             else {
@@ -588,6 +674,39 @@ mod tests {
         assert_eq!(lib.folders.iter().filter(|f| f.kind == NodeKind::Search).count(), 1);
         assert_eq!(lib.tracks[0].artist, "Artista");
         let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn pendrive_do_rekordbox_mostra_as_musicas_dele() {
+        let root = std::env::temp_dir().join(format!("dj-os-rekordbox-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let demo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("analise/tests/rekordbox/demo/PIONEER");
+        let copy = |from: &Path, to: &Path| {
+            std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+            std::fs::copy(from, to).unwrap();
+        };
+        copy(&demo.join("rekordbox/export.pdb"), &root.join("PIONEER/rekordbox/export.pdb"));
+        let album = root.join("Contents/Loopmasters/UnknownAlbum");
+        std::fs::create_dir_all(&album).unwrap();
+        for f in ["Demo Track 1.mp3", "Demo Track 2.mp3"] {
+            std::fs::write(album.join(f), b"x").unwrap();
+        }
+        let mut lib = Library::with_roots(vec![root.clone()]);
+        lib.open_selected();
+        let names: Vec<_> = lib.folders.iter().map(|n| n.name.clone()).collect();
+        assert_eq!(names[1], "📀 rekordbox (2 músicas)", "{names:?}");
+        assert!(!names.iter().any(|n| n == "PIONEER"), "a pasta do rekordbox fica escondida");
+        lib.scroll(1);
+        assert_eq!(lib.tracks.len(), 2);
+        assert_eq!((lib.tracks[0].title.as_str(), lib.tracks[0].artist.as_str()), ("Demo Track 1", "Loopmasters"));
+        assert_eq!(lib.tracks[0].bpm, Some(128.0));
+        assert!(lib.selected_path().is_none(), "o item do rekordbox não é uma pasta para copiar");
+        lib.focus = Focus::Folders;
+        lib.reveal(&album);
+        assert_eq!(lib.tracks.len(), 2);
+        assert_eq!(lib.tracks[1].title, "Demo Track 2", "pela pasta também vem o nome do rekordbox");
+        assert_eq!(lib.tracks[1].bpm, Some(120.0));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

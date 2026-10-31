@@ -10,6 +10,7 @@ pub mod dsp;
 pub mod key;
 pub mod loudness;
 pub mod prepare;
+pub mod rekordbox;
 pub mod store;
 pub mod track;
 

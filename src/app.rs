@@ -288,9 +288,20 @@ impl Loader {
 
 fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path, resume: Option<f64>) {
     let started = Instant::now();
-    let saved = crate::store::load(path);
-    let cached = saved.as_ref().map(|s| (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness));
-    match track::load_cached(path, true, cached) {
+    let mut saved = crate::store::load(path);
+    // Primeira vez de uma música de pendrive do rekordbox: grade, tom e cues dele.
+    let loaded = match saved.is_none().then(|| crate::rekordbox::load_track(path)).flatten() {
+        Some(r) => r.map(|(t, s)| {
+            crate::store::save(path, &s);
+            saved = Some(s);
+            t
+        }),
+        None => {
+            let cached = saved.as_ref().map(|s| (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness));
+            track::load_cached(path, true, cached)
+        }
+    };
+    match loaded {
         Ok(t) => {
             let t = Arc::new(t);
             match &saved {

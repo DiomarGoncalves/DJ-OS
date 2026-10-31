@@ -98,7 +98,7 @@ fn prepare_one(root: &Path, f: &Path) -> Outcome {
     }
     let saved = match crate::store::load(f) {
         Some(s) if s.key != crate::key::RAW_UNKNOWN && !s.loudness.is_nan() => Ok(s),
-        _ => crate::track::load(f, true).map(|t| crate::store::Saved::from_track(&t)),
+        _ => crate::rekordbox::first_analysis(f).map(|(_, s)| s),
     };
     match saved.map_err(|e| e.to_string()).and_then(|s| crate::store::save_portable(root, f, &s).map(|_| s.bpm).map_err(|e| e.to_string())) {
         Ok(bpm) => Outcome::Done(bpm),

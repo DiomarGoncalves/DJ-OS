@@ -16,6 +16,11 @@ para diferenciar firmwares de teste da mesma versão.
 - **Slip** (CONFIG → CONTROLADORA, desligado de fábrica): scratch, backspin e loop "por cima" da
   música; ao soltar o prato ou sair do loop, ela volta onde estaria se tivesse seguido tocando.
   Uma linha tracejada na waveform mostra onde é; a etiqueta SLIP acende enquanto está valendo.
+- **Pendrive do rekordbox**: o DJ OS lê o banco do pendrive exportado pelo rekordbox. No browser
+  aparece "📀 rekordbox" com todas as músicas e as playlists (com as pastas delas); nas pastas,
+  nome, artista, BPM e tom vêm do rekordbox. Ao abrir uma música, a grade, o tom e os cues
+  (memory cue, hot cues A-H e loop) são os do rekordbox, sem analisar de novo. O Preparar e o
+  "Analisar todas" também usam. Só leitura: nada é gravado no pendrive.
 
 ### Corrigido
 - Som baixo na REV1 mesmo com tudo no máximo: o sistema agora deixa a saída da REV1 em 100%

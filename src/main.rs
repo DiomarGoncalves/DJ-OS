@@ -26,7 +26,7 @@ mod shared;
 mod ui;
 
 // Análise das músicas: biblioteca compartilhada com o DJ OS Preparar (analise/).
-use dj_os_analise::{key, loudness, store, track};
+use dj_os_analise::{key, loudness, rekordbox, store, track};
 
 use parking_lot::Mutex;
 use shared::{CmdTx, Snapshot};
