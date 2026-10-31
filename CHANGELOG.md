@@ -13,6 +13,9 @@ para diferenciar firmwares de teste da mesma versão.
   - curva do crossfader (saiu da aba Controladora);
   - lado de cada deck no crossfader: A, B ou THRU (fora do crossfader);
   - fone em estéreo ou mono dividido (CUE no ouvido esquerdo, master no direito).
+- **Slip** (CONFIG → CONTROLADORA, desligado de fábrica): scratch, backspin e loop "por cima" da
+  música; ao soltar o prato ou sair do loop, ela volta onde estaria se tivesse seguido tocando.
+  Uma linha tracejada na waveform mostra onde é; a etiqueta SLIP acende enquanto está valendo.
 
 ### Corrigido
 - Som baixo na REV1 mesmo com tudo no máximo: o sistema agora deixa a saída da REV1 em 100%

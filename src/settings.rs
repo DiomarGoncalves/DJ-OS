@@ -50,6 +50,8 @@ pub struct Settings {
     pub xf_side: [usize; NUM_DECKS],
     /// Fone em mono dividido (cue à esquerda, master à direita).
     pub hp_split: bool,
+    /// Slip: depois do scratch ou do loop, a música volta onde estaria.
+    pub slip: bool,
 }
 
 impl Default for Settings {
@@ -74,6 +76,7 @@ impl Default for Settings {
             fader_curve: 1,
             xf_side: std::array::from_fn(|d| if d % 2 == 0 { 0 } else { 2 }),
             hp_split: false,
+            slip: false,
         }
     }
 }
@@ -121,6 +124,7 @@ impl Settings {
                     }
                 }
                 "fone_dividido" => s.hp_split = v == "sim",
+                "slip" => s.slip = v == "sim",
                 _ => {}
             }
         }
@@ -137,7 +141,7 @@ impl Settings {
         format!(
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
-             eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\n",
+             eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -155,7 +159,8 @@ impl Settings {
             yn(self.eq_iso),
             self.fader_curve,
             self.xf_side.iter().map(|&i| XF_SIDE_CHARS[i]).collect::<String>(),
-            yn(self.hp_split)
+            yn(self.hp_split),
+            yn(self.slip)
         )
     }
 
@@ -179,6 +184,7 @@ impl Settings {
             cmd.send(Cmd::Vinyl { deck, on: self.vinyl });
             cmd.send(Cmd::SetPitchRange { deck, range: PITCH_RANGES[self.pitch_range] });
             cmd.send(Cmd::Keylock { deck, on: self.keylock });
+            cmd.send(Cmd::Slip { deck, on: self.slip });
             cmd.send(Cmd::XfAssign { deck, side: self.xf_side[deck] as u8 });
         }
         cmd.send(Cmd::XfCurve(self.xf_curve as u8));
@@ -224,6 +230,7 @@ pub enum Action {
     EqMode,
     FaderCurve,
     HpSplit,
+    Slip,
     Keylock,
     Palette,
     Scale,
@@ -296,7 +303,7 @@ pub fn tab_summary(app: &AppState, tab: Tab) -> String {
         Tab::Bluetooth => app.bt_mode.name().to_lowercase(),
         Tab::Phone => crate::phone::ROUTES[s.phone_in].to_lowercase(),
         Tab::Wifi => app.settings_ui.as_ref().and_then(|u| u.wifi.iter().find(|n| n.active)).map_or("—".into(), |n| n.ssid.clone()),
-        Tab::Controller => format!("{} · ±{:.0}%", if s.vinyl { "vinil" } else { "cdj" }, PITCH_RANGES[s.pitch_range] * 100.0),
+        Tab::Controller => format!("{} · ±{:.0}%{}", if s.vinyl { "vinil" } else { "cdj" }, PITCH_RANGES[s.pitch_range] * 100.0, if s.slip { " · slip" } else { "" }),
         Tab::Screen => PALETTES[s.palette].to_lowercase(),
         Tab::System => match app.fw.info.split(" · ").find_map(|p| p.strip_prefix("firmware de ")) {
             Some(date) => format!("firmware {date}"),
@@ -390,6 +397,8 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Item { label: "Jog ao ligar".into(), value: if s.vinyl { "VINIL (scratch)" } else { "CDJ (bend)" }.into(), action: Action::Vinyl });
             v.push(Row::Item { label: "Faixa de pitch".into(), value: format!("±{:.0}%", PITCH_RANGES[s.pitch_range] * 100.0), action: Action::PitchRange });
             v.push(Row::Item { label: "Keylock ao carregar".into(), value: if s.keylock { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Keylock });
+            v.push(Row::Item { label: "Slip".into(), value: if s.slip { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Slip });
+            v.push(Row::Info("Slip: scratch, backspin e loop por cima da música; ao soltar, ela volta onde estaria".into()));
             let left = crate::midi::log_left();
             let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
             v.push(Row::Item { label: "Registrar os botões (diagnóstico, 5 min)".into(), value, action: Action::MidiLog });
@@ -544,6 +553,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::FaderCurve => a.settings.fader_curve = next(a.settings.fader_curve, FADER_CURVES.len()),
         Action::HpSplit => a.settings.hp_split = !a.settings.hp_split,
         Action::Keylock => a.settings.keylock = !a.settings.keylock,
+        Action::Slip => a.settings.slip = !a.settings.slip,
         Action::Palette => a.settings.palette = next(a.settings.palette, PALETTES.len()),
         Action::Scale => a.settings.scale = next(a.settings.scale, SCALES.len()),
         Action::AmbientVol => a.settings.ambient_vol = next(a.settings.ambient_vol, AMBIENT_VOLS.len()),
@@ -749,6 +759,7 @@ mod tests {
             fader_curve: 2,
             xf_side: [1, 2, 0, 1],
             hp_split: true,
+            slip: true,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

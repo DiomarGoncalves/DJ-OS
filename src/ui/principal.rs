@@ -276,6 +276,11 @@ impl DjOsApp {
         if s.keylock {
             right = tag(p, pos2(right, r.top() + 16.0), "KEYLOCK", K_PANEL2, K_TEXT).left() - 6.0;
         }
+        if s.slip {
+            // Aceso enquanto a música segue "por baixo" (scratch ou loop com slip).
+            let (bg, fg) = if s.slip_pos.is_some() { (K_ORANGE, K_BG) } else { (K_PANEL2, K_TEXT) };
+            right = tag(p, pos2(right, r.top() + 16.0), "SLIP", bg, fg).left() - 6.0;
+        }
         let title_clip = p.with_clip_rect(Rect::from_min_max(pos2(x0, r.top()), pos2(right - 4.0, r.top() + 32.0)));
         match (&t, s.live) {
             (_, true) => {
@@ -461,6 +466,14 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
         if b >= 0.0 {
             let txt = format!("{}.{}", (b / 4.0).floor() as i64 + 1, (b.rem_euclid(4.0)).floor() as i64 + 1);
             tb(p, pos2(center_x - 6.0, wr.top() + 2.0), Align2::RIGHT_TOP, txt, 13.0, K_ORANGE);
+        }
+    }
+
+    // Slip: onde a música estaria (linha tracejada; ao soltar, o som volta para ela).
+    if let Some(sp) = s.slip_pos {
+        let sx = x_of(sp / t.sr);
+        if wr.x_range().contains(sx) {
+            p.add(Shape::dashed_line(&[pos2(sx, wr.top()), pos2(sx, wr.bottom())], Stroke::new(2.0_f32, K_ORANGE), 5.0, 4.0));
         }
     }
 

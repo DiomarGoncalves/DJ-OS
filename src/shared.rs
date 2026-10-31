@@ -45,6 +45,7 @@ pub enum Cmd {
     PitchReset(usize),
     Sync(usize),
     Vinyl { deck: usize, on: bool },
+    Slip { deck: usize, on: bool },
     Keylock { deck: usize, on: bool },
     JogTouch { deck: usize, down: bool },
     JogScratch { deck: usize, ticks: f64 },
@@ -156,6 +157,9 @@ pub struct DeckSnap {
     pub sync_ok: bool,
     pub vinyl: bool,
     pub keylock: bool,
+    pub slip: bool,
+    /// Onde a música estaria (slip ativo durante um scratch ou loop).
+    pub slip_pos: Option<f64>,
     pub pfl: bool,
     pub fader: f32,
     pub peak: f32,

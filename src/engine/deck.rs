@@ -54,6 +54,10 @@ pub struct Deck {
     pub vinyl: bool,
     /// Keylock: o pitch muda o andamento sem mudar o tom.
     pub keylock: bool,
+    /// Slip: scratch, loop e backspin "por cima" da música; ao soltar, volta onde ela estaria.
+    pub slip: bool,
+    /// Onde a música estaria se tivesse seguido tocando (só durante um scratch/loop com slip).
+    slip_pos: Option<f64>,
     kl: super::keylock::Keylock,
     kl_on: bool,
     touched: bool,
@@ -153,6 +157,8 @@ impl Deck {
             trans_gate: 1.0,
             vinyl: true,
             keylock: false,
+            slip: false,
+            slip_pos: None,
             kl: super::keylock::Keylock::new(),
             kl_on: false,
             touched: false,
@@ -201,6 +207,7 @@ impl Deck {
         self.trans = None;
         self.key_semis = 0.0;
         self.scratching = false;
+        self.slip_pos = None;
         self.kl.reset();
         let old = self.track.replace(t);
         self.update_auto_gain();
@@ -288,6 +295,22 @@ impl Deck {
                 t.pos_of_beat((b / unit).floor() * unit)
             }
             _ => self.pos,
+        }
+    }
+
+    // ----- slip -----
+
+    /// Começo de um scratch ou loop: com o slip ligado, a música segue "por baixo" daqui.
+    fn slip_start(&mut self) {
+        if self.slip && self.playing && self.slip_pos.is_none() && self.track.is_some() {
+            self.slip_pos = Some(self.pos);
+        }
+    }
+
+    pub fn set_slip(&mut self, on: bool) {
+        self.slip = on;
+        if !on {
+            self.slip_pos = None;
         }
     }
 
@@ -394,6 +417,7 @@ impl Deck {
         self.touched = down;
         self.spin_idle = 0.0;
         if down && self.vinyl && self.track.is_some() {
+            self.slip_start();
             if !self.scratching {
                 self.scr_rate = self.nominal();
             }
@@ -429,6 +453,7 @@ impl Deck {
 
     pub fn jog_search(&mut self, ticks: f64) {
         if self.track.is_some() {
+            self.slip_pos = None;
             self.pos = (self.pos + ticks * self.sr() * 0.03).max(0.0);
         }
     }
@@ -442,6 +467,8 @@ impl Deck {
         if down {
             match self.hotcues[i] {
                 Some(p) => {
+                    // Pulo de propósito: o slip não puxa de volta.
+                    self.slip_pos = None;
                     self.pos = p;
                     if !self.playing {
                         self.playing = true;
@@ -465,6 +492,9 @@ impl Deck {
             (true, Some(a)) => a,
             _ => self.quantize_floor(beats.min(1.0)),
         };
+        if !self.loop_on {
+            self.slip_start();
+        }
         self.loop_beats = beats;
         self.loop_in = Some(start);
         self.loop_out = Some(start + beats * bl);
@@ -507,6 +537,9 @@ impl Deck {
     pub fn loop_out_point(&mut self) {
         if let Some(a) = self.loop_in {
             if self.pos > a {
+                if !self.loop_on {
+                    self.slip_start();
+                }
                 self.loop_out = Some(self.pos);
                 self.loop_beats = (self.pos - a) / self.beat_len();
                 self.loop_on = true;
@@ -518,6 +551,7 @@ impl Deck {
         if self.loop_on {
             self.loop_on = false;
         } else if let (Some(a), Some(_)) = (self.loop_in, self.loop_out) {
+            self.slip_start();
             self.loop_on = true;
             self.pos = a;
         }
@@ -527,6 +561,9 @@ impl Deck {
         if self.track.is_some() {
             let d = beats * self.beat_len();
             self.pos = (self.pos + d).max(0.0);
+            if let Some(sp) = &mut self.slip_pos {
+                *sp = (*sp + d).max(0.0);
+            }
             if self.loop_on {
                 if let (Some(a), Some(b)) = (self.loop_in, self.loop_out) {
                     self.loop_in = Some(a + d);
@@ -625,6 +662,21 @@ impl Deck {
         let ratio = t.sr / self.fs;
         let block_secs = n as f64 / self.fs;
 
+        // Slip: soltou o prato e ele parou (ou saiu do loop) → volta direto onde a música estaria,
+        // sem a retomada de velocidade do scratch normal.
+        if self.slip_pos.is_some() && self.scratching && !self.touched && self.spin_idle >= SPIN_STOP_SECS {
+            self.scratching = false;
+        }
+        if let Some(sp) = self.slip_pos {
+            if !self.playing {
+                self.slip_pos = None;
+            } else if !self.scratching && !self.loop_on {
+                self.slip_pos = None;
+                self.pos = sp.min(t.frames as f64);
+                self.last_gain = 0.0; // entra num fade curto, sem estalo
+            }
+        }
+
         // Velocidade do bloco.
         let mut speed = if self.scratching {
             let (target, k) = if self.touched {
@@ -665,6 +717,7 @@ impl Deck {
             speed += self.bend * self.rate;
         }
         let step = speed * ratio;
+        let slip_step = self.nominal() * ratio;
         let step0 = if self.scratching { self.last_step } else { step };
         self.last_step = step;
         let gain1 = (speed.abs() / QUIET_SPEED).min(1.0) as f32;
@@ -717,6 +770,9 @@ impl Deck {
             self.pos += step;
             if self.pos < 0.0 {
                 self.pos = 0.0;
+            }
+            if let Some(sp) = &mut self.slip_pos {
+                *sp += slip_step;
             }
             if let Some(roll) = &mut self.roll {
                 roll.virt += step;
@@ -834,6 +890,8 @@ impl Deck {
             sync_ok: false,
             vinyl: self.vinyl,
             keylock: self.keylock,
+            slip: self.slip,
+            slip_pos: self.slip_pos,
             pfl: self.pfl,
             fader: self.fader_v,
             peak: self.peak,

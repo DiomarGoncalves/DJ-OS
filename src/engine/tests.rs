@@ -826,3 +826,76 @@ fn gravacao_recebe_o_master() {
     r.run(4096);
     assert!(rx.pop().is_err(), "parou de gravar");
 }
+
+#[test]
+fn slip_no_scratch_volta_onde_a_musica_estaria() {
+    let mut d = deck_with(128.0);
+    d.set_slip(true);
+    d.play_toggle();
+    render(&mut d, 48000);
+    let t0 = d.pos;
+    // Segura o prato, faz um scratch para trás e solta parado: meio segundo depois do toque.
+    d.jog_touch(true);
+    for _ in 0..10 {
+        d.jog_scratch(-8.0);
+        render(&mut d, 960);
+    }
+    render(&mut d, 4800);
+    assert!(d.snapshot().slip_pos.is_some(), "slip ativo durante o scratch");
+    d.jog_touch(false);
+    render(&mut d, 4800);
+    let elapsed = (9600 + 4800 + 4800) as f64;
+    assert!(d.snapshot().slip_pos.is_none(), "slip acaba quando o prato para");
+    assert!((d.pos - (t0 + elapsed)).abs() < 600.0, "voltou para {} e não para {}", d.pos, t0 + elapsed);
+    assert!(d.playing);
+}
+
+#[test]
+fn slip_no_loop_sai_onde_a_musica_estaria() {
+    let mut d = deck_with(128.0);
+    d.set_slip(true);
+    d.play_toggle();
+    render(&mut d, 48000);
+    d.loop_auto(1.0);
+    let start = d.loop_in.unwrap();
+    let t0 = d.pos;
+    render(&mut d, 96000); // 2 s rodando num loop de 1 batida
+    assert!(d.pos < start + d.beat_len() + 1.0, "ficou no loop");
+    d.loop_toggle();
+    render(&mut d, 64);
+    assert!((d.pos - (t0 + 96000.0 + 64.0)).abs() < 2.0, "saiu do loop em {} e não em {}", d.pos, t0 + 96064.0);
+}
+
+#[test]
+fn sem_slip_tudo_continua_como_antes() {
+    let mut d = deck_with(128.0);
+    d.play_toggle();
+    render(&mut d, 48000);
+    d.loop_auto(1.0);
+    let (a, b) = (d.loop_in.unwrap(), d.loop_out.unwrap());
+    render(&mut d, 96000);
+    d.loop_toggle();
+    render(&mut d, 64);
+    assert!(d.pos >= a && d.pos <= b + 64.0, "sem slip, sai do loop de onde está ({})", d.pos);
+    assert!(d.snapshot().slip_pos.is_none());
+}
+
+#[test]
+fn slip_cancela_no_hotcue_e_no_pause() {
+    let mut d = deck_with(128.0);
+    d.set_slip(true);
+    d.hotcues[0] = Some(1000.0);
+    d.play_toggle();
+    render(&mut d, 48000);
+    d.loop_auto(1.0);
+    render(&mut d, 4800);
+    d.hotcue(0, true);
+    d.hotcue(0, false);
+    assert!(d.snapshot().slip_pos.is_none(), "hotcue é pulo de propósito");
+    d.loop_toggle();
+    d.loop_toggle();
+    assert!(d.snapshot().slip_pos.is_some());
+    d.play_toggle();
+    render(&mut d, 64);
+    assert!(d.snapshot().slip_pos.is_none(), "pausar acaba o slip");
+}

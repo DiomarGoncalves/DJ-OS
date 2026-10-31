@@ -222,6 +222,7 @@ impl Engine {
             Cmd::PitchReset(d) if ok(d) => self.decks[d].pitch_reset(),
             Cmd::Sync(d) if ok(d) => self.sync(d),
             Cmd::Vinyl { deck, on } if ok(deck) => self.decks[deck].vinyl = on,
+            Cmd::Slip { deck, on } if ok(deck) => self.decks[deck].set_slip(on),
             Cmd::Keylock { deck, on } if ok(deck) => self.decks[deck].keylock = on,
             Cmd::JogTouch { deck, down } if ok(deck) => self.decks[deck].jog_touch(down),
             Cmd::JogScratch { deck, ticks } if ok(deck) => self.decks[deck].jog_scratch(ticks),
