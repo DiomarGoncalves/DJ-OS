@@ -372,15 +372,25 @@ impl Library {
         if self.tracks_for.as_ref() == Some(&key) {
             return;
         }
-        self.tracks = match n.kind {
+        self.tracks = self.node_tracks(n);
+        self.track_sel = 0;
+        self.tracks_for = Some(key);
+    }
+
+    /// Músicas de um item da árvore (pasta, pesquisa, histórico ou item do rekordbox).
+    pub fn node_tracks(&self, n: &Node) -> Vec<TrackEntry> {
+        match n.kind {
             NodeKind::Search => self.results.as_ref().map(|(_, r)| r.clone()).unwrap_or_default(),
             // A mais recente em cima.
             NodeKind::History => self.history.iter().rev().cloned().collect(),
             NodeKind::RbRoot | NodeKind::RbFolder(_) | NodeKind::RbPlaylist(_) => rb_tracks(&n.path, n.kind),
             _ => list_tracks(&n.path),
-        };
-        self.track_sel = 0;
-        self.tracks_for = Some(key);
+        }
+    }
+
+    /// Unidades ligadas (pendrives, SSDs, músicas internas), como itens da árvore.
+    pub fn source_nodes() -> Vec<Node> {
+        sources().into_iter().map(|(n, p)| Self::node(n, p, 0, NodeKind::Source)).collect()
     }
 
     /// Depois de uma importação: relê as pastas (mantendo a seleção) e reindexa.
@@ -448,6 +458,35 @@ impl Library {
         self.focus = Focus::Prepare;
     }
 
+    /// O que tem dentro de uma pasta da árvore: subpastas (e, num pendrive do rekordbox, o item
+    /// das playlists dele) ou as pastas e playlists do rekordbox.
+    pub fn children(n: &Node) -> Vec<Node> {
+    match n.kind {
+            NodeKind::RbRoot => crate::rekordbox::library(&n.path).map_or(Vec::new(), |l| Self::rb_nodes(&n.path, &l.playlists, n.depth + 1)),
+            NodeKind::RbFolder(id) => match crate::rekordbox::library(&n.path).as_deref().and_then(|l| l.node(id)) {
+                Some(crate::rekordbox::Node::Folder { children, .. }) => Self::rb_nodes(&n.path, children, n.depth + 1),
+                _ => Vec::new(),
+            },
+            _ => {
+                // Pendrive do rekordbox: as playlists dele em primeiro.
+                let rb = crate::rekordbox::library(&n.path).map(|l| Node {
+                    name: format!("📀 rekordbox ({} músicas)", l.tracks.len()),
+                    path: n.path.clone(),
+                    depth: n.depth + 1,
+                    kind: NodeKind::RbRoot,
+                    expanded: false,
+                    has_children: !l.playlists.is_empty(),
+                });
+                rb.into_iter()
+                    .chain(list_dirs(&n.path).into_iter().map(|d| {
+                        let name = d.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        Self::node(name, d, n.depth + 1, NodeKind::Dir)
+                    }))
+                    .collect()
+            }
+        }
+    }
+
     /// LOAD numa pasta: abre/fecha as subpastas na árvore; sem subpastas, entra nas músicas.
     pub fn open_selected(&mut self) {
         let i = self.folder_sel;
@@ -461,30 +500,7 @@ impl Library {
             self.folders.drain(i + 1..end);
             self.folders[i].expanded = false;
         } else {
-            let children: Vec<Node> = match n.kind {
-                NodeKind::RbRoot => crate::rekordbox::library(&n.path).map_or(Vec::new(), |l| Self::rb_nodes(&n.path, &l.playlists, n.depth + 1)),
-                NodeKind::RbFolder(id) => match crate::rekordbox::library(&n.path).as_deref().and_then(|l| l.node(id)) {
-                    Some(crate::rekordbox::Node::Folder { children, .. }) => Self::rb_nodes(&n.path, children, n.depth + 1),
-                    _ => Vec::new(),
-                },
-                _ => {
-                    // Pendrive do rekordbox: as playlists dele em primeiro.
-                    let rb = crate::rekordbox::library(&n.path).map(|l| Node {
-                        name: format!("📀 rekordbox ({} músicas)", l.tracks.len()),
-                        path: n.path.clone(),
-                        depth: n.depth + 1,
-                        kind: NodeKind::RbRoot,
-                        expanded: false,
-                        has_children: !l.playlists.is_empty(),
-                    });
-                    rb.into_iter()
-                        .chain(list_dirs(&n.path).into_iter().map(|d| {
-                            let name = d.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                            Self::node(name, d, n.depth + 1, NodeKind::Dir)
-                        }))
-                        .collect()
-                }
-            };
+            let children = Self::children(&n);
             self.folders.splice(i + 1..i + 1, children);
             self.folders[i].expanded = true;
         }
