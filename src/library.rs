@@ -290,6 +290,8 @@ pub struct Library {
     /// Músicas tocadas nesta noite (em ordem) e o conjunto para marcar com ✓ nas listas.
     pub history: Vec<TrackEntry>,
     pub played: std::collections::HashSet<PathBuf>,
+    /// Sobe cada vez que as unidades são relidas (pendrive entrou/saiu, cópia terminou, apagou).
+    pub generation: u64,
 }
 
 impl Library {
@@ -312,6 +314,7 @@ impl Library {
             sources_sig: Vec::new(),
             history: Vec::new(),
             played: Default::default(),
+            generation: 0,
         };
         lib.reload_sources();
         lib
@@ -346,6 +349,7 @@ impl Library {
     /// Recria a árvore com as unidades atuais e reindexa as músicas.
     fn reload_sources(&mut self) {
         let src = sources();
+        self.generation += 1;
         self.sources_sig = src.iter().map(|(_, p)| p.clone()).collect();
         let virtuals: Vec<Node> = self.folders.iter().filter(|n| n.kind.is_virtual()).cloned().collect();
         self.folders = virtuals.into_iter().chain(src.into_iter().map(|(n, p)| Self::node(n, p, 0, NodeKind::Source))).collect();
@@ -391,6 +395,11 @@ impl Library {
     /// Unidades ligadas (pendrives, SSDs, músicas internas), como itens da árvore.
     pub fn source_nodes() -> Vec<Node> {
         sources().into_iter().map(|(n, p)| Self::node(n, p, 0, NodeKind::Source)).collect()
+    }
+
+    /// Unidades ligadas agora.
+    pub fn sources_sig(&self) -> &[PathBuf] {
+        &self.sources_sig
     }
 
     /// Depois de uma importação: relê as pastas (mantendo a seleção) e reindexa.
@@ -461,7 +470,7 @@ impl Library {
     /// O que tem dentro de uma pasta da árvore: subpastas (e, num pendrive do rekordbox, o item
     /// das playlists dele) ou as pastas e playlists do rekordbox.
     pub fn children(n: &Node) -> Vec<Node> {
-    match n.kind {
+        match n.kind {
             NodeKind::RbRoot => crate::rekordbox::library(&n.path).map_or(Vec::new(), |l| Self::rb_nodes(&n.path, &l.playlists, n.depth + 1)),
             NodeKind::RbFolder(id) => match crate::rekordbox::library(&n.path).as_deref().and_then(|l| l.node(id)) {
                 Some(crate::rekordbox::Node::Folder { children, .. }) => Self::rb_nodes(&n.path, children, n.depth + 1),
@@ -563,6 +572,11 @@ impl Library {
 
     pub fn add_selected_to_prepare(&mut self) -> Option<String> {
         let t = self.tracks.get(self.track_sel)?.clone();
+        self.add_to_prepare(t)
+    }
+
+    /// Coloca a música na fila ("Preparar"), se ainda não estiver; devolve o nome.
+    pub fn add_to_prepare(&mut self, t: TrackEntry) -> Option<String> {
         if self.prepare.iter().any(|p| p.path == t.path) {
             return None;
         }

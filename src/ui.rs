@@ -269,8 +269,10 @@ impl DjOsApp {
             if i.key_pressed(Key::Delete) {
                 a.delete_selected();
             }
+            let nav_on = crate::navegador::is_on(&a);
             if i.modifiers.ctrl && i.key_pressed(Key::S) {
-                if let Some(path) = a.lib.selected_path() {
+                let path = if nav_on { a.nav.selected_path() } else { a.lib.selected_path() };
+                if let Some(path) = path {
                     drop(a);
                     let msg = crate::import::start(&self.app, path);
                     self.app.lock().toast(msg);
@@ -281,10 +283,48 @@ impl DjOsApp {
                 search::open(&mut a);
                 return;
             }
+            // Browser novo aberto: setas andam nele, Enter abre, Backspace volta, Tab troca entre
+            // as categorias e a lista, Esc ou B fecha, 1-4 carregam.
+            if nav_on {
+                use crate::navegador as nav;
+                for (k, d) in [(Key::ArrowUp, -1), (Key::ArrowDown, 1), (Key::PageUp, -12), (Key::PageDown, 12)] {
+                    if i.key_pressed(k) {
+                        nav::scroll(&mut a, d);
+                    }
+                }
+                for (k, d) in [(Key::ArrowLeft, -1), (Key::ArrowRight, 1)] {
+                    if i.key_pressed(k) {
+                        nav::side(&mut a, d);
+                    }
+                }
+                if i.key_pressed(Key::Enter) {
+                    nav::press(&mut a);
+                }
+                if i.key_pressed(Key::Backspace) {
+                    a.nav.back();
+                }
+                if i.key_pressed(Key::Tab) {
+                    a.nav.area = if a.nav.area == nav::Area::List { nav::Area::Cats } else { nav::Area::List };
+                }
+                if i.key_pressed(Key::Escape) || i.key_pressed(Key::B) {
+                    a.big_browser = false;
+                }
+                for (k, d) in [(Key::Num1, 0), (Key::Num2, 1), (Key::Num3, 2), (Key::Num4, 3)] {
+                    if let (true, Some(t)) = (i.key_pressed(k), a.nav.selected_track()) {
+                        self.loader.load_deck(&mut a, d, t.path);
+                        a.big_browser = false;
+                    }
+                }
+                return;
+            }
             if i.key_pressed(Key::ArrowDown) || i.key_pressed(Key::ArrowUp) {
-                // Mexer na lista abre o browser em tela cheia (como girar o BROWSE).
+                // Mexer na lista abre o browser em tela cheia (como girar o BROWSE); o novo abre
+                // onde parou, sem andar.
+                let novo = crate::navegador::enabled(&a);
+                if !(novo && !a.big_browser) {
+                    a.lib.scroll(if i.key_pressed(Key::ArrowDown) { 1 } else { -1 });
+                }
                 a.big_browser = true;
-                a.lib.scroll(if i.key_pressed(Key::ArrowDown) { 1 } else { -1 });
             }
             if i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals) {
                 a.wave_zoom = a.wave_zoom.saturating_sub(1);
@@ -362,7 +402,8 @@ impl DjOsApp {
         let dx = ctx.input(|i| {
             (if i.key_down(Key::ArrowRight) { 1.0 } else { 0.0 }) - (if i.key_down(Key::ArrowLeft) { 1.0 } else { 0.0 })
         });
-        if dx != 0.0 {
+        // (No browser novo as setas andam na lista.)
+        if dx != 0.0 && !crate::navegador::is_on(&self.app.lock()) {
             self.xf = (self.xf + dx * 0.02).clamp(0.0, 1.0);
             self.cmd.send(Cmd::Crossfader(self.xf));
         }
@@ -408,6 +449,17 @@ impl DjOsApp {
             a.lib.reveal(std::path::Path::new(&dir));
             a.lib.focus = crate::library::Focus::Tracks;
             a.lib.track_sel = 3.min(a.lib.tracks.len().saturating_sub(1));
+            let st: &mut crate::app::AppState = &mut a;
+            st.nav.tick(&st.lib);
+            st.nav.reveal(&st.lib, std::path::Path::new(&dir));
+            let sel = st.nav.level().map_or(0, |l| l.sel + 3);
+            st.nav.select(sel);
+            // DJOS_DEMO_CATEGORIA=ARTISTA (etc.): abre essa categoria com a barra de cima em foco.
+            if let Some(c) = std::env::var("DJOS_DEMO_CATEGORIA").ok().and_then(|n| crate::navegador::Cat::ALL.into_iter().find(|c| c.name() == n)) {
+                st.nav.set_cat(&st.lib, c);
+                st.nav.area = crate::navegador::Area::Top;
+                st.nav.top = crate::navegador::TopButton::Preview;
+            }
         }
         // DJOS_DEMO_GRADE: abre o ajuste da grade do deck 1 (teste da tela).
         if self.frame == 100 && std::env::var_os("DJOS_DEMO_GRADE").is_some() {
@@ -1402,6 +1454,10 @@ impl eframe::App for DjOsApp {
                 }
                 a.commit_fx_picks(&self.cmd);
                 a.tick_browse_hold();
+                if crate::navegador::is_on(&a) {
+                    let st: &mut crate::app::AppState = &mut a;
+                    st.nav.tick(&st.lib);
+                }
                 if a.toast.as_ref().is_some_and(|(_, t)| t.elapsed() > Duration::from_secs(3)) {
                     a.toast = None;
                 }
@@ -1420,86 +1476,89 @@ impl eframe::App for DjOsApp {
                 )
             };
 
-            // Barra superior.
-            let top = Rect::from_min_size(full.min, vec2(full.width(), 34.0));
-            p.rect_filled(top, 0.0, PANEL);
-            text(&p, top.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, "DJ OS", 18.0, ACCENT);
-            mono(&p, top.center(), Align2::CENTER_CENTER, chrono::Local::now().format("%H:%M").to_string(), 18.0, TEXT);
-            // Botão das configurações.
-            let cfg = Rect::from_min_size(pos2(top.left() + 408.0, top.top() + 4.0), vec2(96.0, 26.0));
-            p.rect_filled(cfg, 5.0, PANEL2);
-            text(&p, cfg.center(), Align2::CENTER_CENTER, "CONFIG", 12.0, TEXT);
-            if ui.interact(cfg, ui.id().with("config"), egui::Sense::click()).clicked() {
-                crate::settings::toggle(&mut self.app.lock());
-            }
-            // Botão de gravar o set: vermelho com o tempo enquanto grava.
-            let recr = Rect::from_min_size(pos2(cfg.right() + 8.0, top.top() + 4.0), vec2(104.0, 26.0));
-            let rec_since = self.app.lock().rec.active.as_ref().map(|(_, t, _)| t.elapsed().as_secs());
-            match rec_since {
-                Some(s) => {
-                    p.rect_filled(recr, 5.0, RED);
-                    let blink = if (self.frame / 30) % 2 == 0 { "●" } else { " " };
-                    mono(&p, recr.center(), Align2::CENTER_CENTER, format!("{blink} {:02}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60), 12.0, TEXT);
+            // Barra superior (escondida no browser novo: ele usa a tela inteira).
+            let nav_on = big && crate::navegador::is_on(&self.app.lock());
+            let top = Rect::from_min_size(full.min, vec2(full.width(), if nav_on { 0.0 } else { 34.0 }));
+            if !nav_on {
+                p.rect_filled(top, 0.0, PANEL);
+                text(&p, top.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, "DJ OS", 18.0, ACCENT);
+                mono(&p, top.center(), Align2::CENTER_CENTER, chrono::Local::now().format("%H:%M").to_string(), 18.0, TEXT);
+                // Botão das configurações.
+                let cfg = Rect::from_min_size(pos2(top.left() + 408.0, top.top() + 4.0), vec2(96.0, 26.0));
+                p.rect_filled(cfg, 5.0, PANEL2);
+                text(&p, cfg.center(), Align2::CENTER_CENTER, "CONFIG", 12.0, TEXT);
+                if ui.interact(cfg, ui.id().with("config"), egui::Sense::click()).clicked() {
+                    crate::settings::toggle(&mut self.app.lock());
                 }
-                None => {
-                    p.rect_filled(recr, 5.0, PANEL2);
-                    p.circle_filled(recr.left_center() + vec2(18.0, 0.0), 5.0, RED);
-                    text(&p, recr.center() + vec2(8.0, 0.0), Align2::CENTER_CENTER, "GRAVAR", 12.0, TEXT);
+                // Botão de gravar o set: vermelho com o tempo enquanto grava.
+                let recr = Rect::from_min_size(pos2(cfg.right() + 8.0, top.top() + 4.0), vec2(104.0, 26.0));
+                let rec_since = self.app.lock().rec.active.as_ref().map(|(_, t, _)| t.elapsed().as_secs());
+                match rec_since {
+                    Some(s) => {
+                        p.rect_filled(recr, 5.0, RED);
+                        let blink = if (self.frame / 30) % 2 == 0 { "●" } else { " " };
+                        mono(&p, recr.center(), Align2::CENTER_CENTER, format!("{blink} {:02}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60), 12.0, TEXT);
+                    }
+                    None => {
+                        p.rect_filled(recr, 5.0, PANEL2);
+                        p.circle_filled(recr.left_center() + vec2(18.0, 0.0), 5.0, RED);
+                        text(&p, recr.center() + vec2(8.0, 0.0), Align2::CENTER_CENTER, "GRAVAR", 12.0, TEXT);
+                    }
                 }
-            }
-            if ui.interact(recr, ui.id().with("gravar"), egui::Sense::click()).clicked() {
-                crate::record::toggle(&self.app, &self.cmd, snap.sample_rate);
-            }
-            // Botão do Bluetooth: tocar alterna desligado → master → retorno.
-            let btr = Rect::from_min_size(pos2(top.left() + 150.0, top.top() + 4.0), vec2(250.0, 26.0));
-            let on = bt_mode != crate::bluetooth::BtMode::Off;
-            p.rect_filled(btr, 5.0, if on { Color32::from_rgb(40, 90, 200) } else { PANEL2 });
-            let bp = p.with_clip_rect(btr);
-            text(&bp, btr.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, &bt_status, 12.0, if on { TEXT } else { DIM });
-            if ui.interact(btr, ui.id().with("bt"), egui::Sense::click()).clicked() {
-                let mut a = self.app.lock();
-                a.bt_mode = a.bt_mode.next();
-                a.settings.bt_mode = a.bt_mode;
-                a.settings.save();
-                a.bt_status = format!("BT {} · procurando…", a.bt_mode.name());
-            }
-            // Áudio parado: o motor ainda não rodou nenhum bloco depois de 3 s.
-            let audio_dead = snap.sample_rate == 0.0 && self.frame > 180;
-            // Na barra só o resumo; o texto completo fica em CONFIG → ÁUDIO.
-            let audio = if audio.starts_with(crate::pw_out::NO_OUTPUT) || audio.starts_with("SEM ÁUDIO") || audio.contains("FONE SEM SOM") {
-                audio
-            } else if audio.contains("DDJ-REV1") {
-                "Áudio: DDJ-REV1".to_string()
-            } else if audio.is_empty() || audio.contains("abrindo") {
-                audio
-            } else {
-                "Áudio: placa do computador".to_string()
-            };
-            let audio = if audio_dead { format!("ÁUDIO PARADO · {audio}") } else { audio };
-            let midi_ok = midi.contains("conectada") && !midi.contains("des");
-            let mr = text(&p, top.right_center() - vec2(150.0, 0.0), Align2::RIGHT_CENTER, &midi, 13.0, if midi_ok { ACCENT } else { ORANGE });
-            // Estado do áudio entre o relógio e a controladora, cortado se não couber.
-            let no_out = audio.starts_with(crate::pw_out::NO_OUTPUT);
-            let ar = Rect::from_min_max(pos2(top.center().x + 44.0, top.top()), pos2(mr.left() - 16.0, top.bottom()));
-            let col = if audio_dead { RED } else if no_out { ORANGE } else { DIM };
-            text(&p.with_clip_rect(ar), pos2(ar.right(), top.center().y), Align2::RIGHT_CENTER, &audio, 12.0, col);
-            // Limitador trabalhando (baixou mais de 0,3 dB): "LIM" por 1 s ao lado do medidor.
-            if snap.master_limit > 0.0 && snap.master_limit < 0.966 {
-                self.lim_until = std::time::Instant::now() + Duration::from_secs(1);
-            }
+                if ui.interact(recr, ui.id().with("gravar"), egui::Sense::click()).clicked() {
+                    crate::record::toggle(&self.app, &self.cmd, snap.sample_rate);
+                }
+                // Botão do Bluetooth: tocar alterna desligado → master → retorno.
+                let btr = Rect::from_min_size(pos2(top.left() + 150.0, top.top() + 4.0), vec2(250.0, 26.0));
+                let on = bt_mode != crate::bluetooth::BtMode::Off;
+                p.rect_filled(btr, 5.0, if on { Color32::from_rgb(40, 90, 200) } else { PANEL2 });
+                let bp = p.with_clip_rect(btr);
+                text(&bp, btr.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, &bt_status, 12.0, if on { TEXT } else { DIM });
+                if ui.interact(btr, ui.id().with("bt"), egui::Sense::click()).clicked() {
+                    let mut a = self.app.lock();
+                    a.bt_mode = a.bt_mode.next();
+                    a.settings.bt_mode = a.bt_mode;
+                    a.settings.save();
+                    a.bt_status = format!("BT {} · procurando…", a.bt_mode.name());
+                }
+                // Áudio parado: o motor ainda não rodou nenhum bloco depois de 3 s.
+                let audio_dead = snap.sample_rate == 0.0 && self.frame > 180;
+                // Na barra só o resumo; o texto completo fica em CONFIG → ÁUDIO.
+                let audio = if audio.starts_with(crate::pw_out::NO_OUTPUT) || audio.starts_with("SEM ÁUDIO") || audio.contains("FONE SEM SOM") {
+                    audio
+                } else if audio.contains("DDJ-REV1") {
+                    "Áudio: DDJ-REV1".to_string()
+                } else if audio.is_empty() || audio.contains("abrindo") {
+                    audio
+                } else {
+                    "Áudio: placa do computador".to_string()
+                };
+                let audio = if audio_dead { format!("ÁUDIO PARADO · {audio}") } else { audio };
+                let midi_ok = midi.contains("conectada") && !midi.contains("des");
+                let mr = text(&p, top.right_center() - vec2(150.0, 0.0), Align2::RIGHT_CENTER, &midi, 13.0, if midi_ok { ACCENT } else { ORANGE });
+                // Estado do áudio entre o relógio e a controladora, cortado se não couber.
+                let no_out = audio.starts_with(crate::pw_out::NO_OUTPUT);
+                let ar = Rect::from_min_max(pos2(top.center().x + 44.0, top.top()), pos2(mr.left() - 16.0, top.bottom()));
+                let col = if audio_dead { RED } else if no_out { ORANGE } else { DIM };
+                text(&p.with_clip_rect(ar), pos2(ar.right(), top.center().y), Align2::RIGHT_CENTER, &audio, 12.0, col);
+                // Limitador trabalhando (baixou mais de 0,3 dB): "LIM" por 1 s ao lado do medidor.
+                if snap.master_limit > 0.0 && snap.master_limit < 0.966 {
+                    self.lim_until = std::time::Instant::now() + Duration::from_secs(1);
+                }
 
-            for (i, v) in snap.master_peak.iter().enumerate() {
-                let m = Rect::from_min_size(pos2(top.right() - 140.0, top.top() + 9.0 + i as f32 * 9.0), vec2(126.0, 6.0));
-                p.rect_filled(m, 2.0, BG);
-                let lvl = v.clamp(0.0, 1.0);
-                let c = if lvl > 0.95 { RED } else if lvl > 0.7 { ORANGE } else { ACCENT };
-                p.rect_filled(Rect::from_min_size(m.min, vec2(m.width() * lvl, 6.0)), 2.0, c);
-            }
-            // "LIM" por cima dos medidores (sem disputar espaço com o texto da controladora).
-            if std::time::Instant::now() < self.lim_until {
-                let lr = Rect::from_center_size(pos2(top.right() - 77.0, top.center().y), vec2(40.0, 18.0));
-                p.rect_filled(lr, 3.0, ORANGE);
-                text(&p, lr.center(), Align2::CENTER_CENTER, "LIM", 12.0, BG);
+                for (i, v) in snap.master_peak.iter().enumerate() {
+                    let m = Rect::from_min_size(pos2(top.right() - 140.0, top.top() + 9.0 + i as f32 * 9.0), vec2(126.0, 6.0));
+                    p.rect_filled(m, 2.0, BG);
+                    let lvl = v.clamp(0.0, 1.0);
+                    let c = if lvl > 0.95 { RED } else if lvl > 0.7 { ORANGE } else { ACCENT };
+                    p.rect_filled(Rect::from_min_size(m.min, vec2(m.width() * lvl, 6.0)), 2.0, c);
+                }
+                // "LIM" por cima dos medidores (sem disputar espaço com o texto da controladora).
+                if std::time::Instant::now() < self.lim_until {
+                    let lr = Rect::from_center_size(pos2(top.right() - 77.0, top.center().y), vec2(40.0, 18.0));
+                    p.rect_filled(lr, 3.0, ORANGE);
+                    text(&p, lr.center(), Align2::CENTER_CENTER, "LIM", 12.0, BG);
+                }
             }
 
             let pad = 8.0;
@@ -1538,7 +1597,7 @@ impl eframe::App for DjOsApp {
                 self.draw_principal(ui, &p, body, &snap, side, &tracks, &loading, fx_pick, zoom);
             } else {
                 // Browser novo (estilo cabine): em teste, até ser aprovado.
-                if std::env::var_os("DJOS_NAVEGADOR").is_some() {
+                if nav_on {
                     self.draw_navegador(ui, &p, body, &snap, &tracks);
                 } else {
                     self.draw_library(ui, &p, body);
@@ -1554,7 +1613,11 @@ impl eframe::App for DjOsApp {
                 &p,
                 foot.left_center() + vec2(12.0, 0.0),
                 Align2::LEFT_CENTER,
-                "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · F10 configurações · +/- zoom · setas esq/dir crossfader",
+                if nav_on {
+                    "Browser: setas andam · Enter abre · Backspace volta · Tab categorias/lista · 1-4 ou clicar no deck carrega · dois cliques carrega · Ctrl+F pesquisa · Esc ou B fecha"
+                } else {
+                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · F10 configurações · +/- zoom · setas esq/dir crossfader"
+                },
                 11.0,
                 DIM,
             );

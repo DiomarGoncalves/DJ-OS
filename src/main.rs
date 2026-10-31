@@ -16,6 +16,7 @@ mod history;
 mod import;
 mod library;
 mod midi;
+mod navegador;
 mod phone;
 mod record;
 mod resume;

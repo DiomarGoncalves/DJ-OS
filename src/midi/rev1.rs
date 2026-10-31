@@ -319,11 +319,26 @@ impl Rev1 {
             // copia a pasta para as músicas internas.
             0x58 | 0x59 | 0x60 | 0x61 if down => {
                 let mut a = self.app.lock();
-                if a.lib.focus == crate::library::Focus::Folders {
+                if a.lib.focus == crate::library::Focus::Folders && !crate::navegador::is_on(&a) {
                     if let Some(p) = a.lib.selected_path() {
                         drop(a);
                         let msg = crate::import::start(&self.app, p);
                         self.app.lock().toast(msg);
+                    }
+                } else if crate::navegador::is_on(&a) {
+                    // Browser novo: música vai para a FILA; pasta do pendrive é copiada.
+                    match (a.nav.selected_track(), a.nav.selected_path()) {
+                        (Some(t), _) => {
+                            if let Some(name) = a.lib.add_to_prepare(t) {
+                                a.toast(format!("Na fila: {name}"));
+                            }
+                        }
+                        (None, Some(p)) => {
+                            drop(a);
+                            let msg = crate::import::start(&self.app, p);
+                            self.app.lock().toast(msg);
+                        }
+                        _ => {}
                     }
                 } else if let Some(name) = a.lib.add_selected_to_prepare() {
                     a.toast(format!("Em Preparar: {name}"));
@@ -354,6 +369,14 @@ impl Rev1 {
             }
             return;
         }
+        if crate::navegador::is_on(&a) {
+            // Browser novo: na música carrega; no resto abre (pasta, voltar...).
+            if let Some(t) = crate::navegador::load(&mut a) {
+                self.loader.load_deck(&mut a, d, t.path);
+                a.big_browser = false;
+            }
+            return;
+        }
         if a.lib.focus == crate::library::Focus::Folders {
             a.lib.open_selected();
             return;
@@ -373,8 +396,16 @@ impl Rev1 {
                     crate::settings::scroll(&mut a, enc_delta(v));
                     return;
                 }
+                let novo = crate::navegador::enabled(&a);
                 match a.search.as_mut() {
                     Some(ui) => ui.step(enc_delta(v)),
+                    None if novo => {
+                        // Browser novo: o primeiro giro só abre (onde parou); depois anda.
+                        if a.big_browser {
+                            crate::navegador::scroll(&mut a, enc_delta(v));
+                        }
+                        a.big_browser = true;
+                    }
                     None => {
                         // Girar o BROWSE na tela principal abre a lista em tela cheia.
                         a.big_browser = true;
@@ -481,6 +512,13 @@ impl Rev1 {
             if a.search.is_some() {
                 if down {
                     crate::search::pad(&mut a, idx);
+                }
+                return;
+            }
+            // Browser novo com a barra de cima em foco: os pads andam nela.
+            if crate::navegador::is_on(&a) && a.nav.area == crate::navegador::Area::Top {
+                if down {
+                    crate::navegador::pad(&mut a, idx);
                 }
                 return;
             }

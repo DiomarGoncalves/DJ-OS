@@ -21,6 +21,13 @@ para diferenciar firmwares de teste da mesma versão.
   nome, artista, BPM e tom vêm do rekordbox. Ao abrir uma música, a grade, o tom e os cues
   (memory cue, hot cues A-H e loop) são os do rekordbox, sem analisar de novo. O Preparar e o
   "Analisar todas" também usam. Só leitura: nada é gravado no pendrive.
+- **Browser novo** em tela cheia, estilo cabine (CONFIG → TELA → Browser em tela cheia: NOVO; em
+  teste): categorias à esquerda (ARTISTA, MÚSICAS, PLAYLIST, HISTÓRICO, PASTAS, FILA, GRAVAÇÕES;
+  ÁLBUM, TOM e COMBINAM em breve), pastas e músicas numa lista só com "← Voltar", dispositivo
+  escolhido na barra de cima (girar o BROWSE para cima até lá; os pads andam nela) e os 4 decks
+  embaixo. Funciona com a REV1, o teclado e o mouse (clique, dois cliques carrega, clicar no deck
+  carrega, rodinha). Abre onde parou e esconde a barra de cima do sistema. Colunas da waveform, BPM
+  e tom e o tamanho da letra nas configurações.
 
 ### Corrigido
 - Som baixo na REV1 mesmo com tudo no máximo: o sistema agora deixa a saída da REV1 em 100%

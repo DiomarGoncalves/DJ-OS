@@ -74,6 +74,8 @@ pub struct AppState {
     pub shift: bool,
     pub master_cue: bool,
     pub big_browser: bool,
+    /// Browser novo em tela cheia (src/navegador.rs).
+    pub nav: crate::navegador::Nav,
     /// Configurações salvas e a tela de configurações (aberta ou não).
     pub settings: crate::settings::Settings,
     pub settings_ui: Option<crate::settings::SettingsUi>,
@@ -123,6 +125,7 @@ impl AppState {
             shift: false,
             master_cue: false,
             big_browser: false,
+            nav: Default::default(),
             settings_ui: None,
             bt_mode: settings.bt_mode,
             bt_status: "BT desligado".into(),
@@ -174,6 +177,8 @@ impl AppState {
         }
         if self.search.is_some() {
             crate::search::press(self);
+        } else if crate::navegador::is_on(self) {
+            crate::navegador::press(self);
         } else {
             self.lib.toggle_focus();
         }
@@ -181,7 +186,8 @@ impl AppState {
 
     /// Apagar (das músicas internas) em dois toques: o primeiro avisa, o segundo apaga.
     pub fn delete_selected(&mut self) {
-        let Some(path) = self.lib.selected_path() else { return };
+        let path = if crate::navegador::is_on(self) { self.nav.selected_path() } else { self.lib.selected_path() };
+        let Some(path) = path else { return };
         let allowed = [crate::import::internal_dir(), crate::record::dir()].iter().any(|r| path.starts_with(r) && path != *r);
         if !allowed {
             self.toast("Só dá para apagar o que está nas músicas internas ou nas gravações");
