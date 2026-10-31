@@ -401,6 +401,14 @@ impl DjOsApp {
                 u.go_to("ENTER");
             }
         }
+        // DJOS_DEMO_BROWSER=<pasta>: abre o browser em tela cheia nessa pasta (teste da tela).
+        if let (Some(dir), 70) = (std::env::var_os("DJOS_DEMO_BROWSER"), self.frame) {
+            let mut a = self.app.lock();
+            a.big_browser = true;
+            a.lib.reveal(std::path::Path::new(&dir));
+            a.lib.focus = crate::library::Focus::Tracks;
+            a.lib.track_sel = 3.min(a.lib.tracks.len().saturating_sub(1));
+        }
         // DJOS_DEMO_GRADE: abre o ajuste da grade do deck 1 (teste da tela).
         if self.frame == 100 && std::env::var_os("DJOS_DEMO_GRADE").is_some() {
             self.app.lock().grid_edit = Some(crate::grid::GridEdit::new(0));
@@ -1529,7 +1537,12 @@ impl eframe::App for DjOsApp {
                 let _ = (&sampler_names, &scratch_names);
                 self.draw_principal(ui, &p, body, &snap, side, &tracks, &loading, fx_pick, zoom);
             } else {
-                self.draw_library(ui, &p, body);
+                // Browser novo (estilo cabine): em teste, até ser aprovado.
+                if std::env::var_os("DJOS_NAVEGADOR").is_some() {
+                    self.draw_navegador(ui, &p, body, &snap, &tracks);
+                } else {
+                    self.draw_library(ui, &p, body);
+                }
                 if self.app.lock().search.is_some() {
                     self.draw_search(ui, &p, body);
                 }

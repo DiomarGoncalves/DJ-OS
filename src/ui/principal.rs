@@ -25,6 +25,8 @@ use crate::track::{Track, BINS_PER_SEC};
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontFamily, FontId, Mesh, Painter, Rect, Shape, Stroke};
 use std::sync::Arc;
 
+mod navegador;
+
 // ---- cores (sóbrias: preto, cinzas, branco; cor só onde informa algo) ----
 pub(super) const K_BG: Color32 = Color32::from_rgb(0, 0, 0);
 pub(super) const K_PANEL: Color32 = Color32::from_rgb(14, 15, 17);
