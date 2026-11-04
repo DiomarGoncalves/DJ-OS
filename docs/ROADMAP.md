@@ -9,7 +9,12 @@
 2. **Preparar, etapa 2**: player com a waveform (play/pause, clicar para pular), hot cues A–H e
    memory cue marcados no PC e gravados no pendrive; no aparelho vale o que foi marcado por último
    (hoje a cópia do próprio aparelho ganha da do pendrive).
-3. Sistema de baixar músicas (o dele) dentro do Preparar: fica para depois.
+3. **Cores da waveform como as das XDJ** (ele mandou prints da XDJ-AZ): três camadas espelhadas em
+   volta do meio, azul forte por fora (graves), laranja/âmbar no meio (médios) e creme quase branco
+   no centro (agudos), em fundo preto; o que já tocou na visão geral fica mais apagado. Ajustar a
+   paleta AZUL/LARANJA (cores e o jeito de empilhar as bandas) na tela principal, nos decks do
+   browser e no Preparar.
+4. Sistema de baixar músicas (o dele) dentro do Preparar: fica para depois.
 
 ## Feito em 2026-11-03
 Pendrive do rekordbox (0.1.4), browser novo preto com a lógica do de árvore (0.1.4; a versão com
