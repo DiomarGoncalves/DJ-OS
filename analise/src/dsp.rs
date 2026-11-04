@@ -188,10 +188,11 @@ impl DelayLine {
     }
 }
 
-/// Saturação suave para o master não estourar de forma dura.
+/// Saturação suave para o master não estourar de forma dura (só por segurança: começa acima do
+/// teto do limitador, então com o limitador funcionando não mexe no som).
 #[inline]
 pub fn soft_clip(x: f32) -> f32 {
-    const K: f32 = 0.89;
+    const K: f32 = 0.98;
     let a = x.abs();
     if a <= K {
         x
@@ -200,11 +201,15 @@ pub fn soft_clip(x: f32) -> f32 {
     }
 }
 
-/// Limitador com olhar à frente: segura os picos abaixo de `-1 dBFS` baixando o volume só no
-/// instante do pico (sem distorcer a onda) e voltando devagar. Atrasa o som em 64 amostras (1,3 ms).
+/// Limitador com olhar à frente: segura os picos abaixo de `-0,2 dBFS` baixando o volume aos poucos
+/// antes do pico (sem distorcer a onda) e voltando devagar. Com o teto perto do máximo, uma música
+/// sozinha no volume normal passa intacta: ele só trabalha quando a soma realmente estouraria
+/// (dois decks, EQ ou MASTER no alto). Atrasa o som em 4 ms.
 pub struct Limiter {
     buf: [[f32; 2]; Limiter::LOOKAHEAD],
     need: [f32; Limiter::LOOKAHEAD],
+    /// Menor `need` da janela (refeito só quando o menor sai dela).
+    need_min: f32,
     idx: usize,
     gain: f32,
     release: f32,
@@ -214,17 +219,18 @@ pub struct Limiter {
 }
 
 impl Limiter {
-    pub const LOOKAHEAD: usize = 64;
-    pub const THRESHOLD: f32 = 0.89;
+    pub const LOOKAHEAD: usize = 192;
+    pub const THRESHOLD: f32 = 0.977;
 
     pub fn new(fs: f64) -> Self {
         Self {
             buf: [[0.0; 2]; Self::LOOKAHEAD],
             need: [1.0; Self::LOOKAHEAD],
+            need_min: 1.0,
             idx: 0,
             gain: 1.0,
-            // Volta ao normal em ~150 ms; desce em ~1/4 do olhar à frente.
-            release: 1.0 - (-1.0 / (0.15 * fs)).exp() as f32,
+            // Volta ao normal em ~300 ms; desce ao longo do olhar à frente.
+            release: 1.0 - (-1.0 / (0.3 * fs)).exp() as f32,
             attack: 1.0 - (-4.0 / Self::LOOKAHEAD as f32).exp(),
             min_gain: 1.0,
         }
@@ -233,12 +239,19 @@ impl Limiter {
     #[inline]
     pub fn process(&mut self, x: [f32; 2]) -> [f32; 2] {
         let peak = x[0].abs().max(x[1].abs());
-        self.need[self.idx] = if peak > Self::THRESHOLD { Self::THRESHOLD / peak } else { 1.0 };
+        let need = if peak > Self::THRESHOLD { Self::THRESHOLD / peak } else { 1.0 };
+        let old = self.need[self.idx];
+        self.need[self.idx] = need;
         let out = self.buf[self.idx];
         self.buf[self.idx] = x;
         self.idx = (self.idx + 1) % Self::LOOKAHEAD;
         // O ganho mira o menor necessário entre as amostras que ainda vão sair.
-        let target = self.need.iter().copied().fold(1.0f32, f32::min);
+        if need <= self.need_min {
+            self.need_min = need;
+        } else if old <= self.need_min {
+            self.need_min = self.need.iter().copied().fold(1.0f32, f32::min);
+        }
+        let target = self.need_min;
         let k = if target < self.gain { self.attack } else { self.release };
         self.gain += (target - self.gain) * k;
         // Garantia: a amostra que sai agora nunca passa do limite.

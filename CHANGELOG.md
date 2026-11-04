@@ -29,6 +29,11 @@ para diferenciar firmwares de teste da mesma versão.
   Preparar depois de a música tocar no aparelho passam a valer).
 
 ### Corrigido
+- **Som mais aberto no master e no fone**: o limitador de proteção tinha o teto em -1 dBFS e
+  apertava em quase toda batida forte, mesmo com uma música só e tudo no meio (medido: até
+  ~1,3 dB, 65% do tempo), achatando o som. Agora o teto é -0,2 dBFS e ele é mais suave (olha 4 ms
+  à frente e volta em ~300 ms): uma música sozinha passa praticamente intacta, e ele só trabalha
+  quando a soma realmente estouraria. O ganho automático sobe no máximo +3 dB (antes +6).
 - Waveform sem o agudo no modo leve (placa de vídeo antiga): cortando grave e médio no EQ sobrava
   uma linha limpa. Agora as três bandas aparecem sempre, e o agudo ficou maior.
 

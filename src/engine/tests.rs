@@ -769,26 +769,26 @@ fn limitador_segura_o_master_sem_distorcer() {
     r.send(Cmd::MasterLevel(1.0));
     r.run(24000);
     let p = r.run(48000);
-    assert!(p[0] <= Limiter::THRESHOLD + 0.001 && p[1] <= Limiter::THRESHOLD + 0.001, "master nunca passa de -1 dBFS ({:?})", p);
+    assert!(p[0] <= Limiter::THRESHOLD + 0.001 && p[1] <= Limiter::THRESHOLD + 0.001, "master nunca passa do teto ({:?})", p);
     assert!(p[0] > 0.8, "mas continua alto ({:?})", p);
     assert!(r.snap.lock().master_limit < 0.9, "a tela mostra que está limitando");
 }
 
 #[test]
 fn ganho_automatico_nivela_musicas_alta_e_baixa() {
-    // Mesma música, uma "masterizada" 8 dB mais alta: com o ganho automático as duas saem iguais.
+    // Mesma música, uma "masterizada" 7 dB mais alta: com o ganho automático as duas saem iguais.
     let mut alta = synthetic(10.0, FS, 128.0, 0.25);
     let mut baixa = synthetic(10.0, FS, 128.0, 0.25);
-    let g = 10f32.powf(-8.0 / 20.0);
+    let g = 10f32.powf(-7.0 / 20.0);
     baixa.data.iter_mut().for_each(|x| *x *= g);
     // Volumes como os medidos na análise (dentro da faixa de correção).
     alta.loudness = -5.0;
-    baixa.loudness = -13.0;
+    baixa.loudness = -12.0;
     let mut d1 = Deck::new(FS);
     let mut d2 = Deck::new(FS);
     d1.load(Arc::new(alta));
     d2.load(Arc::new(baixa));
-    assert!((d2.auto_gain_db() - d1.auto_gain_db() - 8.0).abs() < 0.2, "correções diferem em 8 dB");
+    assert!((d2.auto_gain_db() - d1.auto_gain_db() - 7.0).abs() < 0.2, "correções diferem em 7 dB");
     d1.play_toggle();
     d2.play_toggle();
     // Mede depois de a correção assentar (ela entra suave, em ~10 ms).
@@ -802,7 +802,7 @@ fn ganho_automatico_nivela_musicas_alta_e_baixa() {
     d1.set_auto_gain(false);
     d2.set_auto_gain(false);
     let (p1, p2) = (peak(&mut d1), peak(&mut d2));
-    assert!((20.0 * (p1 / p2).log10() - 8.0).abs() < 0.3, "sem ganho automático: 8 dB de diferença");
+    assert!((20.0 * (p1 / p2).log10() - 7.0).abs() < 0.3, "sem ganho automático: 7 dB de diferença");
 }
 
 #[test]
@@ -898,4 +898,92 @@ fn slip_cancela_no_hotcue_e_no_pause() {
     d.play_toggle();
     render(&mut d, 64);
     assert!(d.snapshot().slip_pos.is_none(), "pausar acaba o slip");
+}
+
+// ------------------------------------------------------------- comparação de som (para ouvir)
+
+/// WAV estéreo em ponto flutuante (32 bits), sem perder nada do que o motor gerou.
+fn write_wav_f32(path: &std::path::Path, sr: u32, frames: &[[f32; 2]]) {
+    let data_len = (frames.len() * 8) as u32;
+    let mut b = Vec::with_capacity(44 + data_len as usize);
+    b.extend_from_slice(b"RIFF");
+    b.extend_from_slice(&(36 + data_len).to_le_bytes());
+    b.extend_from_slice(b"WAVEfmt ");
+    b.extend_from_slice(&16u32.to_le_bytes());
+    b.extend_from_slice(&3u16.to_le_bytes()); // ponto flutuante
+    b.extend_from_slice(&2u16.to_le_bytes());
+    b.extend_from_slice(&sr.to_le_bytes());
+    b.extend_from_slice(&(sr * 8).to_le_bytes());
+    b.extend_from_slice(&8u16.to_le_bytes());
+    b.extend_from_slice(&32u16.to_le_bytes());
+    b.extend_from_slice(b"data");
+    b.extend_from_slice(&data_len.to_le_bytes());
+    for f in frames {
+        b.extend_from_slice(&f[0].to_le_bytes());
+        b.extend_from_slice(&f[1].to_le_bytes());
+    }
+    std::fs::write(path, b).unwrap();
+}
+
+/// Passa uma música de verdade pelo motor (como no aparelho: 48 kHz, ganho automático ligado,
+/// EQ no meio, fader e master como saem de fábrica) e grava o master e o fone em WAV, mais o
+/// trecho do arquivo original, para comparar de ouvido. Diz quanto tempo o limitador trabalhou.
+///
+/// DJOS_SOM_MUSICA=<arquivo> DJOS_SOM_SAIDA=<pasta> DJOS_SOM_NOME=<prefixo>
+/// cargo test --release comparacao_de_som -- --ignored --nocapture
+#[test]
+#[ignore]
+fn comparacao_de_som() {
+    let (Some(musica), Some(saida)) = (std::env::var_os("DJOS_SOM_MUSICA"), std::env::var_os("DJOS_SOM_SAIDA")) else { return };
+    let nome = std::env::var("DJOS_SOM_NOME").unwrap_or_else(|_| "dj-os".into());
+    let saida = std::path::PathBuf::from(saida);
+    std::fs::create_dir_all(&saida).unwrap();
+    let t = Arc::new(crate::track::load(std::path::Path::new(&musica), true).unwrap());
+    let (ini, dur) = (60.0, 40.0);
+    // Trecho do original (na taxa do arquivo).
+    let a = (ini * t.sr) as usize;
+    let b = ((ini + dur) * t.sr) as usize;
+    let orig: Vec<[f32; 2]> = (a..b.min(t.frames)).map(|i| [t.data[i * 2], t.data[i * 2 + 1]]).collect();
+    write_wav_f32(&saida.join("0-original.wav"), t.sr as u32, &orig);
+
+    let mut r = rig();
+    r.send(Cmd::AutoGain(true));
+    r.send(Cmd::Load { deck: 0, track: t.clone() });
+    r.send(Cmd::Fader { deck: 0, v: 1.0 });
+    r.send(Cmd::Crossfader(0.5));
+    r.send(Cmd::Pfl { deck: 0, on: true });
+    r.send(Cmd::PlayToggle(0));
+    let mut buf = vec![0.0f32; 512 * 4];
+    let (mut master, mut fone) = (Vec::new(), Vec::new());
+    let (mut blocos, mut limitando, mut reducao) = (0usize, 0usize, 1.0f32);
+    let total = ((ini + dur) * FS) as usize / 512;
+    let pular = (ini * FS) as usize / 512;
+    for k in 0..total {
+        r.engine.process(&mut buf, 4);
+        if k >= pular {
+            for f in buf.chunks_exact(4) {
+                master.push([f[0], f[1]]);
+                fone.push([f[2], f[3]]);
+            }
+            blocos += 1;
+            let s = r.snap.lock();
+            // Quanto o limitador abaixou neste bloco (só conta o que dá para ouvir: mais de 0,5 dB).
+            if s.master_limit < 0.944 {
+                limitando += 1;
+            }
+            reducao = reducao.min(s.master_limit);
+        }
+    }
+    let pico = master.iter().fold(0.0f32, |m, f| m.max(f[0].abs()).max(f[1].abs()));
+    write_wav_f32(&saida.join(format!("{nome}-master.wav")), FS as u32, &master);
+    write_wav_f32(&saida.join(format!("{nome}-fone.wav")), FS as u32, &fone);
+    println!(
+        "LUFS da música {:.1} · pico do arquivo {:.3} · ganho automático {:+.1} dB · pico do master {:.3} · limitador abaixando mais de 0,5 dB em {:.0}% do tempo (no máximo {:.1} dB)",
+        t.loudness,
+        t.data.iter().fold(0.0f32, |m, x| m.max(x.abs())),
+        crate::loudness::gain_db(t.loudness),
+        pico,
+        100.0 * limitando as f64 / blocos.max(1) as f64,
+        -20.0 * reducao.log10()
+    );
 }

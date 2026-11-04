@@ -8,7 +8,7 @@
 pub const TARGET_LUFS: f32 = -9.0;
 /// Limites da correção (não aumenta demais uma música muito baixa).
 pub const MIN_GAIN_DB: f32 = -12.0;
-pub const MAX_GAIN_DB: f32 = 6.0;
+pub const MAX_GAIN_DB: f32 = 3.0;
 
 /// Correção em dB para levar a música ao nível de referência.
 pub fn gain_db(lufs: f32) -> f32 {
@@ -132,7 +132,7 @@ mod tests {
     fn correcao_tem_limites() {
         assert_eq!(gain_db(-9.0), 0.0);
         assert_eq!(gain_db(-5.0), -4.0, "música alta desce");
-        assert_eq!(gain_db(-30.0), MAX_GAIN_DB, "música muito baixa sobe no máximo +6 dB");
+        assert_eq!(gain_db(-30.0), MAX_GAIN_DB, "música muito baixa sobe no máximo +3 dB");
         assert_eq!(gain_db(f32::NAN), 0.0);
     }
 }
