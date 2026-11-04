@@ -236,9 +236,24 @@ fn peek_file(path: &Path) -> Option<Peek> {
     bpm.is_finite().then_some(Peek { bpm, key, has_loudness: m == MAGIC })
 }
 
-/// O que o aparelho guardou da música; se não tiver nada, a análise do pendrive preparado.
+/// O que o aparelho guardou da música ou a análise do pendrive preparado. Se tem os dois, vale o
+/// gravado por último: cues marcados no Preparar depois de tocar a música chegam ao aparelho, e os
+/// marcados no aparelho depois continuam valendo.
 pub fn load(track: &Path) -> Option<Saved> {
-    load_from(&dir(), track).or_else(|| decode(&std::fs::read(pendrive_file(track)?).ok()?))
+    let own = key(track).map(|k| dir().join(format!("{k}.dxj")));
+    newest(own.into_iter().chain(pendrive_file(track)))
+}
+
+/// Lê o mais recente que existir (e der para ler) entre os arquivos.
+fn newest(files: impl Iterator<Item = PathBuf>) -> Option<Saved> {
+    let mut v: Vec<(std::time::SystemTime, PathBuf)> = files.filter_map(|f| Some((std::fs::metadata(&f).ok()?.modified().ok()?, f))).collect();
+    v.sort_by(|a, b| b.0.cmp(&a.0));
+    v.iter().find_map(|(_, f)| decode(&std::fs::read(f).ok()?))
+}
+
+/// Só a análise gravada no pendrive preparado em `root` (o Preparar edita os cues nela).
+pub fn load_portable(root: &Path, track: &Path) -> Option<Saved> {
+    decode(&std::fs::read(root.join(PENDRIVE_DIR).join(format!("{}.dxj", portable_key(track)?))).ok()?)
 }
 
 pub fn save(track: &Path, s: &Saved) {
@@ -250,6 +265,24 @@ pub fn save(track: &Path, s: &Saved) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vale_o_gravado_por_ultimo() {
+        let base = std::env::temp_dir().join(format!("djos-store-novo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let (a, b) = (base.join("a.dxj"), base.join("b.dxj"));
+        let mut s = sample();
+        s.cue = Some(1.0);
+        std::fs::write(&a, encode(&s)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        s.cue = Some(2.0);
+        std::fs::write(&b, encode(&s)).unwrap();
+        assert_eq!(newest([a.clone(), b.clone()].into_iter()).unwrap().cue, Some(2.0));
+        assert_eq!(newest([b.clone(), a.clone()].into_iter()).unwrap().cue, Some(2.0), "a ordem não importa");
+        assert_eq!(newest([base.join("nao-existe.dxj"), a].into_iter()).unwrap().cue, Some(1.0));
+        let _ = std::fs::remove_dir_all(base);
+    }
 
     fn sample() -> Saved {
         let mut hotcues = [None; HOTCUES];
