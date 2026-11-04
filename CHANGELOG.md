@@ -6,6 +6,19 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+### Novo
+- **DJ OS Preparar** repaginado, no visual preto do aparelho: as pastas do computador e do
+  pendrive lado a lado, em árvore, e as músicas da pasta com BPM, tom e ✓ de analisada.
+  - Arrastar músicas ou pastas do computador para uma pasta do pendrive copia (mantendo as
+    subpastas) e já analisa; também pelo botão "Copiar para o pendrive" ou com dois cliques. Música
+    que já está lá não é copiada de novo; a cópia nunca deixa arquivo pela metade.
+  - No pendrive: criar pasta, renomear, mover (arrastando) e apagar (com confirmação). O que está
+    no computador nunca é apagado.
+  - Escolher quais pastas do computador aparecem ("+ pasta"); busca na pasta; Ctrl/Shift para
+    selecionar várias; "Analisar o pendrive" para o que faltar.
+- Lançamento automático: com várias versões publicadas juntas, a de número maior fica como
+  "Latest".
+
 ## [0.1.4] - 2026-11-03
 
 O browser novo, preto, com a mesma lógica do browser de árvore, e o pendrive do rekordbox.

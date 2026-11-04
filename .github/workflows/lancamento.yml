@@ -70,10 +70,19 @@ jobs:
           } >> notas.md
           cat notas.md
 
+      # Várias versões publicadas juntas (ex.: uma alternativa): só a de número maior fica como
+      # "Latest", não a que termina por último.
+      - name: É a versão mais nova?
+        run: |
+          git fetch --tags --force -q
+          mais_nova=$(git tag -l 'v*' | sort -V | tail -1)
+          if [ "$mais_nova" = "$GITHUB_REF_NAME" ]; then echo "LATEST=true" >> "$GITHUB_ENV"; else echo "LATEST=false" >> "$GITHUB_ENV"; fi
+
       - name: Publicar em Releases
         uses: softprops/action-gh-release@v2
         with:
           name: DJ OS ${{ env.VERSAO }}
+          make_latest: ${{ env.LATEST }}
           body_path: notas.md
           files: |
             saida/dj-os-*.iso
