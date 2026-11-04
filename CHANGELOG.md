@@ -6,6 +6,13 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+## [0.1.3] - 2026-11-03
+
+Versão alternativa: o browser novo com categorias à esquerda (ARTISTA, MÚSICAS, PLAYLIST,
+HISTÓRICO, PASTAS, FILA, GRAVAÇÕES), para quem prefere esse jeito; vem ligado de fábrica. A linha
+principal seguiu na 0.1.4 (browser preto com a lógica do browser de árvore). Tem tudo da 0.1.2 e
+o pendrive do rekordbox.
+
 ### Novo
 - Aba **MIXER** nas configurações (inspirada nos mixers de clube):
   - modo do EQ: isolador (corta tudo no mínimo) ou EQ (até -26 dB);
