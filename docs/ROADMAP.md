@@ -1,6 +1,22 @@
 # Ideias para depois
 
-## Próximos (combinado em 2026-10-31)
+## Próxima atualização (combinado em 2026-11-03)
+1. **Zoom da waveform pelo BROWSE**, só com a controladora:
+   - CONFIG → CONTROLADORA → "Girar o BROWSE na tela principal": ABRE O BROWSER (como hoje) ou
+     ZOOM DA WAVEFORM. No modo zoom, o browser abre pelo SHIFT + BROWSE (ou apertando o BROWSE).
+   - Segurar o BROWSE e girar: zoom da waveform nos dois modos (girar enquanto segura não abre a
+     pesquisa).
+2. **Preparar, etapa 2**: player com a waveform (play/pause, clicar para pular), hot cues A–H e
+   memory cue marcados no PC e gravados no pendrive; no aparelho vale o que foi marcado por último
+   (hoje a cópia do próprio aparelho ganha da do pendrive).
+3. Sistema de baixar músicas (o dele) dentro do Preparar: fica para depois.
+
+## Feito em 2026-11-03
+Pendrive do rekordbox (0.1.4), browser novo preto com a lógica do de árvore (0.1.4; a versão com
+categorias ficou como alternativa na 0.1.3), Preparar repaginado (pastas do PC e do pendrive, cópia
+arrastando, organizar o pendrive). Android e Raspberry Pi: deixados de lado (só desktop).
+
+## Combinado em 2026-10-31
 Regras: tudo que muda o jeito de tocar vira opção em CONFIG (liga/desliga); toda tela continua
 usável só pela controladora, sem toque e sem mouse.
 
