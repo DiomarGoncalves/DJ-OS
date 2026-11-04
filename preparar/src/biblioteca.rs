@@ -1,5 +1,5 @@
-//! A biblioteca do Preparar: as pastas do computador e do pendrive em árvore, as músicas de cada
-//! pasta e o que se faz com elas (copiar para o pendrive já analisando, mover, criar pasta,
+//! A biblioteca do Preparar: as pastas do computador e do pendrive, as músicas de cada pasta e o
+//! que se faz com elas (copiar para o pendrive já analisando, mover, criar pasta,
 //! renomear, apagar). Sem tela: dá para testar.
 
 use dj_os_analise::prepare::is_audio;
@@ -10,17 +10,6 @@ use std::path::{Path, PathBuf};
 pub enum Lado {
     Pc,
     Pendrive,
-}
-
-/// Uma linha da árvore de pastas.
-#[derive(Clone, Debug)]
-pub struct Pasta {
-    pub caminho: PathBuf,
-    pub nome: String,
-    pub nivel: usize,
-    pub aberta: bool,
-    pub tem_sub: bool,
-    pub lado: Lado,
 }
 
 /// Uma música da lista.
@@ -78,70 +67,85 @@ pub fn musica(f: &Path, raiz_pendrive: Option<&Path>) -> Musica {
     }
 }
 
-/// Árvore de pastas: as do computador e as do pendrive escolhido, abrindo e fechando.
-#[derive(Default)]
-pub struct Arvore {
-    pub linhas: Vec<Pasta>,
+/// Uma linha da lista de um lado: voltar, uma subpasta ou uma música.
+#[derive(Clone, Debug)]
+pub enum Item {
+    Voltar,
+    Pasta(PathBuf),
+    Musica(Musica),
 }
 
-impl Arvore {
-    /// Monta de novo com estas raízes, mantendo abertas as pastas que estavam abertas.
-    pub fn montar(&mut self, pc: &[PathBuf], pendrive: Option<&Path>) {
-        let abertas: Vec<PathBuf> = self.linhas.iter().filter(|l| l.aberta).map(|l| l.caminho.clone()).collect();
-        self.linhas.clear();
-        let raizes = pc.iter().map(|p| (p.as_path(), Lado::Pc)).chain(pendrive.map(|p| (p, Lado::Pendrive)));
-        for (r, lado) in raizes {
-            self.linhas.push(Pasta { caminho: r.to_path_buf(), nome: nome(r), nivel: 0, aberta: false, tem_sub: !subpastas(r).is_empty(), lado });
+impl Item {
+    pub fn caminho(&self) -> Option<&Path> {
+        match self {
+            Item::Voltar => None,
+            Item::Pasta(p) => Some(p),
+            Item::Musica(m) => Some(&m.caminho),
         }
-        // Reabre de cima para baixo (as de dentro aparecem depois que a de fora abre).
-        let mut i = 0;
-        while i < self.linhas.len() {
-            if abertas.contains(&self.linhas[i].caminho) && self.linhas[i].tem_sub {
-                self.abrir(i);
+    }
+}
+
+/// O que aparece numa pasta: "← Voltar" (fora do começo do disco), as subpastas e as músicas.
+pub fn conteudo(pasta: &Path, raiz: &Path, raiz_pendrive: Option<&Path>) -> Vec<Item> {
+    let voltar = (pasta != raiz).then_some(Item::Voltar);
+    voltar.into_iter().chain(subpastas(pasta).into_iter().map(Item::Pasta)).chain(musicas(pasta, raiz_pendrive).into_iter().map(Item::Musica)).collect()
+}
+
+/// Lugares do computador para escolher: pasta pessoal, músicas e os discos (internos e
+/// externos). Nome para mostrar e caminho.
+pub fn discos() -> Vec<(String, PathBuf)> {
+    let mut v = Vec::new();
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+    if let Some(h) = &home {
+        if let Some(m) = ["Música", "Music", "Músicas"].iter().map(|n| h.join(n)).find(|p| p.is_dir()) {
+            v.push(("Músicas".to_string(), m));
+        }
+        v.push(("Pasta pessoal".to_string(), h.clone()));
+    }
+    if cfg!(windows) {
+        for c in b'C'..=b'Z' {
+            let p = PathBuf::from(format!("{}:\\", c as char));
+            if p.is_dir() {
+                v.push((format!("Disco {}:", c as char), p));
             }
-            i += 1;
         }
-    }
-
-    /// Abre ou fecha a pasta da linha `i`.
-    pub fn alternar(&mut self, i: usize) {
-        match self.linhas.get(i) {
-            Some(l) if l.aberta => self.fechar(i),
-            Some(l) if l.tem_sub => self.abrir(i),
-            _ => {}
-        }
-    }
-
-    fn abrir(&mut self, i: usize) {
-        let l = self.linhas[i].clone();
-        let filhas: Vec<Pasta> = subpastas(&l.caminho)
-            .into_iter()
-            .map(|p| Pasta { nome: nome(&p), tem_sub: !subpastas(&p).is_empty(), caminho: p, nivel: l.nivel + 1, aberta: false, lado: l.lado })
-            .collect();
-        self.linhas.splice(i + 1..i + 1, filhas);
-        self.linhas[i].aberta = true;
-    }
-
-    fn fechar(&mut self, i: usize) {
-        let nivel = self.linhas[i].nivel;
-        let fim = (i + 1..self.linhas.len()).find(|&j| self.linhas[j].nivel <= nivel).unwrap_or(self.linhas.len());
-        self.linhas.drain(i + 1..fim);
-        self.linhas[i].aberta = false;
-    }
-
-    /// Abre os pais até `alvo` aparecer; devolve a linha dele.
-    pub fn revelar(&mut self, alvo: &Path) -> Option<usize> {
-        for _ in 0..64 {
-            let i = self.linhas.iter().enumerate().filter(|(_, l)| alvo.starts_with(&l.caminho)).max_by_key(|(_, l)| l.nivel).map(|(i, _)| i)?;
-            if self.linhas[i].caminho == alvo || !self.linhas[i].tem_sub {
-                return Some(i);
+    } else {
+        let user = std::env::var("USER").unwrap_or_default();
+        for base in [PathBuf::from("/mnt"), PathBuf::from("/media").join(&user), PathBuf::from("/run/media").join(&user)] {
+            for d in subpastas(&base) {
+                if std::fs::read_dir(&d).is_ok() {
+                    v.push((format!("Disco {}", nome(&d)), d));
+                }
             }
-            if self.linhas[i].aberta {
-                return None;
-            }
-            self.abrir(i);
         }
-        None
+        v.push(("Computador inteiro (/)".to_string(), PathBuf::from("/")));
+    }
+    v
+}
+
+/// Tira o pendrive com segurança (desmonta e desliga). Devolve o erro em português.
+pub fn ejetar(raiz: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let letra = raiz.display().to_string().trim_end_matches('\\').to_string();
+        let cmd = format!("(New-Object -comObject Shell.Application).Namespace(17).ParseName('{letra}').InvokeVerb('Eject')");
+        let ok = std::process::Command::new("powershell").args(["-NoProfile", "-Command", &cmd]).status().is_ok_and(|s| s.success());
+        return if ok { Ok(()) } else { Err("o Windows não deixou ejetar (feche o que estiver usando o pendrive)".into()) };
+    }
+    #[cfg(not(windows))]
+    {
+        let saida = std::process::Command::new("findmnt").args(["-n", "-o", "SOURCE", "--target"]).arg(raiz).output().map_err(|e| e.to_string())?;
+        let dev = String::from_utf8_lossy(&saida.stdout).trim().to_string();
+        if dev.is_empty() {
+            return Err("não achei o pendrive".into());
+        }
+        let des = std::process::Command::new("udisksctl").args(["unmount", "-b", &dev]).output().map_err(|e| e.to_string())?;
+        if !des.status.success() {
+            return Err("ainda tem algo usando o pendrive (feche e tente de novo)".into());
+        }
+        // Desligar é bom (a luz apaga), mas se não der o pendrive já pode sair.
+        let _ = std::process::Command::new("udisksctl").args(["power-off", "-b", &dev]).output();
+        Ok(())
     }
 }
 
@@ -297,26 +301,20 @@ mod tests {
     }
 
     #[test]
-    fn arvore_abre_fecha_e_lembra() {
-        let pc = pasta("arvore");
-        for d in ["Funk/Antigas", "Funk/Novas", "House", ".oculta", "DJOS/analise"] {
+    fn conteudo_com_voltar_pastas_e_musicas() {
+        let pc = pasta("conteudo");
+        for d in ["Funk/Antigas", "House", ".oculta", "DJOS/analise"] {
             std::fs::create_dir_all(pc.join(d)).unwrap();
         }
-        let mut a = Arvore::default();
-        a.montar(&[pc.clone()], None);
-        assert_eq!(a.linhas.len(), 1);
-        a.alternar(0);
-        let nomes: Vec<_> = a.linhas.iter().map(|l| l.nome.as_str()).collect();
-        assert_eq!(nomes[1..], ["Funk", "House"], "ocultas e a do DJ OS ficam de fora");
-        a.alternar(1);
-        assert_eq!(a.linhas[2].nome, "Antigas");
-        assert_eq!(a.linhas[2].nivel, 2);
-        // Montar de novo (pendrive entrou, cópia terminou) mantém o que estava aberto.
-        a.montar(&[pc.clone()], None);
-        assert_eq!(a.linhas.len(), 5);
-        a.alternar(0);
-        assert_eq!(a.linhas.len(), 1, "fechar a de fora fecha as de dentro");
-        assert_eq!(a.revelar(&pc.join("Funk/Novas")).map(|i| a.linhas[i].nome.clone()), Some("Novas".into()));
+        arquivo(&pc.join("Funk/MC A - Um.mp3"), b"um");
+        arquivo(&pc.join("Funk/capa.jpg"), b"x");
+        let raiz: Vec<_> = conteudo(&pc, &pc, None).iter().map(|i| format!("{i:?}").split('(').next().unwrap().to_string()).collect();
+        assert_eq!(raiz, ["Pasta", "Pasta"], "no começo do disco não tem voltar; ocultas e a do DJ OS ficam de fora");
+        let funk = conteudo(&pc.join("Funk"), &pc, None);
+        assert!(matches!(funk[0], Item::Voltar));
+        assert!(matches!(&funk[1], Item::Pasta(p) if p.ends_with("Antigas")));
+        assert!(matches!(&funk[2], Item::Musica(m) if m.titulo == "Um" && m.artista == "MC A"));
+        assert_eq!(funk.len(), 3, "a capa não entra");
         let _ = std::fs::remove_dir_all(pc);
     }
 

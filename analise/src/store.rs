@@ -195,6 +195,7 @@ pub fn has_portable(root: &Path, track: &Path) -> bool {
         .is_some_and(|p| p.key != crate::key::RAW_UNKNOWN && p.has_loudness)
 }
 
+#[cfg(test)]
 fn load_from(dir: &Path, track: &Path) -> Option<Saved> {
     let bytes = std::fs::read(dir.join(format!("{}.dxj", key(track)?))).ok()?;
     decode(&bytes)

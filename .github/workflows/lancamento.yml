@@ -97,7 +97,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Compilar
-        run: cargo build --release -p dj-os-preparar
+        run: |
+          sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+          cargo build --release -p dj-os-preparar
       - name: Empacotar (AppImage)
         run: |
           sudo apt-get update && sudo apt-get install -y libfuse2

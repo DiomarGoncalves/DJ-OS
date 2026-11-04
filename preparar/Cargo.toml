@@ -8,6 +8,5 @@ description = "DJ OS Preparar: analisa as músicas do pendrive no computador (Wi
 [dependencies]
 dj-os-analise = { path = "../analise" }
 eframe = "0.29"
-# Seletor de pasta: no Linux pelo "portal" do sistema (funciona também dentro do Flatpak), no
-# Windows pela janela nativa.
-rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
+# Ouvir as músicas (o player): a saída de som padrão do computador.
+cpal = "0.15"

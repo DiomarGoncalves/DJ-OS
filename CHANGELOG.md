@@ -7,15 +7,21 @@ para diferenciar firmwares de teste da mesma versão.
 ## [Não lançado]
 
 ### Novo
-- **DJ OS Preparar** repaginado, no visual preto do aparelho: as pastas do computador e do
-  pendrive lado a lado, em árvore, e as músicas da pasta com BPM, tom e ✓ de analisada.
-  - Arrastar músicas ou pastas do computador para uma pasta do pendrive copia (mantendo as
-    subpastas) e já analisa; também pelo botão "Copiar para o pendrive" ou com dois cliques. Música
-    que já está lá não é copiada de novo; a cópia nunca deixa arquivo pela metade.
-  - No pendrive: criar pasta, renomear, mover (arrastando) e apagar (com confirmação). O que está
-    no computador nunca é apagado.
-  - Escolher quais pastas do computador aparecem ("+ pasta"); busca na pasta; Ctrl/Shift para
-    selecionar várias; "Analisar o pendrive" para o que faltar.
+- **DJ OS Preparar** repaginado, no visual preto do aparelho, dividido no meio:
+  - à esquerda o **computador** (escolhe o disco: Músicas, pasta pessoal, HDs internos e
+    externos; abre onde parou) e à direita o **pendrive** (com o botão **EJETAR**, para tirar com
+    segurança). Em cada lado: pastas e músicas com BPM, tom e ✓ de analisada, "← Voltar", busca.
+  - **Arrastar** músicas ou pastas do computador para o pendrive (para a pasta aberta ou em cima
+    de uma pasta) copia, mantendo as subpastas, e já analisa; também pelo botão "Copiar para o
+    pendrive". Música que já está lá não é copiada de novo; a cópia nunca deixa arquivo pela metade.
+  - No pendrive: nova pasta, renomear (F2), mover (arrastando) e apagar (Delete, com confirmação).
+    O que está no computador nunca é apagado.
+  - **Player embaixo**: dois cliques numa música para ouvir; waveform da música inteira (clique
+    para pular), play/pausa (espaço), **CUE** e **hot cues A–H** (clique marca ou vai; botão
+    direito apaga). Os cues de música do pendrive vão direto para a análise do pendrive; os de
+    música do computador vão junto quando ela for copiada.
+  - Corrigido: o Preparar fechava sozinho ao escolher uma pasta (a janela de escolher pasta do
+    sistema não abria).
 - Lançamento automático: com várias versões publicadas juntas, a de número maior fica como
   "Latest".
 - **Zoom da waveform pelo BROWSE**: segurar o BROWSE e girar aproxima/afasta a waveform (girar
