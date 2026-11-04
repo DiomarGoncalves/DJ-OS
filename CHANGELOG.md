@@ -6,6 +6,10 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+## [0.1.2] - 2026-11-03
+
+Slip, aba MIXER, volume da REV1, scratch mais liso e HD/SSD externo na biblioteca.
+
 ### Novo
 - Aba **MIXER** nas configurações (inspirada nos mixers de clube):
   - modo do EQ: isolador (corta tudo no mínimo) ou EQ (até -26 dB);
