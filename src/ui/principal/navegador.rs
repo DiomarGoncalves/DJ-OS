@@ -366,8 +366,9 @@ impl DjOsApp {
         for (x, c) in o.cols.iter().enumerate() {
             let fx = ov.left() + x as f32;
             let dim = if (x as f32) < played { 0.35 } else { 1.0 };
-            for (b, scale) in [(0usize, 1.0f32), (1, 0.46), (2, 0.28)] {
-                let a = (c[b] as f32 / 255.0).powf(0.75) * scale * ov.height();
+            let hs = layers(c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0);
+            for (b, v) in hs.into_iter().enumerate() {
+                let a = v * ov.height();
                 if a > 0.5 {
                     mesh.add_colored_rect(Rect::from_min_max(pos2(fx, ov.bottom() - a), pos2(fx + 1.0, ov.bottom())), pal[b].gamma_multiply(dim));
                 }

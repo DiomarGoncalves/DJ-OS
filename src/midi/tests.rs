@@ -256,6 +256,34 @@ fn browse_load_e_preparar() {
     assert!(r.app.lock().search.as_ref().unwrap().query.is_empty(), "soltar depois de segurar não digita");
 }
 
+#[test]
+fn browse_faz_zoom_da_waveform() {
+    let mut r = rig();
+    r.app.lock().wave_zoom = 2;
+    // Segurar o BROWSE e girar: zoom (horário aproxima), sem abrir o browser nem a pesquisa.
+    r.send([0x96, 0x41, 0x7F]);
+    r.send([0xB6, 0x40, 0x01]);
+    assert_eq!(r.app.lock().wave_zoom, 1);
+    assert!(!r.app.lock().big_browser);
+    r.app.lock().browse_down = Some(std::time::Instant::now() - std::time::Duration::from_millis(600));
+    r.app.lock().tick_browse_hold();
+    assert!(r.app.lock().search.is_none(), "girar enquanto segura não abre a pesquisa");
+    let focus = r.app.lock().lib.focus;
+    r.send([0x96, 0x41, 0x00]);
+    assert_eq!(r.app.lock().lib.focus, focus, "soltar depois de girar não troca pastas/músicas");
+    // Modo zoom (CONFIG): girar na tela principal dá zoom; apertar abre o browser.
+    r.app.lock().settings.browse_gira = 1;
+    r.send([0xB6, 0x40, 0x7F]);
+    assert_eq!(r.app.lock().wave_zoom, 2, "anti-horário afasta");
+    assert!(!r.app.lock().big_browser);
+    r.send([0x96, 0x41, 0x7F]);
+    r.send([0x96, 0x41, 0x00]);
+    assert!(r.app.lock().big_browser);
+    // Com o browser aberto, girar anda na lista (não dá zoom).
+    r.send([0xB6, 0x40, 0x01]);
+    assert_eq!(r.app.lock().wave_zoom, 2);
+}
+
 // --------------------------------------------------------------------- LEDs
 
 #[test]

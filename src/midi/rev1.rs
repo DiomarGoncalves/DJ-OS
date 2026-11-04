@@ -373,6 +373,19 @@ impl Rev1 {
                     crate::settings::scroll(&mut a, enc_delta(v));
                     return;
                 }
+                // Segurando o BROWSE (ou no modo zoom, na tela principal): zoom da waveform. Girar
+                // enquanto segura não abre a pesquisa nem troca pastas/músicas ao soltar.
+                let segurando = a.browse_down.is_some() && a.search.is_none();
+                let modo_zoom = a.settings.browse_gira == 1 && !a.big_browser && a.search.is_none();
+                if segurando || modo_zoom {
+                    if segurando {
+                        a.browse_long = true;
+                    }
+                    let d = enc_delta(v);
+                    let z = a.wave_zoom as i32 - d.signum();
+                    a.wave_zoom = z.clamp(0, crate::ui::ZOOMS.len() as i32 - 1) as usize;
+                    return;
+                }
                 match a.search.as_mut() {
                     Some(ui) => ui.step(enc_delta(v)),
                     None => {

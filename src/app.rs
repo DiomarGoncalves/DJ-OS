@@ -174,6 +174,9 @@ impl AppState {
         }
         if self.search.is_some() {
             crate::search::press(self);
+        } else if !self.big_browser && self.settings.browse_gira == 1 {
+            // Modo zoom: na tela principal, apertar o BROWSE abre o browser.
+            self.big_browser = true;
         } else {
             self.lib.toggle_focus();
         }

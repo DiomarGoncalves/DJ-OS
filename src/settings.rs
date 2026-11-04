@@ -10,6 +10,8 @@ use crate::shared::{Cmd, CmdTx, NUM_DECKS};
 
 pub const PALETTES: [&str; 3] = ["AZUL/LARANJA", "RGB", "AZUL"];
 pub const SCALES: [f32; 3] = [1.0, 1.15, 1.3];
+/// Girar o BROWSE na tela principal.
+pub const BROWSE_GIRA: [&str; 2] = ["ABRE O BROWSER", "ZOOM DA WAVEFORM"];
 /// Tamanho da letra do browser novo.
 pub const BROWSER_FONTS: [&str; 3] = ["PEQUENA", "MÉDIA", "GRANDE"];
 pub const PITCH_RANGES: [f64; 3] = [0.08, 0.16, 0.50];
@@ -60,6 +62,8 @@ pub struct Settings {
     pub browser_key: bool,
     /// Tamanho da letra do browser novo (índice em BROWSER_FONTS).
     pub browser_font: usize,
+    /// O que girar o BROWSE faz na tela principal (índice em BROWSE_GIRA).
+    pub browse_gira: usize,
 }
 
 impl Default for Settings {
@@ -89,6 +93,7 @@ impl Default for Settings {
             browser_bpm: true,
             browser_key: true,
             browser_font: 0,
+            browse_gira: 0,
         }
     }
 }
@@ -141,6 +146,7 @@ impl Settings {
                 "browser_bpm" => s.browser_bpm = v != "nao",
                 "browser_tom" => s.browser_key = v != "nao",
                 "browser_letra" => s.browser_font = num(BROWSER_FONTS.len()).unwrap_or(0),
+                "browse_gira" => s.browse_gira = num(BROWSE_GIRA.len()).unwrap_or(0),
                 _ => {}
             }
         }
@@ -158,7 +164,7 @@ impl Settings {
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
-             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\n",
+             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -181,7 +187,8 @@ impl Settings {
             yn(self.browser_novo),
             yn(self.browser_bpm),
             yn(self.browser_key),
-            self.browser_font
+            self.browser_font,
+            self.browse_gira
         )
     }
 
@@ -256,6 +263,7 @@ pub enum Action {
     BrowserBpm,
     BrowserKey,
     BrowserFont,
+    BrowseGira,
     Keylock,
     Palette,
     Scale,
@@ -423,6 +431,8 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Item { label: "Faixa de pitch".into(), value: format!("±{:.0}%", PITCH_RANGES[s.pitch_range] * 100.0), action: Action::PitchRange });
             v.push(Row::Item { label: "Keylock ao carregar".into(), value: if s.keylock { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Keylock });
             v.push(Row::Item { label: "Slip".into(), value: if s.slip { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Slip });
+            v.push(Row::Item { label: "Girar o BROWSE na tela principal".into(), value: BROWSE_GIRA[s.browse_gira].into(), action: Action::BrowseGira });
+            v.push(Row::Info("Segurar o BROWSE e girar: zoom da waveform. No modo zoom, o browser abre apertando o BROWSE ou SHIFT + BROWSE".into()));
             v.push(Row::Info("Slip: scratch, backspin e loop por cima da música; ao soltar, ela volta onde estaria".into()));
             let left = crate::midi::log_left();
             let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
@@ -589,6 +599,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::BrowserBpm => a.settings.browser_bpm = !a.settings.browser_bpm,
         Action::BrowserKey => a.settings.browser_key = !a.settings.browser_key,
         Action::BrowserFont => a.settings.browser_font = next(a.settings.browser_font, BROWSER_FONTS.len()),
+        Action::BrowseGira => a.settings.browse_gira = next(a.settings.browse_gira, BROWSE_GIRA.len()),
         Action::Palette => a.settings.palette = next(a.settings.palette, PALETTES.len()),
         Action::Scale => a.settings.scale = next(a.settings.scale, SCALES.len()),
         Action::AmbientVol => a.settings.ambient_vol = next(a.settings.ambient_vol, AMBIENT_VOLS.len()),
@@ -799,6 +810,7 @@ mod tests {
             browser_bpm: false,
             browser_key: false,
             browser_font: 2,
+            browse_gira: 1,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

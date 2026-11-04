@@ -62,8 +62,21 @@ fn band_colors() -> [Color32; 3] {
     match super::PALETTE.load(std::sync::atomic::Ordering::Relaxed) {
         1 => [Color32::from_rgb(220, 40, 40), Color32::from_rgb(40, 200, 80), Color32::from_rgb(60, 140, 255)],
         2 => [Color32::from_rgb(20, 70, 200), Color32::from_rgb(60, 150, 255), Color32::from_rgb(190, 225, 255)],
-        _ => [Color32::from_rgb(0, 95, 255), Color32::from_rgb(255, 150, 30), Color32::from_rgb(255, 238, 220)],
+        // Como nos aparelhos de cabine: azul forte (grave), âmbar (médio) e creme (agudo).
+        _ => [Color32::from_rgb(25, 100, 240), Color32::from_rgb(235, 140, 30), Color32::from_rgb(250, 238, 218)],
     }
+}
+
+/// Altura (0 a 1) de cada camada da waveform, empilhadas como nos aparelhos de cabine: o agudo
+/// no centro, o médio em volta dele e o grave por fora. Cada banda tem a sua grossura, então as
+/// três aparecem sempre (cortar o grave no EQ some com o azul; só o agudo fica o creme). Recebe
+/// cada banda de 0 a 1 (já com o EQ) e devolve [grave, médio, agudo], do maior para o menor.
+fn layers(l: f32, m: f32, h: f32) -> [f32; 3] {
+    let f = |v: f32| v.clamp(0.0, 1.0).powf(0.75);
+    let hi = f(h) * 0.30;
+    let mi = hi + f(m) * 0.30;
+    let lo = mi + f(l) * 0.55;
+    [lo.min(1.0), mi.min(1.0), hi.min(1.0)]
 }
 
 // ---- fonte condensada (Noto Sans Condensed, licença OFL, em assets/fonts) ----
@@ -351,8 +364,9 @@ impl DjOsApp {
                 let fx = ov.left() + x as f32;
                 let played = (x as f32) < frac_played * width as f32;
                 let dim = if played { 0.35 } else { 1.0 };
-                for (v, col, scale) in [(c[0], pal[0], 1.0f32), (c[1], pal[1], 0.46), (c[2], pal[2], 0.28)] {
-                    let a = (v as f32 / 255.0).powf(0.75) * scale * (oh - 4.0);
+                let hs = layers(c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0);
+                for (v, col) in hs.into_iter().zip(pal) {
+                    let a = v * (oh - 4.0);
                     if a > 0.5 {
                         mesh.add_colored_rect(Rect::from_min_max(pos2(fx, mid - a), pos2(fx + 1.0, mid)), col.gamma_multiply(dim));
                     }
@@ -411,7 +425,7 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
     let trim = s.trim.max(0.0);
     let gains = [s.eq[0] * trim, s.eq[1] * trim, s.eq[2] * trim];
     let mut mesh = Mesh::default();
-    let (step, layers) = if light() { (2.0f32, 2) } else { (1.0f32, 3) };
+    let step = if light() { 2.0f32 } else { 1.0 };
     let mut x = wr.left();
     while x < wr.right() {
         let ts = t_of(x);
@@ -428,9 +442,10 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
                 h = h.max(t.wave.high[i]);
             }
             let dim = if ts < pos_s { 0.55 } else { 1.0 };
-            // Grave por fora, médio no meio, agudo no centro (a curva realça o que é baixo).
-            for (k, (v, scale)) in [(l, 1.0f32), (m, 0.46), (h, 0.28)].into_iter().enumerate().take(layers) {
-                let a = ((v as f32 / 255.0).powf(0.75) * scale * gains[k]).min(1.0) * hh;
+            // Grave por fora, médio no meio, agudo no centro, empilhados.
+            let hs = layers(l as f32 / 255.0 * gains[0], m as f32 / 255.0 * gains[1], h as f32 / 255.0 * gains[2]);
+            for (k, v) in hs.into_iter().enumerate() {
+                let a = v * hh;
                 if a > 0.5 {
                     mesh.add_colored_rect(Rect::from_min_max(pos2(x, mid - a), pos2(x + step, mid + a)), pal[k].gamma_multiply(dim));
                 }
