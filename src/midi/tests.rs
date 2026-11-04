@@ -236,6 +236,8 @@ fn com_o_teclado_aberto_os_pads_navegam() {
 #[test]
 fn browse_load_e_preparar() {
     let mut r = rig();
+    // Browser de árvore (o novo tem o teste dele embaixo).
+    r.app.lock().settings.browser_novo = false;
     // Girar o BROWSE abre a lista em tela cheia.
     r.send([0xB6, 0x40, 0x01]);
     assert!(r.app.lock().big_browser);
@@ -254,6 +256,38 @@ fn browse_load_e_preparar() {
     assert!(r.app.lock().search.is_some());
     r.send([0x96, 0x41, 0x00]);
     assert!(r.app.lock().search.as_ref().unwrap().query.is_empty(), "soltar depois de segurar não digita");
+}
+
+#[test]
+fn browser_novo_pelo_browse_e_pelo_load() {
+    use crate::navegador::{Area, Cat};
+    let mut r = rig();
+    r.app.lock().settings.browser_novo = true;
+    // O primeiro giro só abre (onde parou), sem andar.
+    r.send([0xB6, 0x40, 0x01]);
+    {
+        let mut a = r.app.lock();
+        assert!(a.big_browser);
+        let st: &mut AppState = &mut a;
+        st.nav.tick(&st.lib); // a tela faz isto a cada quadro
+        st.nav.set_cat(&st.lib, Cat::Pastas);
+        st.nav.select(0);
+    }
+    // Girar para cima no começo da lista chega na barra de cima; os pads andam nela.
+    r.send([0xB6, 0x40, 0x7F]);
+    assert_eq!(r.app.lock().nav.area, Area::Top);
+    r.send([0xB6, 0x40, 0x01]);
+    assert_eq!(r.app.lock().nav.area, Area::List, "girar para baixo volta para a lista");
+    // LOAD numa unidade abre ela (não carrega nada).
+    let before = r.app.lock().nav.levels.len();
+    r.send([0x96, 0x46, 0x7F]);
+    assert_eq!(r.app.lock().nav.levels.len(), before + 1);
+    assert!(r.app.lock().big_browser, "continua no browser");
+    // Apertar o BROWSE no "← Voltar" volta.
+    r.app.lock().nav.select(0);
+    r.send([0x96, 0x41, 0x7F]);
+    r.send([0x96, 0x41, 0x00]);
+    assert_eq!(r.app.lock().nav.levels.len(), before);
 }
 
 // --------------------------------------------------------------------- LEDs
