@@ -455,6 +455,23 @@ impl Library {
         }
     }
 
+    /// Clique numa pasta da árvore: seleciona e mostra as músicas dela.
+    pub fn select_folder(&mut self, i: usize) {
+        if i < self.folders.len() {
+            self.folder_sel = i;
+            self.focus = Focus::Folders;
+            self.refresh_tracks();
+        }
+    }
+
+    /// Clique numa música da lista.
+    pub fn select_track(&mut self, i: usize) {
+        if i < self.tracks.len() {
+            self.track_sel = i;
+            self.focus = Focus::Tracks;
+        }
+    }
+
     /// Apertar o BROWSE: entra na lista de músicas da pasta; apertar de novo volta para as pastas.
     pub fn toggle_focus(&mut self) {
         self.focus = match self.focus {

@@ -269,10 +269,8 @@ impl DjOsApp {
             if i.key_pressed(Key::Delete) {
                 a.delete_selected();
             }
-            let nav_on = crate::navegador::is_on(&a);
             if i.modifiers.ctrl && i.key_pressed(Key::S) {
-                let path = if nav_on { a.nav.selected_path() } else { a.lib.selected_path() };
-                if let Some(path) = path {
+                if let Some(path) = a.lib.selected_path() {
                     drop(a);
                     let msg = crate::import::start(&self.app, path);
                     self.app.lock().toast(msg);
@@ -283,48 +281,10 @@ impl DjOsApp {
                 search::open(&mut a);
                 return;
             }
-            // Browser novo aberto: setas andam nele, Enter abre, Backspace volta, Tab troca entre
-            // as categorias e a lista, Esc ou B fecha, 1-4 carregam.
-            if nav_on {
-                use crate::navegador as nav;
-                for (k, d) in [(Key::ArrowUp, -1), (Key::ArrowDown, 1), (Key::PageUp, -12), (Key::PageDown, 12)] {
-                    if i.key_pressed(k) {
-                        nav::scroll(&mut a, d);
-                    }
-                }
-                for (k, d) in [(Key::ArrowLeft, -1), (Key::ArrowRight, 1)] {
-                    if i.key_pressed(k) {
-                        nav::side(&mut a, d);
-                    }
-                }
-                if i.key_pressed(Key::Enter) {
-                    nav::press(&mut a);
-                }
-                if i.key_pressed(Key::Backspace) {
-                    a.nav.back();
-                }
-                if i.key_pressed(Key::Tab) {
-                    a.nav.area = if a.nav.area == nav::Area::List { nav::Area::Cats } else { nav::Area::List };
-                }
-                if i.key_pressed(Key::Escape) || i.key_pressed(Key::B) {
-                    a.big_browser = false;
-                }
-                for (k, d) in [(Key::Num1, 0), (Key::Num2, 1), (Key::Num3, 2), (Key::Num4, 3)] {
-                    if let (true, Some(t)) = (i.key_pressed(k), a.nav.selected_track()) {
-                        self.loader.load_deck(&mut a, d, t.path);
-                        a.big_browser = false;
-                    }
-                }
-                return;
-            }
             if i.key_pressed(Key::ArrowDown) || i.key_pressed(Key::ArrowUp) {
-                // Mexer na lista abre o browser em tela cheia (como girar o BROWSE); o novo abre
-                // onde parou, sem andar.
-                let novo = crate::navegador::enabled(&a);
-                if !(novo && !a.big_browser) {
-                    a.lib.scroll(if i.key_pressed(Key::ArrowDown) { 1 } else { -1 });
-                }
+                // Mexer na lista abre o browser em tela cheia (como girar o BROWSE).
                 a.big_browser = true;
+                a.lib.scroll(if i.key_pressed(Key::ArrowDown) { 1 } else { -1 });
             }
             if i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals) {
                 a.wave_zoom = a.wave_zoom.saturating_sub(1);
@@ -402,8 +362,7 @@ impl DjOsApp {
         let dx = ctx.input(|i| {
             (if i.key_down(Key::ArrowRight) { 1.0 } else { 0.0 }) - (if i.key_down(Key::ArrowLeft) { 1.0 } else { 0.0 })
         });
-        // (No browser novo as setas andam na lista.)
-        if dx != 0.0 && !crate::navegador::is_on(&self.app.lock()) {
+        if dx != 0.0 {
             self.xf = (self.xf + dx * 0.02).clamp(0.0, 1.0);
             self.cmd.send(Cmd::Crossfader(self.xf));
         }
@@ -449,17 +408,6 @@ impl DjOsApp {
             a.lib.reveal(std::path::Path::new(&dir));
             a.lib.focus = crate::library::Focus::Tracks;
             a.lib.track_sel = 3.min(a.lib.tracks.len().saturating_sub(1));
-            let st: &mut crate::app::AppState = &mut a;
-            st.nav.tick(&st.lib);
-            st.nav.reveal(&st.lib, std::path::Path::new(&dir));
-            let sel = st.nav.level().map_or(0, |l| l.sel + 3);
-            st.nav.select(sel);
-            // DJOS_DEMO_CATEGORIA=ARTISTA (etc.): abre essa categoria com a barra de cima em foco.
-            if let Some(c) = std::env::var("DJOS_DEMO_CATEGORIA").ok().and_then(|n| crate::navegador::Cat::ALL.into_iter().find(|c| c.name() == n)) {
-                st.nav.set_cat(&st.lib, c);
-                st.nav.area = crate::navegador::Area::Top;
-                st.nav.top = crate::navegador::TopButton::Preview;
-            }
         }
         // DJOS_DEMO_GRADE: abre o ajuste da grade do deck 1 (teste da tela).
         if self.frame == 100 && std::env::var_os("DJOS_DEMO_GRADE").is_some() {
@@ -1454,10 +1402,6 @@ impl eframe::App for DjOsApp {
                 }
                 a.commit_fx_picks(&self.cmd);
                 a.tick_browse_hold();
-                if crate::navegador::is_on(&a) {
-                    let st: &mut crate::app::AppState = &mut a;
-                    st.nav.tick(&st.lib);
-                }
                 if a.toast.as_ref().is_some_and(|(_, t)| t.elapsed() > Duration::from_secs(3)) {
                     a.toast = None;
                 }
@@ -1614,7 +1558,7 @@ impl eframe::App for DjOsApp {
                 foot.left_center() + vec2(12.0, 0.0),
                 Align2::LEFT_CENTER,
                 if nav_on {
-                    "Browser: setas andam · Enter abre · Backspace volta · Tab categorias/lista · 1-4 ou clicar no deck carrega · dois cliques carrega · Ctrl+F pesquisa · Esc ou B fecha"
+                    "Browser: setas cima/baixo andam · Tab pastas/músicas · Enter abre a pasta · 1-4 ou clicar no deck carrega · dois cliques abre/carrega · Ctrl+F pesquisa · B fecha"
                 } else {
                     "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · F10 configurações · +/- zoom · setas esq/dir crossfader"
                 },

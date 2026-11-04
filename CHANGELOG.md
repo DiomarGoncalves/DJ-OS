@@ -6,6 +6,35 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+## [0.1.4] - 2026-11-03
+
+O browser novo, preto, com a mesma lógica do browser de árvore, e o pendrive do rekordbox.
+
+### Novo
+- **Browser novo** em tela cheia (SHIFT + BROWSE), no visual dos aparelhos de cabine: fundo preto,
+  pastas à esquerda, músicas da pasta à direita (com BPM e tom; o tom fica verde quando combina
+  com a música que está tocando) e os 4 decks embaixo (tempo restante, BPM, tom e a música
+  inteira com os hot cues). A lógica é a do browser de árvore: apertar o BROWSE alterna entre as
+  pastas e as músicas, o LOAD abre a pasta ou carrega a música, segurar o BROWSE pesquisa. A barra
+  de cima do sistema some enquanto ele está aberto. Também com o mouse (clique, dois cliques abre
+  a pasta ou carrega a música, clicar num deck de baixo carrega nele, rodinha). Em CONFIG → TELA:
+  voltar para o browser clássico, colunas de BPM e tom e o tamanho da letra.
+- **Pendrive do rekordbox**: o DJ OS lê o banco do pendrive exportado pelo rekordbox. No browser
+  aparece "📀 rekordbox" com todas as músicas e as playlists (com as pastas delas); nas pastas,
+  nome, artista, BPM e tom vêm do rekordbox. Ao abrir uma música, a grade, o tom e os cues
+  (memory cue, hot cues A-H e loop) são os do rekordbox, sem analisar de novo. O Preparar e o
+  "Analisar todas" também usam. Só leitura: nada é gravado no pendrive.
+
+## [0.1.3] - 2026-11-03
+
+Versão alternativa (branch `browser-categorias`): o browser novo com categorias à esquerda
+(ARTISTA, MÚSICAS, PLAYLIST, HISTÓRICO, PASTAS, FILA, GRAVAÇÕES), para quem prefere esse jeito.
+Tem também o pendrive do rekordbox. A linha principal seguiu na 0.1.4.
+
+## [0.1.2] - 2026-11-03
+
+Slip, aba MIXER, volume da REV1, scratch mais liso e HD/SSD externo na biblioteca.
+
 ### Novo
 - Aba **MIXER** nas configurações (inspirada nos mixers de clube):
   - modo do EQ: isolador (corta tudo no mínimo) ou EQ (até -26 dB);
@@ -16,18 +45,6 @@ para diferenciar firmwares de teste da mesma versão.
 - **Slip** (CONFIG → CONTROLADORA, desligado de fábrica): scratch, backspin e loop "por cima" da
   música; ao soltar o prato ou sair do loop, ela volta onde estaria se tivesse seguido tocando.
   Uma linha tracejada na waveform mostra onde é; a etiqueta SLIP acende enquanto está valendo.
-- **Pendrive do rekordbox**: o DJ OS lê o banco do pendrive exportado pelo rekordbox. No browser
-  aparece "📀 rekordbox" com todas as músicas e as playlists (com as pastas delas); nas pastas,
-  nome, artista, BPM e tom vêm do rekordbox. Ao abrir uma música, a grade, o tom e os cues
-  (memory cue, hot cues A-H e loop) são os do rekordbox, sem analisar de novo. O Preparar e o
-  "Analisar todas" também usam. Só leitura: nada é gravado no pendrive.
-- **Browser novo** em tela cheia, estilo cabine (CONFIG → TELA → Browser em tela cheia: NOVO; em
-  teste): categorias à esquerda (ARTISTA, MÚSICAS, PLAYLIST, HISTÓRICO, PASTAS, FILA, GRAVAÇÕES;
-  ÁLBUM, TOM e COMBINAM em breve), pastas e músicas numa lista só com "← Voltar", dispositivo
-  escolhido na barra de cima (girar o BROWSE para cima até lá; os pads andam nela) e os 4 decks
-  embaixo. Funciona com a REV1, o teclado e o mouse (clique, dois cliques carrega, clicar no deck
-  carrega, rodinha). Abre onde parou e esconde a barra de cima do sistema. Colunas da waveform, BPM
-  e tom e o tamanho da letra nas configurações.
 
 ### Corrigido
 - Som baixo na REV1 mesmo com tudo no máximo: o sistema agora deixa a saída da REV1 em 100%

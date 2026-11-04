@@ -56,7 +56,6 @@ pub struct Settings {
     pub slip: bool,
     /// Browser em tela cheia: o novo (estilo cabine) ou o de árvore; e as colunas do novo.
     pub browser_novo: bool,
-    pub browser_wave: bool,
     pub browser_bpm: bool,
     pub browser_key: bool,
     /// Tamanho da letra do browser novo (índice em BROWSER_FONTS).
@@ -86,8 +85,7 @@ impl Default for Settings {
             xf_side: std::array::from_fn(|d| if d % 2 == 0 { 0 } else { 2 }),
             hp_split: false,
             slip: false,
-            browser_novo: false,
-            browser_wave: true,
+            browser_novo: true,
             browser_bpm: true,
             browser_key: true,
             browser_font: 0,
@@ -140,7 +138,6 @@ impl Settings {
                 "fone_dividido" => s.hp_split = v == "sim",
                 "slip" => s.slip = v == "sim",
                 "browser_novo" => s.browser_novo = v == "sim",
-                "browser_waveform" => s.browser_wave = v != "nao",
                 "browser_bpm" => s.browser_bpm = v != "nao",
                 "browser_tom" => s.browser_key = v != "nao",
                 "browser_letra" => s.browser_font = num(BROWSER_FONTS.len()).unwrap_or(0),
@@ -161,7 +158,7 @@ impl Settings {
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
-             browser_novo={}\nbrowser_waveform={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\n",
+             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -182,7 +179,6 @@ impl Settings {
             yn(self.hp_split),
             yn(self.slip),
             yn(self.browser_novo),
-            yn(self.browser_wave),
             yn(self.browser_bpm),
             yn(self.browser_key),
             self.browser_font
@@ -257,7 +253,6 @@ pub enum Action {
     HpSplit,
     Slip,
     BrowserNovo,
-    BrowserWave,
     BrowserBpm,
     BrowserKey,
     BrowserFont,
@@ -447,8 +442,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Info(format!("Placa de vídeo: {}", if app.gpu.is_empty() { "?" } else { &app.gpu })));
             v.push(Row::Header("BROWSER (SHIFT + BROWSE)"));
             let show = |b: bool| if b { "MOSTRAR" } else { "ESCONDER" }.to_string();
-            v.push(Row::Item { label: "Browser em tela cheia".into(), value: if s.browser_novo { "NOVO (CATEGORIAS)" } else { "ÁRVORE DE PASTAS" }.into(), action: Action::BrowserNovo });
-            v.push(Row::Item { label: "Waveform das músicas (PREVIEW)".into(), value: show(s.browser_wave), action: Action::BrowserWave });
+            v.push(Row::Item { label: "Browser em tela cheia".into(), value: if s.browser_novo { "NOVO (PRETO)" } else { "CLÁSSICO" }.into(), action: Action::BrowserNovo });
             v.push(Row::Item { label: "Coluna do BPM".into(), value: show(s.browser_bpm), action: Action::BrowserBpm });
             v.push(Row::Item { label: "Coluna do tom".into(), value: show(s.browser_key), action: Action::BrowserKey });
             v.push(Row::Item { label: "Tamanho da letra".into(), value: BROWSER_FONTS[s.browser_font].into(), action: Action::BrowserFont });
@@ -592,7 +586,6 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::Keylock => a.settings.keylock = !a.settings.keylock,
         Action::Slip => a.settings.slip = !a.settings.slip,
         Action::BrowserNovo => a.settings.browser_novo = !a.settings.browser_novo,
-        Action::BrowserWave => a.settings.browser_wave = !a.settings.browser_wave,
         Action::BrowserBpm => a.settings.browser_bpm = !a.settings.browser_bpm,
         Action::BrowserKey => a.settings.browser_key = !a.settings.browser_key,
         Action::BrowserFont => a.settings.browser_font = next(a.settings.browser_font, BROWSER_FONTS.len()),
@@ -802,8 +795,7 @@ mod tests {
             xf_side: [1, 2, 0, 1],
             hp_split: true,
             slip: true,
-            browser_novo: true,
-            browser_wave: false,
+            browser_novo: false,
             browser_bpm: false,
             browser_key: false,
             browser_font: 2,
