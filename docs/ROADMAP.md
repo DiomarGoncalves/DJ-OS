@@ -1,7 +1,13 @@
 # Ideias para depois
 
 ## Próxima atualização (combinado em 2026-11-03)
-1. **Zoom da waveform pelo BROWSE**, só com a controladora:
+0. **Qualidade do som (fone e master)** — prioridade. Ele comparou a mesma música no PC e no
+   aparelho e o aparelho soa pior ("não é aquele áudio gostoso"). Suspeitos, medir um a um com WAVs
+   para ele ouvir antes de mudar: ganho automático em -9 LUFS + limitador apertando o tempo todo
+   (som achatado); conversão de taxa 44,1 → 48 kHz com interpolação linear (perde brilho e
+   cria aliasing); keylock ligado; caminho do fone. Comparar com o arquivo original (bit a bit com
+   pitch 0, EQ no meio e ganho automático desligado).
+1. ~~Zoom da waveform pelo BROWSE~~ (feito, firmware de 2026-11-04), só com a controladora:
    - CONFIG → CONTROLADORA → "Girar o BROWSE na tela principal": ABRE O BROWSER (como hoje) ou
      ZOOM DA WAVEFORM. No modo zoom, o browser abre pelo SHIFT + BROWSE (ou apertando o BROWSE).
    - Segurar o BROWSE e girar: zoom da waveform nos dois modos (girar enquanto segura não abre a
@@ -9,7 +15,7 @@
 2. **Preparar, etapa 2**: player com a waveform (play/pause, clicar para pular), hot cues A–H e
    memory cue marcados no PC e gravados no pendrive; no aparelho vale o que foi marcado por último
    (hoje a cópia do próprio aparelho ganha da do pendrive).
-3. **Cores da waveform como as das XDJ** (ele mandou prints da XDJ-AZ): três camadas espelhadas em
+3. ~~Cores da waveform como as das XDJ~~ (feito, firmware de 2026-11-04) (ele mandou prints da XDJ-AZ): três camadas espelhadas em
    volta do meio, azul forte por fora (graves), laranja/âmbar no meio (médios) e creme quase branco
    no centro (agudos), em fundo preto; o que já tocou na visão geral fica mais apagado. Ajustar a
    paleta AZUL/LARANJA (cores e o jeito de empilhar as bandas) na tela principal, nos decks do
