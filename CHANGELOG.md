@@ -18,6 +18,19 @@ para diferenciar firmwares de teste da mesma versão.
     selecionar várias; "Analisar o pendrive" para o que faltar.
 - Lançamento automático: com várias versões publicadas juntas, a de número maior fica como
   "Latest".
+- **Zoom da waveform pelo BROWSE**: segurar o BROWSE e girar aproxima/afasta a waveform (girar
+  enquanto segura não abre a pesquisa). Em CONFIG → CONTROLADORA → "Girar o BROWSE na tela
+  principal": ABRE O BROWSER (como antes) ou ZOOM DA WAVEFORM; no modo zoom o browser abre
+  apertando o BROWSE ou com SHIFT + BROWSE.
+- **Cores da waveform como nos aparelhos de cabine** (paleta AZUL/LARANJA): as três bandas
+  empilhadas a partir do meio, creme (agudo) no centro, âmbar (médio) em volta e azul (grave) por
+  fora, cada uma com a sua grossura.
+- Cues: entre a análise do aparelho e a do pendrive, vale a gravada por último (cues marcados no
+  Preparar depois de a música tocar no aparelho passam a valer).
+
+### Corrigido
+- Waveform sem o agudo no modo leve (placa de vídeo antiga): cortando grave e médio no EQ sobrava
+  uma linha limpa. Agora as três bandas aparecem sempre, e o agudo ficou maior.
 
 ## [0.1.4] - 2026-11-03
 
