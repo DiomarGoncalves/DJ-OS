@@ -235,6 +235,8 @@ fn scan_index(index: Arc<Mutex<Index>>, roots: Vec<PathBuf>, gen: Arc<AtomicU64>
     std::thread::Builder::new()
         .name("indice".into())
         .spawn(move || {
+            // Ler o HD inteiro (milhares de músicas) não atrapalha o som.
+            crate::import::low_priority();
             let mut entries = Vec::new();
             let mut stack: Vec<(PathBuf, usize)> = roots.into_iter().map(|r| (r, 0)).collect();
             while let Some((dir, depth)) = stack.pop() {

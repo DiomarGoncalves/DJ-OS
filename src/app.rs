@@ -255,6 +255,9 @@ impl Loader {
         std::thread::Builder::new()
             .name("carregador".into())
             .spawn(move || {
+                // Abrir e analisar uma música (um set de 50 min leva ~30 s num notebook antigo)
+                // nunca disputa o processador com o som nem com a tela.
+                crate::import::low_priority();
                 for job in rx {
                     match job {
                         Job::Deck { deck, path, resume } => load_deck(&app, &cmd, deck, &path, resume),

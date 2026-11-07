@@ -10,6 +10,8 @@ use crate::shared::{Cmd, CmdTx, NUM_DECKS};
 
 pub const PALETTES: [&str; 3] = ["AZUL/LARANJA", "RGB", "AZUL"];
 pub const SCALES: [f32; 3] = [1.0, 1.15, 1.3];
+/// Folga do som (amostras por bloco a 48 kHz): mais folga, menos risco de estalo.
+pub const AUDIO_BUFFERS: [u32; 3] = [256, 512, 1024];
 /// Girar o BROWSE na tela principal.
 pub const BROWSE_GIRA: [&str; 2] = ["ABRE O BROWSER", "ZOOM DA WAVEFORM"];
 /// Tamanho da letra do browser novo.
@@ -64,6 +66,8 @@ pub struct Settings {
     pub browser_font: usize,
     /// O que girar o BROWSE faz na tela principal (índice em BROWSE_GIRA).
     pub browse_gira: usize,
+    /// Folga do som (índice em AUDIO_BUFFERS).
+    pub audio_buffer: usize,
 }
 
 impl Default for Settings {
@@ -94,6 +98,7 @@ impl Default for Settings {
             browser_key: true,
             browser_font: 0,
             browse_gira: 0,
+            audio_buffer: 1,
         }
     }
 }
@@ -147,6 +152,7 @@ impl Settings {
                 "browser_tom" => s.browser_key = v != "nao",
                 "browser_letra" => s.browser_font = num(BROWSER_FONTS.len()).unwrap_or(0),
                 "browse_gira" => s.browse_gira = num(BROWSE_GIRA.len()).unwrap_or(0),
+                "buffer_som" => s.audio_buffer = num(AUDIO_BUFFERS.len()).unwrap_or(1),
                 _ => {}
             }
         }
@@ -164,7 +170,7 @@ impl Settings {
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
-             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\n",
+             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -188,7 +194,8 @@ impl Settings {
             yn(self.browser_bpm),
             yn(self.browser_key),
             self.browser_font,
-            self.browse_gira
+            self.browse_gira,
+            self.audio_buffer
         )
     }
 
@@ -223,6 +230,7 @@ impl Settings {
         cmd.send(Cmd::AmbientDuck(self.ambient_duck));
         cmd.send(Cmd::LineInRoute(crate::phone::route_target(self.phone_in)));
         cmd.send(Cmd::AutoGain(self.auto_gain));
+        crate::pw_out::BUFFER.store(AUDIO_BUFFERS[self.audio_buffer.min(AUDIO_BUFFERS.len() - 1)], std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -264,6 +272,7 @@ pub enum Action {
     BrowserKey,
     BrowserFont,
     BrowseGira,
+    AudioBuffer,
     Keylock,
     Palette,
     Scale,
@@ -373,6 +382,9 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
                 action: Action::AutoGain,
             });
             v.push(Row::Info(format!("Leva cada música a {:.0} LUFS (de {:+.0} a {:+.0} dB); o TRIM ajusta por cima.", crate::loudness::TARGET_LUFS, crate::loudness::MIN_GAIN_DB, crate::loudness::MAX_GAIN_DB)));
+            let b = AUDIO_BUFFERS[s.audio_buffer.min(AUDIO_BUFFERS.len() - 1)];
+            v.push(Row::Item { label: "Folga do som (contra estalos)".into(), value: format!("{b} ({:.0} ms)", b as f64 / 48.0), action: Action::AudioBuffer });
+            v.push(Row::Info("Estalos ou estática com o computador ocupado: aumente a folga (512 é o normal; 1024 para computador fraco)".into()));
             v.push(Row::Header("GRAVAR O SET (botão GRAVAR na barra de cima ou Ctrl+R)"));
             v.push(Row::Item { label: "Gravar em".into(), value: crate::record::TARGETS[s.rec_target].into(), action: Action::RecTarget });
             v.push(Row::Info("Arquivo WAV na pasta \"records\" (≈11 MB por minuto).".into()));
@@ -600,6 +612,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::BrowserKey => a.settings.browser_key = !a.settings.browser_key,
         Action::BrowserFont => a.settings.browser_font = next(a.settings.browser_font, BROWSER_FONTS.len()),
         Action::BrowseGira => a.settings.browse_gira = next(a.settings.browse_gira, BROWSE_GIRA.len()),
+        Action::AudioBuffer => a.settings.audio_buffer = next(a.settings.audio_buffer, AUDIO_BUFFERS.len()),
         Action::Palette => a.settings.palette = next(a.settings.palette, PALETTES.len()),
         Action::Scale => a.settings.scale = next(a.settings.scale, SCALES.len()),
         Action::AmbientVol => a.settings.ambient_vol = next(a.settings.ambient_vol, AMBIENT_VOLS.len()),
@@ -811,6 +824,7 @@ mod tests {
             browser_key: false,
             browser_font: 2,
             browse_gira: 1,
+            audio_buffer: 2,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

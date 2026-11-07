@@ -13,7 +13,7 @@ use crate::shared::{Cmd, SharedSnap};
 use crate::track::Track;
 use std::ffi::{c_char, c_int, c_void, CString};
 use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -403,6 +403,47 @@ fn pw_dump_checked() -> Option<Vec<serde_json::Value>> {
 /// Vezes seguidas (a cada 3 s) que uma troca de saída precisa ser vista antes de valer.
 const CONFIRM_CHANGE: u32 = 3;
 
+/// Folga do som (amostras por bloco) pedida em CONFIG → ÁUDIO. Mais folga = menos risco de
+/// estalo quando o computador está ocupado; a saída reabre sozinha quando muda.
+pub static BUFFER: AtomicU32 = AtomicU32::new(512);
+
+/// Blocos de som que chegaram atrasados ou que o motor demorou para fazer (contados no último
+/// minuto, para o registro) e o pior tempo de trabalho (µs).
+static ATRASOS: AtomicU32 = AtomicU32::new(0);
+static LENTOS: AtomicU32 = AtomicU32::new(0);
+static PIOR_US: AtomicU32 = AtomicU32::new(0);
+static BLOCO_US: AtomicU32 = AtomicU32::new(0);
+
+/// Temperatura mais alta dos sensores (°C) e a velocidade do processador agora (MHz).
+fn temperatura_e_mhz() -> (Option<i64>, Option<i64>) {
+    let mut t = None;
+    if let Ok(rd) = std::fs::read_dir("/sys/class/thermal") {
+        for z in rd.flatten() {
+            if let Some(v) = std::fs::read_to_string(z.path().join("temp")).ok().and_then(|s| s.trim().parse::<i64>().ok()) {
+                t = t.max(Some(v / 1000));
+            }
+        }
+    }
+    let mhz = std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|c| c.lines().find_map(|l| l.strip_prefix("cpu MHz")).and_then(|v| v.split(':').nth(1)).and_then(|v| v.trim().parse::<f64>().ok()).map(|v| v as i64));
+    (t, mhz)
+}
+
+/// Registro de um minuto: só escreve se o som atrasou ou chegou perto de atrasar.
+fn registrar_atrasos() {
+    let (a, l, pior, bloco) = (ATRASOS.swap(0, Ordering::Relaxed), LENTOS.swap(0, Ordering::Relaxed), PIOR_US.swap(0, Ordering::Relaxed), BLOCO_US.load(Ordering::Relaxed));
+    if a == 0 && l == 0 {
+        return;
+    }
+    let (t, mhz) = temperatura_e_mhz();
+    eprintln!(
+        "[djos] som: {a} atraso(s) e {l} bloco(s) lento(s) no último minuto (pior bloco {:.1} ms de {:.1} ms) · {} · {}",
+        pior as f64 / 1000.0,
+        bloco as f64 / 1000.0,
+        t.map_or("temperatura ?".into(), |t| format!("{t} °C")),
+        mhz.map_or("? MHz".into(), |m| format!("{m} MHz"))
+    );
+}
+
 fn props(o: &serde_json::Value) -> &serde_json::Value {
     &o["info"]["props"]
 }
@@ -577,12 +618,31 @@ type EngineSlot = Arc<parking_lot::Mutex<Option<Engine>>>;
 fn open_main(slot: &EngineSlot, sink: Option<&Sink>) -> Result<(Stream, String), String> {
     let positions = stream_positions(sink);
     let s2 = slot.clone();
-    let render: Render = Box::new(move |out, ch| match s2.try_lock().as_mut().and_then(|g| g.as_mut()) {
-        Some(e) => e.process(out, ch),
-        None => out.iter_mut().for_each(|x| *x = 0.0),
+    let mut ultimo: Option<Instant> = None;
+    let render: Render = Box::new(move |out, ch| {
+        // Mede: o bloco chegou bem depois do esperado (atraso = estalo) ou o motor demorou
+        // perto do tempo do bloco (lento = quase estalou).
+        let agora = Instant::now();
+        let bloco = Duration::from_secs_f64((out.len() / ch.max(1)) as f64 / RATE as f64);
+        if let Some(u) = ultimo {
+            if agora.duration_since(u) > bloco.mul_f64(1.5) + Duration::from_millis(2) {
+                ATRASOS.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        ultimo = Some(agora);
+        match s2.try_lock().as_mut().and_then(|g| g.as_mut()) {
+            Some(e) => e.process(out, ch),
+            None => out.iter_mut().for_each(|x| *x = 0.0),
+        }
+        let trabalho = agora.elapsed();
+        if trabalho > bloco.mul_f64(0.7) {
+            LENTOS.fetch_add(1, Ordering::Relaxed);
+        }
+        PIOR_US.fetch_max(trabalho.as_micros() as u32, Ordering::Relaxed);
+        BLOCO_US.store(bloco.as_micros() as u32, Ordering::Relaxed);
     });
     let target = sink.map(|s| s.name.as_str());
-    let stream = Stream::open("dj-os", "DJ OS", target, &positions, 256, render)?;
+    let stream = Stream::open("dj-os", "DJ OS", target, &positions, BUFFER.load(Ordering::Relaxed).clamp(64, 4096), render)?;
     if let Some(s) = sink.filter(|s| s.rev1) {
         let name = s.name.clone();
         std::thread::spawn(move || rev1_full_volume(&name));
@@ -680,27 +740,38 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
         .spawn(move || {
             // Troca vista nas últimas consultas (nome da saída nova) e quantas vezes seguidas.
             let mut pending: (Option<String>, u32) = (None, 0);
+            let mut voltas = 0u32;
+            let mut aberto_com = BUFFER.load(Ordering::Relaxed);
             loop {
                 std::thread::sleep(Duration::from_secs(3));
+                voltas += 1;
+                if voltas % 20 == 0 {
+                    registrar_atrasos();
+                }
+                // Folga do som mudou em CONFIG: reabre a mesma saída com a folga nova.
+                let quer = BUFFER.load(Ordering::Relaxed);
+                let nova_folga = stream.is_some() && quer != aberto_com;
                 // Consulta que falhou: não sabemos nada, então não mexe no som.
                 let Some(dump) = pw_dump_checked() else { continue };
                 let now = if has_output(&dump) { pick_main(&dump) } else { None };
                 let any = now.is_some();
-                let changed = match &stream {
-                    None => any,
-                    Some(_) => match (&sink, &now) {
-                        (None, None) => false,
-                        (Some(a), Some(b)) => a.name != b.name || (a.rev1 && a.positions.len() < 4 && b.positions.len() >= 4),
-                        _ => true,
-                    },
-                };
+                let changed = nova_folga
+                    || match &stream {
+                        None => any,
+                        Some(_) => match (&sink, &now) {
+                            (None, None) => false,
+                            (Some(a), Some(b)) => a.name != b.name || (a.rev1 && a.positions.len() < 4 && b.positions.len() >= 4),
+                            _ => true,
+                        },
+                    };
                 if !changed {
                     pending = (None, 0);
                     continue;
                 }
+                aberto_com = quer;
                 // Tocando: só fecha ou troca a saída depois de ver a mudança algumas vezes seguidas.
                 // Uma falha de um instante fechava e reabria o som (o "som caindo" no meio do set).
-                if stream.is_some() {
+                if stream.is_some() && !nova_folga {
                     let name = now.as_ref().map(|s| s.name.clone());
                     pending = if pending.0 == name { (name, pending.1 + 1) } else { (name, 1) };
                     if pending.1 < CONFIRM_CHANGE {

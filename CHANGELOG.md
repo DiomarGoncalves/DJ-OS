@@ -6,6 +6,21 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+### Corrigido
+- **Estalos e estática no som depois de um tempo** (fone e master), principalmente ao carregar um
+  set longo (50 min ocupam ~1 GB e levam ~30 s para analisar num notebook antigo) ou com o HD
+  inteiro sendo lido para a pesquisa:
+  - abrir e analisar a música no LOAD e ler o HD agora rodam com prioridade baixa (antes
+    disputavam o processador com o som);
+  - mais folga no som: 512 amostras (10,7 ms) em vez de 256 (5,3 ms). Em CONFIG → ÁUDIO →
+    "Folga do som": 256, 512 ou 1024 (computador fraco); a saída reabre sozinha ao trocar.
+- O registro do aparelho agora anota, a cada minuto, se o som atrasou (e quanto), com a
+  temperatura e a velocidade do processador: dá para ver se foi calor.
+
+### Novo
+- Preparar: analisa mais músicas ao mesmo tempo (núcleos menos 2, até 10, conforme a memória
+  livre); antes eram no máximo 4. Num i5 de 12 núcleos, 12 mil músicas em ~25-30 min.
+
 ## [0.1.5] - 2026-11-06
 
 Som mais aberto, waveform com as cores dos aparelhos de cabine, zoom pelo BROWSE e o DJ OS
