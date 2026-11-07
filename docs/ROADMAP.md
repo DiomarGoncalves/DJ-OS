@@ -1,5 +1,22 @@
 # Ideias para depois
 
+## DJ OS para PC (combinado em 2026-11-07)
+Virar um programa de DJ para qualquer computador (como VirtualDJ, rekordbox, Mixxx), além do
+aparelho. Linux + Windows (Mac depois, sem Mac para testar). Etapas, cada uma funcionando antes
+da próxima:
+
+1. ~~**Modo PC**~~ (feito): no PC o DJ OS não mexe em Wi-Fi, Bluetooth, firmware nem desliga;
+   janela normal maximizada; compila para Windows; AppImage e .exe nas Releases. Falta: escolher
+   a saída de som (placa ou controladora) em CONFIG → ÁUDIO; registro em arquivo no Windows.
+2. **Mapeamento por arquivo**: cada controladora num arquivo (MIDI → ação, LEDs, jog), com MIDI
+   learn; a REV1 vira o primeiro arquivo. Escolher a controladora em CONFIG.
+3. **Controladoras novas** pela documentação oficial pública (MIDI Message List de cada modelo):
+   Pioneer DDJ-400/FLX4, SB3/FLX6/SR2/1000; CDJs/XDJs no modo USB (CDJ-2000NXS2, CDJ-3000,
+   XDJ-RX/XZ); Numark, Hercules (Inpulse), Denon, Reloop. Cada uma "em teste" até alguém com o
+   aparelho confirmar. Os mapeamentos do Mixxx (GPL) servem de referência.
+4. **Skins editáveis por arquivo** (como no VirtualDJ): posição e tamanho de cada parte da tela,
+   cores e fontes; vários prontos (XDJ preto, claro, 2/4 decks); a pessoa edita e compartilha.
+
 ## Próxima atualização (combinado em 2026-11-03)
 0. **Qualidade do som (fone e master)** — prioridade. Ele comparou a mesma música no PC e no
    aparelho e o aparelho soa pior ("não é aquele áudio gostoso"). Suspeitos, medir um a um com WAVs
