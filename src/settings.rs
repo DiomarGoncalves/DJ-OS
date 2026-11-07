@@ -273,6 +273,10 @@ pub enum Action {
     BrowserFont,
     BrowseGira,
     AudioBuffer,
+    AprenderFuncao,
+    AprenderDeck,
+    AprenderAgora,
+    AprenderApagar,
     Keylock,
     Palette,
     Scale,
@@ -304,6 +308,9 @@ pub struct SettingsUi {
     pub wifi_msg: String,
     pub bt_devices: Vec<(String, String)>,
     pub bt_msg: String,
+    /// MIDI learn: função escolhida (índice em midi::aprender::FUNCOES) e deck.
+    pub aprender_funcao: usize,
+    pub aprender_deck: usize,
 }
 
 /// Abas da tela de configurações (estilo XDJ: abas à esquerda, itens à direita).
@@ -459,6 +466,31 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
             v.push(Row::Item { label: "Registrar os botões (diagnóstico, 5 min)".into(), value, action: Action::MidiLog });
             v.push(Row::Info(format!("Controladora: {}", app.midi_status)));
+            // MIDI learn: escolhe a função e o deck, aperta "ensinar" e depois o botão.
+            v.push(Row::Header("ENSINAR BOTÕES (MIDI LEARN)"));
+            match crate::midi::CONECTADA.lock().clone() {
+                None => v.push(Row::Info("Ligue a controladora para ensinar botões.".into())),
+                Some(nome) => {
+                    use crate::midi::aprender::{quantos, ESPERANDO, FUNCOES};
+                    let (fi, deck) = ui.map_or((0, 0), |u| (u.aprender_funcao.min(FUNCOES.len() - 1), u.aprender_deck));
+                    let (texto, _, de_deck) = FUNCOES[fi];
+                    v.push(Row::Item { label: "Função".into(), value: texto.into(), action: Action::AprenderFuncao });
+                    if de_deck {
+                        v.push(Row::Item { label: "Deck".into(), value: format!("{}", deck + 1), action: Action::AprenderDeck });
+                    }
+                    let esperando = ESPERANDO.lock().is_some();
+                    v.push(Row::Item {
+                        label: "Ensinar agora".into(),
+                        value: if esperando { "APERTE O BOTÃO NA CONTROLADORA…".into() } else { String::new() },
+                        action: Action::AprenderAgora,
+                    });
+                    let n = quantos(&nome);
+                    if n > 0 {
+                        v.push(Row::Item { label: format!("Apagar os {n} botões ensinados"), value: confirm(&Action::AprenderApagar, String::new()), action: Action::AprenderApagar });
+                    }
+                    v.push(Row::Info("Os botões ensinados valem por cima do mapeamento. Mapear por arquivo: docs/mapeamento.md".into()));
+                }
+            }
         }
         Tab::Screen => {
             v.push(Row::Item { label: "Decks embaixo da tela".into(), value: if s.four_decks { "OS 4" } else { "SÓ OS 2 DA FRENTE" }.into(), action: Action::FourDecks });
@@ -585,7 +617,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
     let Some(action) = action else { return };
     let mut a = shared.lock();
     // Ações perigosas: só no segundo toque (em até 4 s).
-    if matches!(action, Action::FwInstall(_) | Action::Restart | Action::PowerOff) {
+    if matches!(action, Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar) {
         let Some(u) = a.settings_ui.as_mut() else { return };
         let again = u.armed.as_ref().is_some_and(|(x, t)| *x == action && t.elapsed().as_secs() < 4);
         if !again {
@@ -596,6 +628,12 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         drop(a);
         match action {
             Action::FwInstall(f) => crate::firmware::install(shared, f),
+            Action::AprenderApagar => {
+                if let Some(nome) = crate::midi::CONECTADA.lock().clone() {
+                    crate::midi::aprender::apagar(&nome);
+                    shared.lock().toast("Botões ensinados apagados");
+                }
+            }
             Action::Restart => crate::firmware::power(shared, "reiniciar"),
             _ => crate::firmware::power(shared, "desligar"),
         }
@@ -628,6 +666,27 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::BrowserFont => a.settings.browser_font = next(a.settings.browser_font, BROWSER_FONTS.len()),
         Action::BrowseGira => a.settings.browse_gira = next(a.settings.browse_gira, BROWSE_GIRA.len()),
         Action::AudioBuffer => a.settings.audio_buffer = next(a.settings.audio_buffer, AUDIO_BUFFERS.len()),
+        Action::AprenderFuncao => {
+            if let Some(u) = a.settings_ui.as_mut() {
+                u.aprender_funcao = next(u.aprender_funcao, crate::midi::aprender::FUNCOES.len());
+            }
+            return;
+        }
+        Action::AprenderDeck => {
+            if let Some(u) = a.settings_ui.as_mut() {
+                u.aprender_deck = next(u.aprender_deck, crate::shared::NUM_DECKS);
+            }
+            return;
+        }
+        Action::AprenderAgora => {
+            use crate::midi::aprender::{Pedido, ESPERANDO, FUNCOES};
+            let (Some(nome), Some(u)) = (crate::midi::CONECTADA.lock().clone(), a.settings_ui.as_ref()) else { return };
+            let (_, acao, de_deck) = FUNCOES[u.aprender_funcao.min(FUNCOES.len() - 1)];
+            let acao = if de_deck { format!("{acao} deck={}", u.aprender_deck + 1) } else { acao.to_string() };
+            *ESPERANDO.lock() = Some(Pedido { acao, controladora: nome });
+            a.toast("Aperte o botão (ou mexa no knob) na controladora");
+            return;
+        }
         Action::Palette => a.settings.palette = next(a.settings.palette, PALETTES.len()),
         Action::Scale => a.settings.scale = next(a.settings.scale, SCALES.len()),
         Action::AmbientVol => a.settings.ambient_vol = next(a.settings.ambient_vol, AMBIENT_VOLS.len()),
@@ -669,7 +728,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
             crate::firmware::search(shared);
             return;
         }
-        Action::FwInstall(_) | Action::Restart | Action::PowerOff => return,
+        Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar => return,
         Action::BtScan => {
             drop(a);
             bt_scan(shared);

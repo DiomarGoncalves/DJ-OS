@@ -5,6 +5,7 @@
 //! criar o mapeamento dela (um `Controller`). A DDJ-REV1 tem o mapeamento escrito no código
 //! (`rev1.rs`); as outras vêm de arquivos `.djosmap` (`mapa.rs`, `docs/mapeamento.md`).
 
+pub mod aprender;
 pub mod mapa;
 pub mod rev1;
 #[cfg(test)]
@@ -33,10 +34,15 @@ type Criar = Box<dyn Fn(SharedApp, CmdTx, SharedSnap, Loader) -> Box<dyn Control
 pub struct Model {
     /// Nome mostrado na tela.
     pub name: String,
+    /// Nome sem "(em teste)" (é o do arquivo dos botões ensinados).
+    pub base: String,
     /// A porta MIDI (pelo nome) é desta controladora?
     pub matches: Box<dyn Fn(&str) -> bool + Send + Sync>,
     pub create: Criar,
 }
+
+/// Controladora conectada agora (o nome sem "(em teste)"), para o MIDI learn.
+pub static CONECTADA: Mutex<Option<String>> = Mutex::new(None);
 
 /// Diagnóstico (CONFIG → CONTROLADORA): até quando (segundos desde 1970) cada mensagem que a
 /// controladora manda vai para o registro da sessão.
@@ -59,11 +65,12 @@ pub fn log_left() -> u64 {
 /// Catálogo das controladoras suportadas (a primeira que bater com uma porta ligada é usada): a
 /// REV1 e os mapeamentos por arquivo (os do programa e os da pessoa, relidos a cada conexão).
 pub fn catalogo() -> Vec<Arc<Model>> {
-    let mut v = vec![Arc::new(Model { name: "DDJ-REV1".into(), matches: Box::new(rev1::matches), create: Box::new(rev1::create) })];
+    let mut v = vec![Arc::new(Model { name: "DDJ-REV1".into(), base: "DDJ-REV1".into(), matches: Box::new(rev1::matches), create: Box::new(rev1::create) })];
     for m in mapa::todos() {
         let (a, b) = (m.clone(), m.clone());
         v.push(Arc::new(Model {
             name: if m.situacao == "testado" { m.nome.clone() } else { format!("{} (em teste)", m.nome) },
+            base: m.nome.clone(),
             matches: Box::new(move |p| a.reconhece(p)),
             create: Box::new(move |app, cmd, snap, loader| Box::new(mapa::Mapeado::new(b.clone(), app, cmd, snap, loader))),
         }));
@@ -121,6 +128,7 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
                     if let Some((_, name)) = &conn {
                         if model.as_ref().is_none_or(|m| m.name != *name) {
                             app.lock().midi_status = format!("{name} desconectada");
+                            *CONECTADA.lock() = None;
                             conn = None;
                             *out.lock() = None;
                             *mapping.lock() = None;
@@ -128,7 +136,10 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
                     }
                     match (&conn, model, &found) {
                         (None, Some(m), _) => {
-                            *mapping.lock() = Some((m.create)(app.clone(), cmd.clone(), snap.clone(), loader.clone()));
+                            // O mapeamento dela, com os botões ensinados (MIDI learn) por cima.
+                            let base = (m.create)(app.clone(), cmd.clone(), snap.clone(), loader.clone());
+                            *mapping.lock() = Some(Box::new(aprender::ComAprendidos::new(base, &m.base, app.clone(), cmd.clone(), snap.clone(), loader.clone())));
+                            *CONECTADA.lock() = Some(m.base.clone());
                             match connect(&m, mapping.clone()) {
                                 Ok((i, o)) => {
                                     conn = Some((i, m.name.clone()));

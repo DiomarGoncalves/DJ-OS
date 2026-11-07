@@ -398,3 +398,43 @@ led nota 1 0x02 hotcue deck=1 n=3
     super::mapa::leds(&mapa, &app.lock(), &s, &mut out);
     assert_eq!(out, [(0x90, 0x0B, 0x7F), (0x90, 0x02, 0x7F)]);
 }
+
+#[test]
+fn midi_learn_ensina_por_cima_do_mapeamento() {
+    use super::aprender::{apagar, quantos, ComAprendidos, Pedido, ESPERANDO};
+    /// Mapeamento de base que só anota o que recebeu.
+    struct Base(Arc<Mutex<Vec<u8>>>);
+    impl super::Controller for Base {
+        fn handle(&mut self, msg: &[u8]) {
+            self.0.lock().push(msg[1]);
+        }
+        fn leds(&self, _: &AppState, _: &Snapshot, _: bool, _: &mut Vec<(u8, u8, u8)>) {}
+    }
+    let nome = format!("Teste Learn {}", std::process::id());
+    apagar(&nome);
+    let (tx, mut rx) = rtrb::RingBuffer::new(1024);
+    let cmd = CmdTx::new(tx);
+    let app = Arc::new(Mutex::new(AppState::new()));
+    let snap = Arc::new(Mutex::new(Snapshot::default()));
+    let loader = Loader::start(app.clone(), cmd.clone());
+    let vistos = Arc::new(Mutex::new(Vec::new()));
+    let mut c = ComAprendidos::new(Box::new(Base(vistos.clone())), &nome, app.clone(), cmd, snap, loader);
+    // Pede para ensinar PLAY do deck 2 e aperta o botão 0x10 do canal 3.
+    *ESPERANDO.lock() = Some(Pedido { acao: "play deck=2".into(), controladora: nome.clone() });
+    super::Controller::handle(&mut c, &[0x92, 0x10, 0x7F]);
+    assert!(ESPERANDO.lock().is_none(), "aprendeu");
+    assert!(vistos.lock().is_empty(), "o botão ensinado não vai para o mapeamento de base");
+    assert_eq!(quantos(&nome), 1);
+    super::Controller::handle(&mut c, &[0x82, 0x10, 0x00]); // soltar
+    super::Controller::handle(&mut c, &[0x92, 0x10, 0x7F]);
+    let mut cmds = Vec::new();
+    while let Ok(x) = rx.pop() {
+        cmds.push(format!("{x:?}"));
+    }
+    assert_eq!(cmds, ["PlayToggle(1)"], "agora faz PLAY no deck 2");
+    super::Controller::handle(&mut c, &[0x90, 0x0B, 0x7F]);
+    assert_eq!(*vistos.lock(), [0x0B], "os outros botões continuam com o mapeamento de base");
+    apagar(&nome);
+    super::Controller::handle(&mut c, &[0x92, 0x10, 0x7F]);
+    assert_eq!(*vistos.lock(), [0x0B, 0x10], "apagado: volta ao de base");
+}

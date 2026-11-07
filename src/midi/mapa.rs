@@ -448,11 +448,16 @@ impl Mapeado {
     }
 
     pub fn handle(&mut self, msg: &[u8]) {
-        if msg.len() < 3 {
-            return;
-        }
-        if super::log_left() > 0 {
+        if super::log_left() > 0 && msg.len() >= 3 {
             eprintln!("[midi] {:02X} {:02X} {:02X}", msg[0], msg[1], msg[2]);
+        }
+        self.trata(msg);
+    }
+
+    /// Trata a mensagem se ela está no mapeamento (devolve `false` se não está).
+    pub fn trata(&mut self, msg: &[u8]) -> bool {
+        if msg.len() < 3 {
+            return false;
         }
         let (st, d1, d2) = (msg[0], msg[1], msg[2]);
         let canal = st & 0x0F;
@@ -461,9 +466,9 @@ impl Mapeado {
             0x80 => (Tipo::Nota, d1, 0),
             0xB0 => (Tipo::Cc, d1, d2),
             0xE0 => (Tipo::Pb, 0, d2),
-            _ => return,
+            _ => return false,
         };
-        let Some((e, fina)) = self.achar(tipo, canal, num) else { return };
+        let Some((e, fina)) = self.achar(tipo, canal, num) else { return false };
         // Valor de 0 a 1 (absoluto) e a diferença (encoders).
         let x = match (tipo, e.lsb) {
             (Tipo::Pb, _) => (((d2 as u32) << 7) | d1 as u32) as f32 / 16383.0,
@@ -492,6 +497,7 @@ impl Mapeado {
         };
         let down = v > 0;
         self.executar(&e, down, x, delta);
+        true
     }
 
     fn executar(&mut self, e: &Entrada, down: bool, x: f32, delta: f64) {
