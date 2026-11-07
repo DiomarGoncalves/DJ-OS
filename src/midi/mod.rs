@@ -1,10 +1,11 @@
 //! Conexão com a controladora: reconhece qual está ligada (pelo nome da porta MIDI), reconecta
 //! sozinha e atualiza os LEDs.
 //!
-//! Cada controladora suportada é um `Model` no catálogo `MODELS`: o nome, como reconhecer a porta
-//! e como criar o mapeamento dela (um `Controller`). Para acrescentar uma controladora nova, veja
-//! `docs/controladoras.md`.
+//! Cada controladora suportada é um `Model` no catálogo: o nome, como reconhecer a porta e como
+//! criar o mapeamento dela (um `Controller`). A DDJ-REV1 tem o mapeamento escrito no código
+//! (`rev1.rs`); as outras vêm de arquivos `.djosmap` (`mapa.rs`, `docs/mapeamento.md`).
 
+pub mod mapa;
 pub mod rev1;
 #[cfg(test)]
 mod tests;
@@ -26,13 +27,15 @@ pub trait Controller: Send {
     fn leds(&self, app: &AppState, snap: &Snapshot, blink: bool, out: &mut Vec<(u8, u8, u8)>);
 }
 
+type Criar = Box<dyn Fn(SharedApp, CmdTx, SharedSnap, Loader) -> Box<dyn Controller> + Send + Sync>;
+
 /// Uma controladora suportada.
 pub struct Model {
     /// Nome mostrado na tela.
-    pub name: &'static str,
+    pub name: String,
     /// A porta MIDI (pelo nome) é desta controladora?
-    pub matches: fn(&str) -> bool,
-    pub create: fn(SharedApp, CmdTx, SharedSnap, Loader) -> Box<dyn Controller>,
+    pub matches: Box<dyn Fn(&str) -> bool + Send + Sync>,
+    pub create: Criar,
 }
 
 /// Diagnóstico (CONFIG → CONTROLADORA): até quando (segundos desde 1970) cada mensagem que a
@@ -53,8 +56,20 @@ pub fn log_left() -> u64 {
     LOG_UNTIL.load(std::sync::atomic::Ordering::Relaxed).saturating_sub(now_secs())
 }
 
-/// Catálogo das controladoras suportadas (a primeira que bater com uma porta ligada é usada).
-pub const MODELS: &[Model] = &[Model { name: "DDJ-REV1", matches: rev1::matches, create: rev1::create }];
+/// Catálogo das controladoras suportadas (a primeira que bater com uma porta ligada é usada): a
+/// REV1 e os mapeamentos por arquivo (os do programa e os da pessoa, relidos a cada conexão).
+pub fn catalogo() -> Vec<Arc<Model>> {
+    let mut v = vec![Arc::new(Model { name: "DDJ-REV1".into(), matches: Box::new(rev1::matches), create: Box::new(rev1::create) })];
+    for m in mapa::todos() {
+        let (a, b) = (m.clone(), m.clone());
+        v.push(Arc::new(Model {
+            name: if m.situacao == "testado" { m.nome.clone() } else { format!("{} (em teste)", m.nome) },
+            matches: Box::new(move |p| a.reconhece(p)),
+            create: Box::new(move |app, cmd, snap, loader| Box::new(mapa::Mapeado::new(b.clone(), app, cmd, snap, loader))),
+        }));
+    }
+    v
+}
 
 /// Portas que não são controladoras (do próprio Linux ou do DJ OS).
 fn is_system_port(name: &str) -> bool {
@@ -63,16 +78,16 @@ fn is_system_port(name: &str) -> bool {
 }
 
 /// Controladora ligada agora: o modelo conhecido ou o nome de uma desconhecida.
-fn detect(scanner: &MidiInput) -> Option<Result<&'static Model, String>> {
+fn detect(scanner: &MidiInput, catalogo: &[Arc<Model>]) -> Option<Result<Arc<Model>, String>> {
     let names: Vec<String> = scanner.ports().iter().filter_map(|p| scanner.port_name(p).ok()).collect();
-    detect_names(&names)
+    detect_names(&names, catalogo)
 }
 
-fn detect_names(names: &[String]) -> Option<Result<&'static Model, String>> {
+fn detect_names(names: &[String], catalogo: &[Arc<Model>]) -> Option<Result<Arc<Model>, String>> {
     let names: Vec<&String> = names.iter().filter(|n| !is_system_port(n)).collect();
-    for m in MODELS {
+    for m in catalogo {
         if names.iter().any(|n| (m.matches)(n)) {
-            return Some(Ok(m));
+            return Some(Ok(m.clone()));
         }
     }
     // Primeira parte do nome da porta ("DDJ-400:DDJ-400 MIDI 1 24:0" → "DDJ-400").
@@ -90,16 +105,21 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
         std::thread::Builder::new()
             .name("midi".into())
             .spawn(move || {
-                let mut conn: Option<(MidiInputConnection<()>, &'static str)> = None;
+                let mut conn: Option<(MidiInputConnection<()>, String)> = None;
                 // Um só cliente MIDI para procurar (a lista de portas é relida a cada volta).
                 let scanner = MidiInput::new("dj-os-busca").ok();
                 let mut unknown_seen = String::new();
+                let mut catalogo = catalogo();
                 loop {
-                    let found = scanner.as_ref().and_then(detect);
-                    let model = found.as_ref().and_then(|f| f.as_ref().ok()).copied();
+                    // Sem controladora conectada, relê os arquivos (mapeamento novo ou corrigido).
+                    if conn.is_none() {
+                        catalogo = self::catalogo();
+                    }
+                    let found = scanner.as_ref().and_then(|s| detect(s, &catalogo));
+                    let model = found.as_ref().and_then(|f| f.as_ref().ok()).cloned();
                     // A controladora conectada saiu (ou trocou por outra).
                     if let Some((_, name)) = &conn {
-                        if model.is_none_or(|m| m.name != *name) {
+                        if model.as_ref().is_none_or(|m| m.name != *name) {
                             app.lock().midi_status = format!("{name} desconectada");
                             conn = None;
                             *out.lock() = None;
@@ -109,9 +129,9 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
                     match (&conn, model, &found) {
                         (None, Some(m), _) => {
                             *mapping.lock() = Some((m.create)(app.clone(), cmd.clone(), snap.clone(), loader.clone()));
-                            match connect(m, mapping.clone()) {
+                            match connect(&m, mapping.clone()) {
                                 Ok((i, o)) => {
-                                    conn = Some((i, m.name));
+                                    conn = Some((i, m.name.clone()));
                                     *out.lock() = Some(o);
                                     cache.lock().clear();
                                     app.lock().midi_status = format!("{} conectada", m.name);

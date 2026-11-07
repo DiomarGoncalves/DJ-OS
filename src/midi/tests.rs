@@ -312,11 +312,12 @@ fn leds_refletem_o_estado() {
 #[test]
 fn reconhece_a_controladora_pelo_nome_da_porta() {
     let n = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    let rev1 = super::detect_names(&n(&["Midi Through:Midi Through Port-0 14:0", "DDJ-REV1:DDJ-REV1 MIDI 1 28:0"]));
-    assert_eq!(rev1.and_then(|r| r.ok()).map(|m| m.name), Some("DDJ-REV1"));
-    let outra = super::detect_names(&n(&["DDJ-400:DDJ-400 MIDI 1 24:0"]));
-    assert_eq!(outra.and_then(|r| r.err()).as_deref(), Some("DDJ-400"), "desconhecida: mostra o nome");
-    assert!(super::detect_names(&n(&["Midi Through:Midi Through Port-0 14:0"])).is_none(), "só portas do sistema");
+    let cat = super::catalogo();
+    let rev1 = super::detect_names(&n(&["Midi Through:Midi Through Port-0 14:0", "DDJ-REV1:DDJ-REV1 MIDI 1 28:0"]), &cat);
+    assert_eq!(rev1.and_then(|r| r.ok()).map(|m| m.name.clone()).as_deref(), Some("DDJ-REV1"));
+    let outra = super::detect_names(&n(&["XYZ-9000:XYZ-9000 MIDI 1 24:0"]), &cat);
+    assert_eq!(outra.and_then(|r| r.err()).as_deref(), Some("XYZ-9000"), "desconhecida: mostra o nome");
+    assert!(super::detect_names(&n(&["Midi Through:Midi Through Port-0 14:0"]), &cat).is_none(), "só portas do sistema");
 }
 
 #[test]
@@ -335,4 +336,65 @@ fn medidor_dos_canais() {
     for (st, v) in [(0xB0, 127), (0xB2, 127), (0xB1, 0), (0xB3, 0)] {
         assert!(out.contains(&(st, 0x02, v)), "{st:02X} 02 {v}");
     }
+}
+
+// ------------------------------------------------------- mapeamento por arquivo
+
+#[test]
+fn controladora_mapeada_por_arquivo() {
+    let texto = "\
+nome = Teste
+porta = TESTE
+nota 1 0x0B play deck=1
+nota 1 0x0B pitch_zero deck=1 shift
+nota 7 0x3F shift
+cc 1 0x13 volume deck=1 lsb=0x33
+cc 1 0x22 jog_scratch deck=1
+cc 7 0x40 browse_gira
+pb 2 tempo deck=2 invertido
+nota 1 0x00 pad deck=1 n=3
+nota 1 0x14 loop_auto deck=1 b=4
+led nota 1 0x0B tocando deck=1
+led nota 1 0x02 hotcue deck=1 n=3
+";
+    let mapa = Arc::new(super::mapa::ler(texto).unwrap());
+    let (tx, mut rx) = rtrb::RingBuffer::new(1024);
+    let cmd = CmdTx::new(tx);
+    let app = Arc::new(Mutex::new(AppState::new()));
+    let snap = Arc::new(Mutex::new(Snapshot::default()));
+    let loader = Loader::start(app.clone(), cmd.clone());
+    let mut m = super::mapa::Mapeado::new(mapa.clone(), app.clone(), cmd, snap.clone(), loader);
+    let mut send = |msg: [u8; 3]| {
+        m.handle(&msg);
+        let mut out = Vec::new();
+        while let Ok(c) = rx.pop() {
+            out.push(format!("{c:?}"));
+        }
+        out
+    };
+    assert_eq!(send([0x90, 0x0B, 0x7F]), ["PlayToggle(0)"]);
+    assert!(send([0x80, 0x0B, 0x00]).is_empty(), "soltar o play não faz nada");
+    // SHIFT segurado: a linha marcada com shift vale no lugar da normal.
+    assert!(send([0x96, 0x3F, 0x7F]).is_empty());
+    assert_eq!(send([0x90, 0x0B, 0x7F]), ["PitchReset(0)"]);
+    send([0x96, 0x3F, 0x00]);
+    // 14 bits: MSB e LSB.
+    send([0xB0, 0x13, 0x40]);
+    assert_eq!(send([0xB0, 0x33, 0x00]), [format!("Fader {{ deck: 0, v: {:?} }}", (0x40u32 << 7) as f32 / 16383.0)]);
+    // Jog (meio em 64) e pitch bend invertido.
+    assert_eq!(send([0xB0, 0x22, 0x43]), ["JogScratch { deck: 0, ticks: 3.0 }"]);
+    assert_eq!(send([0xE1, 0x00, 0x00]), ["Tempo { deck: 1, v: 1.0 }"]);
+    assert_eq!(send([0x90, 0x14, 0x7F]), ["LoopAuto { deck: 0, beats: 4.0 }"]);
+    // Pad 3 no modo hot cue.
+    assert_eq!(send([0x90, 0x00, 0x7F]), ["Hotcue { deck: 0, idx: 2, down: true }"]);
+    // BROWSE girado: abre o browser.
+    send([0xB6, 0x40, 0x01]);
+    assert!(app.lock().big_browser);
+    // LEDs: tocando e hot cue 3 marcado.
+    let mut s = Snapshot::default();
+    s.decks[0].playing = true;
+    s.decks[0].hotcues[2] = Some(100.0);
+    let mut out = Vec::new();
+    super::mapa::leds(&mapa, &app.lock(), &s, &mut out);
+    assert_eq!(out, [(0x90, 0x0B, 0x7F), (0x90, 0x02, 0x7F)]);
 }
