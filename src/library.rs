@@ -663,8 +663,9 @@ impl Library {
 mod tests {
     use super::*;
 
-    fn fixture() -> PathBuf {
-        let base = std::env::temp_dir().join(format!("dj-os-lib-{}", std::process::id()));
+    /// Pasta de teste própria de cada teste (eles rodam ao mesmo tempo).
+    fn fixture(nome: &str) -> PathBuf {
+        let base = std::env::temp_dir().join(format!("dj-os-lib-{nome}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         for (dir, files) in [
             ("Funk", vec!["MC Kevin O Chris - Évoluiu.mp3", "DJ Ávila - Batidão.mp3"]),
@@ -699,7 +700,7 @@ mod tests {
 
     #[test]
     fn arvore_abre_e_fecha_subpastas() {
-        let base = fixture();
+        let base = fixture("t1");
         let mut lib = Library::with_roots(vec![base.clone()]);
         assert!(lib.folders[0].has_children);
         lib.open_selected();
@@ -723,7 +724,7 @@ mod tests {
 
     #[test]
     fn pesquisa_em_todas_as_pastas() {
-        let base = fixture();
+        let base = fixture("t2");
         let mut lib = Library::with_roots(vec![base.clone()]);
         wait_index(&lib);
         assert_eq!(lib.count_matches("mc"), 2);
