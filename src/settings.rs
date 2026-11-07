@@ -68,6 +68,9 @@ pub struct Settings {
     pub browse_gira: usize,
     /// Folga do som (índice em AUDIO_BUFFERS).
     pub audio_buffer: usize,
+    /// Saída do som escolhida (vazio = automática) e o nome dela para mostrar.
+    pub saida_som: String,
+    pub saida_som_nome: String,
 }
 
 impl Default for Settings {
@@ -99,6 +102,8 @@ impl Default for Settings {
             browser_font: 0,
             browse_gira: 0,
             audio_buffer: 1,
+            saida_som: String::new(),
+            saida_som_nome: String::new(),
         }
     }
 }
@@ -153,6 +158,8 @@ impl Settings {
                 "browser_letra" => s.browser_font = num(BROWSER_FONTS.len()).unwrap_or(0),
                 "browse_gira" => s.browse_gira = num(BROWSE_GIRA.len()).unwrap_or(0),
                 "buffer_som" => s.audio_buffer = num(AUDIO_BUFFERS.len()).unwrap_or(1),
+                "saida_som" => s.saida_som = v.to_string(),
+                "saida_som_nome" => s.saida_som_nome = v.to_string(),
                 _ => {}
             }
         }
@@ -170,7 +177,7 @@ impl Settings {
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
-             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\n",
+             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\nsaida_som={}\nsaida_som_nome={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -195,7 +202,9 @@ impl Settings {
             yn(self.browser_key),
             self.browser_font,
             self.browse_gira,
-            self.audio_buffer
+            self.audio_buffer,
+            self.saida_som,
+            self.saida_som_nome
         )
     }
 
@@ -230,6 +239,7 @@ impl Settings {
         cmd.send(Cmd::AmbientDuck(self.ambient_duck));
         cmd.send(Cmd::LineInRoute(crate::phone::route_target(self.phone_in)));
         cmd.send(Cmd::AutoGain(self.auto_gain));
+        *crate::pw_out::PREFERIDA.lock() = self.saida_som.clone();
         crate::pw_out::BUFFER.store(AUDIO_BUFFERS[self.audio_buffer.min(AUDIO_BUFFERS.len() - 1)], std::sync::atomic::Ordering::Relaxed);
     }
 }
@@ -273,6 +283,7 @@ pub enum Action {
     BrowserFont,
     BrowseGira,
     AudioBuffer,
+    SaidaSom,
     AprenderFuncao,
     AprenderDeck,
     AprenderAgora,
@@ -401,6 +412,9 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             let b = AUDIO_BUFFERS[s.audio_buffer.min(AUDIO_BUFFERS.len() - 1)];
             v.push(Row::Item { label: "Folga do som (contra estalos)".into(), value: format!("{b} ({:.0} ms)", b as f64 / 48.0), action: Action::AudioBuffer });
             v.push(Row::Info("Estalos ou estática com o computador ocupado: aumente a folga (512 é o normal; 1024 para computador fraco)".into()));
+            let saida = if s.saida_som.is_empty() { "AUTOMÁTICA (controladora ou placa)".to_string() } else { s.saida_som_nome.clone() };
+            v.push(Row::Item { label: "Saída do som".into(), value: saida, action: Action::SaidaSom });
+            v.push(Row::Info("Automática: a controladora (master 1-2, fone 3-4) ou, sem ela, a placa do computador.".into()));
             v.push(Row::Header("GRAVAR O SET (botão GRAVAR na barra de cima ou Ctrl+R)"));
             v.push(Row::Item { label: "Gravar em".into(), value: crate::record::TARGETS[s.rec_target].into(), action: Action::RecTarget });
             v.push(Row::Info("Arquivo WAV na pasta \"records\" (≈11 MB por minuto).".into()));
@@ -666,6 +680,14 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::BrowserFont => a.settings.browser_font = next(a.settings.browser_font, BROWSER_FONTS.len()),
         Action::BrowseGira => a.settings.browse_gira = next(a.settings.browse_gira, BROWSE_GIRA.len()),
         Action::AudioBuffer => a.settings.audio_buffer = next(a.settings.audio_buffer, AUDIO_BUFFERS.len()),
+        Action::SaidaSom => {
+            // Automática → cada saída ligada → automática.
+            let lista: Vec<(String, String)> = std::iter::once((String::new(), String::new())).chain(crate::audio_out::saidas()).collect();
+            let i = lista.iter().position(|(n, _)| *n == a.settings.saida_som).unwrap_or(0);
+            let (n, nome) = lista[next(i, lista.len())].clone();
+            a.settings.saida_som = n;
+            a.settings.saida_som_nome = nome;
+        }
         Action::AprenderFuncao => {
             if let Some(u) = a.settings_ui.as_mut() {
                 u.aprender_funcao = next(u.aprender_funcao, crate::midi::aprender::FUNCOES.len());
@@ -899,6 +921,8 @@ mod tests {
             browser_font: 2,
             browse_gira: 1,
             audio_buffer: 2,
+            saida_som: "alsa_output.usb-Pioneer_DDJ-400".into(),
+            saida_som_nome: "DDJ-400".into(),
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

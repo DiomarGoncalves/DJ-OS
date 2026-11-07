@@ -98,6 +98,16 @@ fn build(
     }
 }
 
+/// Saídas de som para escolher em CONFIG → ÁUDIO: (nome usado para achar, nome para mostrar).
+/// Com PipeWire, as dele; sem (Windows), as da placa de som do sistema.
+pub fn saidas() -> Vec<(String, String)> {
+    let pw = crate::pw_out::saidas();
+    if !pw.is_empty() {
+        return pw;
+    }
+    cpal::default_host().output_devices().map(|ds| ds.filter_map(|d| d.name().ok()).map(|n| (n.clone(), n)).collect()).unwrap_or_default()
+}
+
 pub fn start(
     cmds: rtrb::Consumer<Cmd>,
     trash: rtrb::Producer<Arc<Track>>,
@@ -121,6 +131,8 @@ pub fn start(
         }
     }
 
+    // Sem PipeWire (Windows): a saída escolhida em CONFIG → ÁUDIO vale como o nome pedido.
+    let wanted = wanted.or_else(|| Some(crate::pw_out::PREFERIDA.lock().to_lowercase()).filter(|p| !p.is_empty()));
     let host = cpal::default_host();
     let devices: Vec<Device> = host.output_devices().map_err(|e| e.to_string())?.collect();
     let name_of = |d: &Device| d.name().unwrap_or_default();

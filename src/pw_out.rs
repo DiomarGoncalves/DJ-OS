@@ -457,6 +457,39 @@ fn is_rev1(text: &str) -> bool {
     t.contains("REV1") || t.contains("DDJ")
 }
 
+/// Placa de som de controladora de DJ (de outras marcas e das XDJ/CDJ): com 4 canais, master
+/// nas saídas 1-2 e fone nas 3-4, como na REV1.
+fn is_controladora(text: &str) -> bool {
+    let t = text.to_uppercase();
+    ["XDJ", "CDJ", "MIXTRACK", "DJCONTROL", "INPULSE", "MC7000", "MC6000", "MC4000", "MIXON", "BEATMIX", "PARTY MIX", "DJ CONTROLLER"].iter().any(|k| t.contains(k))
+}
+
+/// Saída escolhida em CONFIG → ÁUDIO (o nome do nó no PipeWire; vazio = automática).
+pub static PREFERIDA: parking_lot::Mutex<String> = parking_lot::const_mutex(String::new());
+
+/// Saídas de som que dá para escolher: (nome do nó, nome para mostrar).
+pub fn saidas() -> Vec<(String, String)> {
+    pw_dump()
+        .iter()
+        .filter(|o| prop(o, "media.class") == "Audio/Sink" && prop(o, "node.name").starts_with("alsa_output"))
+        .map(|o| (prop(o, "node.name").to_string(), [prop(o, "node.description"), prop(o, "node.nick"), prop(o, "node.name")].into_iter().find(|t| !t.is_empty()).unwrap_or("").to_string()))
+        .collect()
+}
+
+/// A saída escolhida na mão, se ela estiver ligada.
+fn find_pref_in(dump: &[serde_json::Value], pref: &str) -> Option<Sink> {
+    dump.iter().find(|o| prop(o, "media.class") == "Audio/Sink" && prop(o, "node.name") == pref).map(|o| {
+        let positions: Vec<String> = prop(o, "audio.position").split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
+        Sink {
+            name: prop(o, "node.name").to_string(),
+            // 4 canais ou mais: master 1-2, fone 3-4.
+            rev1: positions.len() >= 4,
+            positions,
+            label: [prop(o, "node.description"), prop(o, "node.nick")].into_iter().find(|t| !t.is_empty()).unwrap_or("placa de som").to_string(),
+        }
+    })
+}
+
 /// Saídas de áudio do PipeWire cujo nome começa com `prefix`.
 pub fn find_sinks(prefix: &str) -> Vec<String> {
     pw_dump()
@@ -478,12 +511,12 @@ struct Sink {
 
 fn find_rev1_in(dump: &[serde_json::Value]) -> Option<Sink> {
     dump.iter()
-        .filter(|o| prop(o, "media.class") == "Audio/Sink" && prop(o, "node.name").starts_with("alsa_output") && is_rev1(prop(o, "node.name")))
+        .filter(|o| prop(o, "media.class") == "Audio/Sink" && prop(o, "node.name").starts_with("alsa_output") && (is_rev1(prop(o, "node.name")) || is_controladora(prop(o, "node.name")) || is_controladora(prop(o, "node.description"))))
         .map(|o| Sink {
             name: prop(o, "node.name").to_string(),
             positions: prop(o, "audio.position").split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect(),
             rev1: true,
-            label: "DDJ-REV1".into(),
+            label: if is_rev1(prop(o, "node.name")) && prop(o, "node.name").to_uppercase().contains("REV1") { "DDJ-REV1".into() } else { [prop(o, "node.description"), prop(o, "node.nick")].into_iter().find(|t| !t.is_empty()).unwrap_or("controladora").to_string() },
         })
         // Com mais de uma saída (perfil com várias), a de mais canais.
         .max_by_key(|s| s.positions.len())
@@ -493,7 +526,7 @@ fn find_rev1_in(dump: &[serde_json::Value]) -> Option<Sink> {
 /// o master pelo fluxo próprio dela, e mandar também por aqui duplicaria o som (eco).
 fn find_wired_in(dump: &[serde_json::Value]) -> Option<Sink> {
     dump.iter()
-        .filter(|o| prop(o, "media.class") == "Audio/Sink" && prop(o, "node.name").starts_with("alsa_output") && !is_rev1(prop(o, "node.name")))
+        .filter(|o| prop(o, "media.class") == "Audio/Sink" && prop(o, "node.name").starts_with("alsa_output") && !is_rev1(prop(o, "node.name")) && !is_controladora(prop(o, "node.name")))
         .max_by_key(|o| props(o)["priority.session"].as_i64().unwrap_or(0))
         .map(|o| Sink {
             name: prop(o, "node.name").to_string(),
@@ -505,7 +538,8 @@ fn find_wired_in(dump: &[serde_json::Value]) -> Option<Sink> {
 
 /// Saída do master: a REV1 ou, sem ela, uma placa de som com fio.
 fn pick_main(dump: &[serde_json::Value]) -> Option<Sink> {
-    find_rev1_in(dump).or_else(|| find_wired_in(dump))
+    let pref = PREFERIDA.lock().clone();
+    (!pref.is_empty()).then(|| find_pref_in(dump, &pref)).flatten().or_else(|| find_rev1_in(dump)).or_else(|| find_wired_in(dump))
 }
 
 /// Perfil da placa da REV1 com 4 saídas: "pro audio" (canais diretos) ou "surround 4.0".
@@ -605,8 +639,8 @@ fn stream_positions(sink: Option<&Sink>) -> Vec<u32> {
 
 fn describe(sink: Option<&Sink>, channels: usize) -> String {
     match sink {
-        Some(s) if s.rev1 && channels >= 4 => format!("PipeWire · DDJ-REV1 · master 1-2, fone 3-4 ({})", s.positions.join(",")),
-        Some(s) if s.rev1 => format!("DDJ-REV1 com {} canais: FONE SEM SOM (só master)", s.positions.len()),
+        Some(s) if s.rev1 && channels >= 4 => format!("PipeWire · {} · master 1-2, fone 3-4 ({})", s.label, s.positions.join(",")),
+        Some(s) if s.rev1 => format!("{} com {} canais: FONE SEM SOM (só master)", s.label, s.positions.len()),
         Some(s) => format!("PipeWire · {} (sem a REV1)", s.label),
         None => NO_OUTPUT.to_string(),
     }
@@ -716,7 +750,8 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
     let mut stream = None;
     let mut silent = None;
     let desc = if has_output(&dump) {
-        sink = prepare_rev1().or_else(|| pick_main(&dump));
+        // Saída escolhida em CONFIG vale primeiro; senão a REV1 (no perfil de 4 canais) ou outra.
+        sink = if PREFERIDA.lock().is_empty() { prepare_rev1().or_else(|| pick_main(&dump)) } else { pick_main(&dump) };
         match open_main(&slot, sink.as_ref()) {
             Ok((s, d)) => {
                 stream = Some(s);
@@ -742,6 +777,7 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
             let mut pending: (Option<String>, u32) = (None, 0);
             let mut voltas = 0u32;
             let mut aberto_com = BUFFER.load(Ordering::Relaxed);
+            let mut saida_pedida = PREFERIDA.lock().clone();
             loop {
                 std::thread::sleep(Duration::from_secs(3));
                 voltas += 1;
@@ -750,7 +786,9 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
                 }
                 // Folga do som mudou em CONFIG: reabre a mesma saída com a folga nova.
                 let quer = BUFFER.load(Ordering::Relaxed);
-                let nova_folga = stream.is_some() && quer != aberto_com;
+                let quer_saida = PREFERIDA.lock().clone();
+                // Folga ou saída escolhida mudaram em CONFIG: reabre (sem esperar confirmar).
+                let nova_folga = stream.is_some() && (quer != aberto_com || quer_saida != saida_pedida);
                 // Consulta que falhou: não sabemos nada, então não mexe no som.
                 let Some(dump) = pw_dump_checked() else { continue };
                 let now = if has_output(&dump) { pick_main(&dump) } else { None };
@@ -769,6 +807,7 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
                     continue;
                 }
                 aberto_com = quer;
+                saida_pedida = quer_saida;
                 // Tocando: só fecha ou troca a saída depois de ver a mudança algumas vezes seguidas.
                 // Uma falha de um instante fechava e reabria o som (o "som caindo" no meio do set).
                 if stream.is_some() && !nova_folga {
@@ -793,7 +832,8 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
                 if let Some(c) = silent.take() {
                     c.stop();
                 }
-                let next = if now.as_ref().is_some_and(|s| s.rev1) { prepare_rev1().or(now) } else { now };
+                let e_rev1 = now.as_ref().is_some_and(|s| s.rev1 && s.name.to_uppercase().contains("REV1"));
+                let next = if e_rev1 { prepare_rev1().or(now) } else { now };
                 eprintln!("[djos] saída mudou: {:?} → {:?}", sink.as_ref().map(|s| &s.name), next.as_ref().map(|s| &s.name));
                 // Se a REV1 não abrir, fica na placa com fio e tenta de novo na próxima volta.
                 let opened = match open_main(&slot, next.as_ref()) {
