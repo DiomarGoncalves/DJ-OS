@@ -71,6 +71,8 @@ pub struct Settings {
     /// Saída do som escolhida (vazio = automática) e o nome dela para mostrar.
     pub saida_som: String,
     pub saida_som_nome: String,
+    /// Skin da tela (nome; vazio = a de fábrica).
+    pub skin: String,
 }
 
 impl Default for Settings {
@@ -104,6 +106,7 @@ impl Default for Settings {
             audio_buffer: 1,
             saida_som: String::new(),
             saida_som_nome: String::new(),
+            skin: String::new(),
         }
     }
 }
@@ -160,6 +163,7 @@ impl Settings {
                 "buffer_som" => s.audio_buffer = num(AUDIO_BUFFERS.len()).unwrap_or(1),
                 "saida_som" => s.saida_som = v.to_string(),
                 "saida_som_nome" => s.saida_som_nome = v.to_string(),
+                "skin" => s.skin = v.to_string(),
                 _ => {}
             }
         }
@@ -177,7 +181,7 @@ impl Settings {
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
-             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\nsaida_som={}\nsaida_som_nome={}\n",
+             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\nsaida_som={}\nsaida_som_nome={}\nskin={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -204,7 +208,8 @@ impl Settings {
             self.browse_gira,
             self.audio_buffer,
             self.saida_som,
-            self.saida_som_nome
+            self.saida_som_nome,
+            self.skin
         )
     }
 
@@ -284,6 +289,7 @@ pub enum Action {
     BrowseGira,
     AudioBuffer,
     SaidaSom,
+    Skin,
     AprenderFuncao,
     AprenderDeck,
     AprenderAgora,
@@ -508,6 +514,8 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
         }
         Tab::Screen => {
             v.push(Row::Item { label: "Decks embaixo da tela".into(), value: if s.four_decks { "OS 4" } else { "SÓ OS 2 DA FRENTE" }.into(), action: Action::FourDecks });
+            v.push(Row::Item { label: "Skin (cores e layout)".into(), value: if s.skin.is_empty() { "DE FÁBRICA (PRETA)".into() } else { s.skin.to_uppercase() }, action: Action::Skin });
+            v.push(Row::Info("Skins prontas e as suas em ~/DJOS/skins (como fazer: docs/skins.md)".into()));
             v.push(Row::Item { label: "Cores da waveform".into(), value: PALETTES[s.palette].into(), action: Action::Palette });
             v.push(Row::Item { label: "Tamanho da tela".into(), value: format!("{:.0}%", SCALES[s.scale] * 100.0), action: Action::Scale });
             let auto_on = crate::ui::weak_gpu(&app.gpu);
@@ -680,6 +688,13 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::BrowserFont => a.settings.browser_font = next(a.settings.browser_font, BROWSER_FONTS.len()),
         Action::BrowseGira => a.settings.browse_gira = next(a.settings.browse_gira, BROWSE_GIRA.len()),
         Action::AudioBuffer => a.settings.audio_buffer = next(a.settings.audio_buffer, AUDIO_BUFFERS.len()),
+        Action::Skin => {
+            // Relê os arquivos (a pessoa pode ter editado) e passa para a próxima skin.
+            crate::ui::skin::recarregar();
+            let nomes: Vec<String> = std::iter::once(String::new()).chain(crate::ui::skin::todas().into_iter().map(|(n, _)| n)).collect();
+            let i = nomes.iter().position(|n| *n == a.settings.skin).unwrap_or(0);
+            a.settings.skin = nomes[next(i, nomes.len())].clone();
+        }
         Action::SaidaSom => {
             // Automática → cada saída ligada → automática.
             let lista: Vec<(String, String)> = std::iter::once((String::new(), String::new())).chain(crate::audio_out::saidas()).collect();
@@ -923,6 +938,7 @@ mod tests {
             audio_buffer: 2,
             saida_som: "alsa_output.usb-Pioneer_DDJ-400".into(),
             saida_som_nome: "DDJ-400".into(),
+            skin: "Clara".into(),
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

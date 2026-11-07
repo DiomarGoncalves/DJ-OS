@@ -27,34 +27,47 @@ use std::sync::Arc;
 
 mod navegador;
 
-// ---- cores (sóbrias: preto, cinzas, branco; cor só onde informa algo) ----
-pub(super) const K_BG: Color32 = Color32::from_rgb(0, 0, 0);
-pub(super) const K_PANEL: Color32 = Color32::from_rgb(14, 15, 17);
-const K_PANEL2: Color32 = Color32::from_rgb(26, 27, 31);
-const K_LINE: Color32 = Color32::from_rgb(52, 54, 60);
-const K_TEXT: Color32 = Color32::from_rgb(236, 236, 236);
-const K_DIM: Color32 = Color32::from_rgb(128, 130, 136);
-const K_BLUE: Color32 = Color32::from_rgb(30, 140, 255);
-const K_ORANGE: Color32 = Color32::from_rgb(255, 140, 20);
-const K_RED: Color32 = Color32::from_rgb(230, 30, 40);
-const K_GREEN: Color32 = Color32::from_rgb(60, 210, 90);
+// ---- cores: da skin em uso (`ui/skin.rs`; a de fábrica é preta, cor só onde informa algo) ----
+pub(super) fn k_bg() -> Color32 {
+    super::skin::atual().fundo
+}
+pub(super) fn k_panel() -> Color32 {
+    super::skin::atual().painel
+}
+fn k_panel2() -> Color32 {
+    super::skin::atual().painel2
+}
+fn k_line() -> Color32 {
+    super::skin::atual().linha
+}
+fn k_text() -> Color32 {
+    super::skin::atual().texto
+}
+fn k_dim() -> Color32 {
+    super::skin::atual().apagado
+}
+fn k_blue() -> Color32 {
+    super::skin::atual().destaque
+}
+fn k_orange() -> Color32 {
+    super::skin::atual().laranja
+}
+fn k_red() -> Color32 {
+    super::skin::atual().vermelho
+}
+fn k_green() -> Color32 {
+    super::skin::atual().verde
+}
 
-/// Cores dos hot cues A–H.
-pub(super) const CUE_COLORS: [Color32; 8] = [
-    Color32::from_rgb(235, 60, 60),
-    Color32::from_rgb(40, 190, 230),
-    Color32::from_rgb(70, 205, 80),
-    Color32::from_rgb(140, 80, 245),
-    Color32::from_rgb(130, 220, 60),
-    Color32::from_rgb(255, 130, 30),
-    Color32::from_rgb(50, 95, 255),
-    Color32::from_rgb(240, 205, 40),
-];
+/// Cor do hot cue `i` (A–H).
+pub(super) fn cue_cor(i: usize) -> Color32 {
+    super::skin::atual().cues[i % 8]
+}
 const CUE_LETTERS: [&str; 8] = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 /// Cor de cada deck (faixa lateral, número).
 fn deck_tint(d: usize) -> Color32 {
-    [Color32::from_rgb(30, 140, 255), Color32::from_rgb(255, 140, 20), Color32::from_rgb(170, 90, 255), Color32::from_rgb(40, 200, 150)][d % 4]
+    super::skin::atual().decks[d % 4]
 }
 
 /// Cores da waveform (grave, médio, agudo) conforme a paleta escolhida em CONFIG → TELA.
@@ -62,8 +75,8 @@ fn band_colors() -> [Color32; 3] {
     match super::PALETTE.load(std::sync::atomic::Ordering::Relaxed) {
         1 => [Color32::from_rgb(220, 40, 40), Color32::from_rgb(40, 200, 80), Color32::from_rgb(60, 140, 255)],
         2 => [Color32::from_rgb(20, 70, 200), Color32::from_rgb(60, 150, 255), Color32::from_rgb(190, 225, 255)],
-        // Como nos aparelhos de cabine: azul forte (grave), âmbar (médio) e creme (agudo).
-        _ => [Color32::from_rgb(25, 100, 240), Color32::from_rgb(235, 140, 30), Color32::from_rgb(250, 238, 218)],
+        // As da skin (a de fábrica é como nos aparelhos de cabine: azul, âmbar e creme).
+        _ => super::skin::atual().bandas,
     }
 }
 
@@ -154,25 +167,32 @@ impl DjOsApp {
         zoom: f64,
     ) {
         let four = self.app.lock().settings.four_decks;
-        p.rect_filled(body.expand(8.0), 0.0, K_BG);
+        let sk = super::skin::atual();
+        p.rect_filled(body.expand(8.0), 0.0, k_bg());
         // Em cima, sempre os 2 decks da frente (os que a controladora está comandando).
         let shown: Vec<usize> = side.to_vec();
         let gap = 4.0;
-        let card_w = 176.0;
-        let fx_w = 236.0;
+        // Medidas da skin: 0 esconde o cartão de cada deck / o painel de efeitos.
+        let card_w = sk.painel_deck;
+        let fx_w = sk.painel_efeitos;
         let ph = if four { 98.0 } else { 150.0 };
-        let panel_h = if four { 2.0 * ph + gap } else { ph };
-        let cues_h = 54.0;
-        let waves = Rect::from_min_max(body.min, pos2(body.right(), body.bottom() - panel_h - cues_h - 2.0 * gap));
+        let panel_h = if !sk.decks_embaixo { 0.0 } else if four { 2.0 * ph + gap } else { ph };
+        let cues_h = if sk.hotcues { 54.0 } else { 0.0 };
+        let gaps = [cues_h, panel_h].iter().filter(|h| **h > 0.0).count() as f32 * gap;
+        let waves = Rect::from_min_max(body.min, pos2(body.right(), body.bottom() - panel_h - cues_h - gaps));
 
         // Coluna da esquerda (um cartão por deck) e waveforms.
         let n = shown.len() as f32;
         let row_h = (waves.height() - gap * (n - 1.0)) / n;
-        let wave_area = Rect::from_min_max(pos2(waves.left() + card_w + gap, waves.top()), pos2(waves.right() - fx_w - gap, waves.bottom()));
+        let esq = if card_w > 0.0 { card_w + gap } else { 0.0 };
+        let dir = if fx_w > 0.0 { fx_w + gap } else { 0.0 };
+        let wave_area = Rect::from_min_max(pos2(waves.left() + esq, waves.top()), pos2(waves.right() - dir, waves.bottom()));
         for (k, &d) in shown.iter().enumerate() {
             let y = waves.top() + k as f32 * (row_h + gap);
-            let card = Rect::from_min_size(pos2(waves.left(), y), vec2(card_w, row_h));
-            self.draw_card(p, card, d, tracks[d].as_deref(), &snap.decks[d], side.contains(&d));
+            if card_w > 0.0 {
+                let card = Rect::from_min_size(pos2(waves.left(), y), vec2(card_w, row_h));
+                self.draw_card(p, card, d, tracks[d].as_deref(), &snap.decks[d], side.contains(&d));
+            }
             let wr = Rect::from_min_size(pos2(wave_area.left(), y), vec2(wave_area.width(), row_h));
             draw_wave_pro(p, wr, d, tracks[d].as_deref(), &snap.decks[d], loading[d].as_deref(), zoom, true);
             if ui.interact(wr, ui.id().with(("onda", d)), egui::Sense::click()).clicked() {
@@ -180,10 +200,10 @@ impl DjOsApp {
                 a.wave_zoom = (a.wave_zoom + 1) % ZOOMS.len();
             }
         }
-        tr(p, wave_area.right_top() + vec2(-6.0, 2.0), Align2::RIGHT_TOP, format!("ZOOM {zoom:.0}s"), 11.0, K_DIM);
+        tr(p, wave_area.right_top() + vec2(-6.0, 2.0), Align2::RIGHT_TOP, format!("ZOOM {zoom:.0}s"), 11.0, k_dim());
 
         // Efeitos (dos 2 decks da frente) na coluna da direita.
-        for (k, &d) in side.iter().enumerate() {
+        for (k, &d) in side.iter().enumerate().filter(|_| fx_w > 0.0) {
             let h = (waves.height() - gap) / 2.0;
             let fr = Rect::from_min_size(pos2(waves.right() - fx_w, waves.top() + k as f32 * (h + gap)), vec2(fx_w, h));
             draw_fx_pro(p, fr, d, &snap.decks[d], fx_pick[k]);
@@ -192,14 +212,14 @@ impl DjOsApp {
         // Faixa dos hot cues dos 2 decks da frente.
         let col_w = (body.width() - gap) / 2.0;
         let y = waves.bottom() + gap;
-        for (k, &d) in side.iter().enumerate() {
+        for (k, &d) in side.iter().enumerate().filter(|_| cues_h > 0.0) {
             let r = Rect::from_min_size(pos2(body.left() + k as f32 * (col_w + gap), y), vec2(col_w, cues_h));
             draw_cue_strip(p, r, &snap.decks[d], tracks[d].as_deref());
         }
 
         // Painéis dos decks embaixo: os 4 (1 e 2 em cima, 3 e 4 embaixo) ou só os 2 da frente.
         let py = body.bottom() - panel_h;
-        let panels: Vec<usize> = if four { vec![0, 1, 2, 3] } else { side.to_vec() };
+        let panels: Vec<usize> = if !sk.decks_embaixo { Vec::new() } else if four { vec![0, 1, 2, 3] } else { side.to_vec() };
         for (k, &d) in panels.iter().enumerate() {
             let (cx, cy) = ((k % 2) as f32, (k / 2) as f32);
             let r = Rect::from_min_size(pos2(body.left() + cx * (col_w + gap), py + cy * (ph + gap)), vec2(col_w, ph));
@@ -223,93 +243,93 @@ impl DjOsApp {
 
     /// Cartão do deck na coluna da esquerda: origem, tom, loop e modo dos pads.
     fn draw_card(&self, p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap, front: bool) {
-        p.rect_filled(r, 0.0, K_PANEL);
+        p.rect_filled(r, 0.0, k_panel());
         let head = Rect::from_min_size(r.min, vec2(r.width(), 24.0));
-        p.rect_filled(head, 0.0, if front { K_PANEL2 } else { K_PANEL });
+        p.rect_filled(head, 0.0, if front { k_panel2() } else { k_panel() });
         p.rect_filled(Rect::from_min_size(head.min, vec2(4.0, head.height())), 0.0, deck_tint(d));
-        tb(p, head.left_center() + vec2(12.0, 0.0), Align2::LEFT_CENTER, format!("DECK {}", d + 1), 14.0, if front { deck_tint(d) } else { K_DIM });
+        tb(p, head.left_center() + vec2(12.0, 0.0), Align2::LEFT_CENTER, format!("DECK {}", d + 1), 14.0, if front { deck_tint(d) } else { k_dim() });
         if on_air(s) {
-            tag(p, head.right_center() - vec2(4.0, 0.0), "NO AR", K_RED, K_TEXT);
+            tag(p, head.right_center() - vec2(4.0, 0.0), "NO AR", k_red(), k_text());
         }
         let mut y = head.bottom() + 4.0;
         let line_h = ((r.bottom() - y) / 4.0).clamp(16.0, 30.0);
         let row = |p: &Painter, y: f32, label: &str| {
-            tr(p, pos2(r.left() + 12.0, y + line_h / 2.0), Align2::LEFT_CENTER, label, 11.0, K_DIM);
-            p.line_segment([pos2(r.left() + 8.0, y + line_h), pos2(r.right() - 8.0, y + line_h)], Stroke::new(1.0_f32, K_PANEL2));
+            tr(p, pos2(r.left() + 12.0, y + line_h / 2.0), Align2::LEFT_CENTER, label, 11.0, k_dim());
+            p.line_segment([pos2(r.left() + 8.0, y + line_h), pos2(r.right() - 8.0, y + line_h)], Stroke::new(1.0_f32, k_panel2()));
         };
         let vx = r.left() + 62.0;
         // Origem.
         row(p, y, "ORIGEM");
         let src = if s.live { "CELULAR".to_string() } else { t.map_or("—".into(), source_label) };
-        tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, src, 14.0, K_TEXT);
+        tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, src, 14.0, k_text());
         y += line_h;
         // Tom.
         row(p, y, "TOM");
         match t.and_then(|t| crate::key::from_raw(t.key)) {
             Some(k) if !s.live => {
                 let rb = key_badge(p, pos2(vx + 44.0, y + line_h / 2.0), k, 13.0);
-                tr(p, pos2(rb.right() + 6.0, y + line_h / 2.0), Align2::LEFT_CENTER, crate::key::name(k), 11.0, K_DIM);
+                tr(p, pos2(rb.right() + 6.0, y + line_h / 2.0), Align2::LEFT_CENTER, crate::key::name(k), 11.0, k_dim());
             }
             _ => {
-                tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, "—", 14.0, K_DIM);
+                tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, "—", 14.0, k_dim());
             }
         }
         y += line_h;
         // Loop.
         row(p, y, "LOOP");
         let lp = if s.loop_on { format!("{} BAT.", beats_label(s.loop_beats as f32)) } else { "—".into() };
-        tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, lp, 14.0, if s.loop_on { K_ORANGE } else { K_DIM });
+        tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, lp, 14.0, if s.loop_on { k_orange() } else { k_dim() });
         y += line_h;
         // Pads.
         if y + line_h <= r.bottom() + 1.0 {
             row(p, y, "PADS");
             let mode = self.app.lock().pad_mode[d].name();
-            tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, mode, 13.0, K_TEXT);
+            tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, mode, 13.0, k_text());
         }
     }
 
     /// Painel do deck embaixo: título, tempo restante, pitch, BPM e a música inteira (mini-onda).
     #[allow(clippy::too_many_arguments)]
     fn draw_deck_panel(&mut self, ui: &mut egui::Ui, p: &Painter, r: Rect, d: usize, t: Option<Arc<Track>>, s: &DeckSnap, compact: bool, front: bool) {
-        p.rect_filled(r, 0.0, K_PANEL);
-        p.rect_stroke(r, 0.0, Stroke::new(1.0_f32, if front { K_LINE } else { K_PANEL2 }));
+        p.rect_filled(r, 0.0, k_panel());
+        p.rect_stroke(r, 0.0, Stroke::new(1.0_f32, if front { k_line() } else { k_panel2() }));
         // Número do deck.
         let num = Rect::from_min_size(r.min + vec2(6.0, 6.0), vec2(46.0, if compact { 40.0 } else { 52.0 }));
-        p.rect_filled(num, 2.0, if front { deck_tint(d) } else { K_PANEL2 });
-        tr(p, num.center_top() + vec2(0.0, 3.0), Align2::CENTER_TOP, "DECK", 10.0, if front { K_BG } else { K_DIM });
-        tb(p, num.center_bottom() - vec2(0.0, 2.0), Align2::CENTER_BOTTOM, d + 1, if compact { 22.0 } else { 28.0 }, if front { K_BG } else { K_TEXT });
+        p.rect_filled(num, 2.0, if front { deck_tint(d) } else { k_panel2() });
+        tr(p, num.center_top() + vec2(0.0, 3.0), Align2::CENTER_TOP, "DECK", 10.0, if front { k_bg() } else { k_dim() });
+        tb(p, num.center_bottom() - vec2(0.0, 2.0), Align2::CENTER_BOTTOM, d + 1, if compact { 22.0 } else { 28.0 }, if front { k_bg() } else { k_text() });
 
         let x0 = num.right() + 10.0;
         // Título (e artista) com as etiquetas à direita.
         let mut right = r.right() - 8.0;
         if on_air(s) {
-            right = tag(p, pos2(right, r.top() + 16.0), "NO AR", K_RED, K_TEXT).left() - 6.0;
+            right = tag(p, pos2(right, r.top() + 16.0), "NO AR", k_red(), k_text()).left() - 6.0;
         }
         if s.sync_ok && s.loaded {
-            right = tag(p, pos2(right, r.top() + 16.0), "SYNC", K_GREEN, K_BG).left() - 6.0;
+            right = tag(p, pos2(right, r.top() + 16.0), "SYNC", k_green(), k_bg()).left() - 6.0;
         }
         if s.keylock {
-            right = tag(p, pos2(right, r.top() + 16.0), "KEYLOCK", K_PANEL2, K_TEXT).left() - 6.0;
+            right = tag(p, pos2(right, r.top() + 16.0), "KEYLOCK", k_panel2(), k_text()).left() - 6.0;
         }
         if s.slip {
             // Aceso enquanto a música segue "por baixo" (scratch ou loop com slip).
-            let (bg, fg) = if s.slip_pos.is_some() { (K_ORANGE, K_BG) } else { (K_PANEL2, K_TEXT) };
+            let (bg, fg) = if s.slip_pos.is_some() { (k_orange(), k_bg()) } else { (k_panel2(), k_text()) };
             right = tag(p, pos2(right, r.top() + 16.0), "SLIP", bg, fg).left() - 6.0;
         }
         let title_clip = p.with_clip_rect(Rect::from_min_max(pos2(x0, r.top()), pos2(right - 4.0, r.top() + 32.0)));
         match (&t, s.live) {
             (_, true) => {
-                tb(&title_clip, pos2(x0, r.top() + 16.0), Align2::LEFT_CENTER, "CELULAR (Bluetooth)", 18.0, K_TEXT);
+                tb(&title_clip, pos2(x0, r.top() + 16.0), Align2::LEFT_CENTER, "CELULAR (Bluetooth)", 18.0, k_text());
             }
             (Some(t), _) => {
-                let tt = tb(&title_clip, pos2(x0, r.top() + 16.0), Align2::LEFT_CENTER, format!("♪ {}", t.title), 18.0, K_TEXT);
+                let tt = tb(&title_clip, pos2(x0, r.top() + 16.0), Align2::LEFT_CENTER, format!("♪ {}", t.title), 18.0, k_text());
                 if !t.artist.is_empty() {
-                    tr(&title_clip, pos2(tt.right() + 10.0, r.top() + 17.0), Align2::LEFT_CENTER, &t.artist, 13.0, K_DIM);
+                    tr(&title_clip, pos2(tt.right() + 10.0, r.top() + 17.0), Align2::LEFT_CENTER, &t.artist, 13.0, k_dim());
                 }
             }
             (None, _) => {
                 let msg = self.app.lock().decks[d].loading.clone().map_or("Sem música".to_string(), |n| format!("Carregando {n}…"));
-                tr(&title_clip, pos2(x0, r.top() + 16.0), Align2::LEFT_CENTER, msg, 16.0, K_DIM);
+                tr(&title_clip, pos2(x0, r.top() + 16.0), Align2::LEFT_CENTER, msg, 16.0, k_dim());
             }
         }
 
@@ -317,10 +337,10 @@ impl DjOsApp {
         // Compacto (4 decks): o BPM desce até o pé do painel e a mini-onda fica à esquerda dele.
         let bpm_h = if compact { r.height() - 42.0 } else { 58.0 };
         let bpm_box = Rect::from_min_size(pos2(r.right() - 112.0, r.top() + 34.0), vec2(104.0, bpm_h));
-        p.rect_stroke(bpm_box, 2.0, Stroke::new(1.5_f32, if s.sync_ok && s.loaded { K_GREEN } else { K_TEXT }));
-        tr(p, bpm_box.left_top() + vec2(5.0, 2.0), Align2::LEFT_TOP, "BPM", 10.0, K_DIM);
+        p.rect_stroke(bpm_box, 2.0, Stroke::new(1.5_f32, if s.sync_ok && s.loaded { k_green() } else { k_text() }));
+        tr(p, bpm_box.left_top() + vec2(5.0, 2.0), Align2::LEFT_TOP, "BPM", 10.0, k_dim());
         let bpm_txt = if s.loaded && s.bpm > 0.0 { format!("{:.1}", s.bpm) } else { "--.-".into() };
-        tb(p, bpm_box.right_bottom() - vec2(6.0, 1.0), Align2::RIGHT_BOTTOM, bpm_txt, if compact { 26.0 } else { 34.0 }, K_TEXT);
+        tb(p, bpm_box.right_bottom() - vec2(6.0, 1.0), Align2::RIGHT_BOTTOM, bpm_txt, if compact { 26.0 } else { 34.0 }, k_text());
         if t.is_some() && !s.live && ui.interact(bpm_box, ui.id().with(("bpm", d)), egui::Sense::click()).clicked() {
             let mut a = self.app.lock();
             let open = a.grid_edit.as_ref().is_some_and(|g| g.deck == d);
@@ -329,30 +349,30 @@ impl DjOsApp {
 
         // Tempo restante e decorrido.
         let ty = r.top() + 34.0;
-        tr(p, pos2(x0, ty), Align2::LEFT_TOP, "RESTANTE", 10.0, K_DIM);
+        tr(p, pos2(x0, ty), Align2::LEFT_TOP, "RESTANTE", 10.0, k_dim());
         let big = if compact { 24.0 } else { 40.0 };
-        let tt = tb(p, pos2(x0, ty + 8.0), Align2::LEFT_TOP, if s.live { "AO VIVO".into() } else { remain_text(s) }, big, K_TEXT);
+        let tt = tb(p, pos2(x0, ty + 8.0), Align2::LEFT_TOP, if s.live { "AO VIVO".into() } else { remain_text(s) }, big, k_text());
         if !compact && s.sr > 0.0 && !s.live {
-            tr(p, pos2(tt.right() + 8.0, tt.bottom() - 8.0), Align2::LEFT_BOTTOM, fmt_time(s.pos / s.sr), 13.0, K_DIM);
+            tr(p, pos2(tt.right() + 8.0, tt.bottom() - 8.0), Align2::LEFT_BOTTOM, fmt_time(s.pos / s.sr), 13.0, k_dim());
         }
         // Pitch e faixa.
         let px = bpm_box.left() - 120.0;
-        tr(p, pos2(px, ty), Align2::LEFT_TOP, "TEMPO", 10.0, K_DIM);
+        tr(p, pos2(px, ty), Align2::LEFT_TOP, "TEMPO", 10.0, k_dim());
         let pitch = (s.rate - 1.0) * 100.0;
         let range = Rect::from_min_size(pos2(px + 40.0, ty - 1.0), vec2(30.0, 13.0));
-        p.rect_filled(range, 2.0, if s.vinyl { K_PANEL2 } else { K_ORANGE });
-        tb(p, range.center(), Align2::CENTER_CENTER, format!("±{:.0}", s.pitch_range * 100.0), 10.0, if s.vinyl { K_TEXT } else { K_BG });
+        p.rect_filled(range, 2.0, if s.vinyl { k_panel2() } else { k_orange() });
+        tb(p, range.center(), Align2::CENTER_CENTER, format!("±{:.0}", s.pitch_range * 100.0), 10.0, if s.vinyl { k_text() } else { k_bg() });
         let ptxt = if s.rate > 0.0 { format!("{:+.2}%", pitch) } else { "--".into() };
-        tb(p, pos2(px, ty + 14.0), Align2::LEFT_TOP, ptxt, if compact { 18.0 } else { 22.0 }, if pitch.abs() < 0.005 { K_TEXT } else { K_ORANGE });
+        tb(p, pos2(px, ty + 14.0), Align2::LEFT_TOP, ptxt, if compact { 18.0 } else { 22.0 }, if pitch.abs() < 0.005 { k_text() } else { k_orange() });
         if !compact && s.auto_gain_db.abs() >= 0.1 && s.loaded && !s.live {
-            tr(p, pos2(px, ty + if compact { 34.0 } else { 40.0 }), Align2::LEFT_TOP, format!("AG {:+.1} dB", s.auto_gain_db), 11.0, K_DIM);
+            tr(p, pos2(px, ty + if compact { 34.0 } else { 40.0 }), Align2::LEFT_TOP, format!("AG {:+.1} dB", s.auto_gain_db), 11.0, k_dim());
         }
 
         // Música inteira (mini-onda) com o que já tocou, cues e posição.
         let oh = if compact { 16.0 } else { 30.0 };
         let ov_right = if compact { bpm_box.left() - 8.0 } else { r.right() - 8.0 };
         let ov = Rect::from_min_max(pos2(x0, r.bottom() - oh - 8.0), pos2(ov_right, r.bottom() - 8.0));
-        p.rect_filled(ov, 0.0, K_BG);
+        p.rect_filled(ov, 0.0, k_bg());
         if let Some(t) = &t {
             let width = ov.width().max(1.0) as usize;
             let pal = band_colors();
@@ -376,15 +396,15 @@ impl DjOsApp {
             let x_of = |pos: f64| ov.left() + (pos / s.frames.max(1.0)) as f32 * ov.width();
             // Cue (triângulo laranja) e hot cues (letras).
             let cx = x_of(s.cue);
-            p.add(Shape::convex_polygon(vec![pos2(cx - 5.0, ov.top() - 1.0), pos2(cx + 5.0, ov.top() - 1.0), pos2(cx, ov.top() + 6.0)], K_ORANGE, Stroke::NONE));
+            p.add(Shape::convex_polygon(vec![pos2(cx - 5.0, ov.top() - 1.0), pos2(cx + 5.0, ov.top() - 1.0), pos2(cx, ov.top() + 6.0)], k_orange(), Stroke::NONE));
             for (i, h) in s.hotcues.iter().enumerate() {
                 if let Some(hp) = h {
                     let hx = x_of(*hp);
-                    p.line_segment([pos2(hx, ov.top()), pos2(hx, ov.bottom())], Stroke::new(1.0_f32, CUE_COLORS[i]));
+                    p.line_segment([pos2(hx, ov.top()), pos2(hx, ov.bottom())], Stroke::new(1.0_f32, cue_cor(i)));
                 }
             }
             let nx = x_of(s.pos);
-            p.line_segment([pos2(nx, ov.top() - 2.0), pos2(nx, ov.bottom() + 2.0)], Stroke::new(2.0_f32, K_TEXT));
+            p.line_segment([pos2(nx, ov.top() - 2.0), pos2(nx, ov.bottom() + 2.0)], Stroke::new(2.0_f32, k_text()));
         }
     }
 }
@@ -393,14 +413,14 @@ impl DjOsApp {
 /// grave no knob, o azul diminui na hora). Batidas e compassos em cima e embaixo; hot cues A–H.
 #[allow(clippy::too_many_arguments)]
 fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap, loading: Option<&str>, zoom_secs: f64, ticks: bool) {
-    p.rect_filled(r, 0.0, K_BG);
+    p.rect_filled(r, 0.0, k_bg());
     let tick_h = if ticks { 12.0 } else { 0.0 };
     let wr = Rect::from_min_max(pos2(r.left(), r.top() + tick_h), pos2(r.right(), r.bottom() - tick_h));
     let mid = wr.center().y;
     let Some(t) = t else {
         let msg = loading.map_or(String::new(), |n| format!("Carregando {n}…"));
-        tr(p, wr.center(), Align2::CENTER_CENTER, msg, 15.0, K_DIM);
-        p.line_segment([pos2(wr.left(), mid), pos2(wr.right(), mid)], Stroke::new(1.0_f32, K_PANEL2));
+        tr(p, wr.center(), Align2::CENTER_CENTER, msg, 15.0, k_dim());
+        p.line_segment([pos2(wr.left(), mid), pos2(wr.right(), mid)], Stroke::new(1.0_f32, k_panel2()));
         return;
     };
     let pal = band_colors();
@@ -417,7 +437,7 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
     if let (true, Some(a), Some(b)) = (s.loop_on, s.loop_in, s.loop_out) {
         let (xa, xb) = (x_of(a / t.sr).max(wr.left()), x_of(b / t.sr).min(wr.right()));
         if xb > xa {
-            p.rect_filled(Rect::from_x_y_ranges(xa..=xb, wr.y_range()), 0.0, K_ORANGE.gamma_multiply(0.14));
+            p.rect_filled(Rect::from_x_y_ranges(xa..=xb, wr.y_range()), 0.0, k_orange().gamma_multiply(0.14));
         }
     }
 
@@ -465,13 +485,13 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
             let bx = x_of(fb + k as f64 * bl);
             let down = k.rem_euclid(4) == 0;
             if ticks {
-                let (len, col) = if down { (9.0, K_RED) } else { (5.0, K_DIM) };
+                let (len, col) = if down { (9.0, k_red()) } else { (5.0, k_dim()) };
                 p.line_segment([pos2(bx, r.top() + 1.0), pos2(bx, r.top() + 1.0 + len)], Stroke::new(1.5_f32, col));
                 p.line_segment([pos2(bx, r.bottom() - 1.0 - len), pos2(bx, r.bottom() - 1.0)], Stroke::new(1.5_f32, col));
                 // Número do compasso a cada 4 compassos.
                 let bar = k.div_euclid(4) + 1;
                 if down && bar % 4 == 1 {
-                    tr(p, pos2(bx + 3.0, r.bottom() - 1.0), Align2::LEFT_BOTTOM, bar, 10.0, K_DIM);
+                    tr(p, pos2(bx + 3.0, r.bottom() - 1.0), Align2::LEFT_BOTTOM, bar, 10.0, k_dim());
                 }
             }
             if down {
@@ -482,7 +502,7 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
         let b = t.beats_at(s.pos);
         if b >= 0.0 {
             let txt = format!("{}.{}", (b / 4.0).floor() as i64 + 1, (b.rem_euclid(4.0)).floor() as i64 + 1);
-            tb(p, pos2(center_x - 6.0, wr.top() + 2.0), Align2::RIGHT_TOP, txt, 13.0, K_ORANGE);
+            tb(p, pos2(center_x - 6.0, wr.top() + 2.0), Align2::RIGHT_TOP, txt, 13.0, k_orange());
         }
     }
 
@@ -490,88 +510,88 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
     if let Some(sp) = s.slip_pos {
         let sx = x_of(sp / t.sr);
         if wr.x_range().contains(sx) {
-            p.add(Shape::dashed_line(&[pos2(sx, wr.top()), pos2(sx, wr.bottom())], Stroke::new(2.0_f32, K_ORANGE), 5.0, 4.0));
+            p.add(Shape::dashed_line(&[pos2(sx, wr.top()), pos2(sx, wr.bottom())], Stroke::new(2.0_f32, k_orange()), 5.0, 4.0));
         }
     }
 
     // Cue (triângulo) e hot cues (letra colorida em cima da linha).
     let cx = x_of(s.cue / t.sr);
     if wr.x_range().contains(cx) {
-        p.add(Shape::convex_polygon(vec![pos2(cx - 6.0, wr.bottom()), pos2(cx + 6.0, wr.bottom()), pos2(cx, wr.bottom() - 9.0)], K_ORANGE, Stroke::NONE));
+        p.add(Shape::convex_polygon(vec![pos2(cx - 6.0, wr.bottom()), pos2(cx + 6.0, wr.bottom()), pos2(cx, wr.bottom() - 9.0)], k_orange(), Stroke::NONE));
     }
     for (i, h) in s.hotcues.iter().enumerate() {
         if let Some(hp) = h {
             let hx = x_of(hp / t.sr);
             if wr.x_range().contains(hx) {
-                p.line_segment([pos2(hx, wr.top()), pos2(hx, wr.bottom())], Stroke::new(1.0_f32, CUE_COLORS[i]));
+                p.line_segment([pos2(hx, wr.top()), pos2(hx, wr.bottom())], Stroke::new(1.0_f32, cue_cor(i)));
                 let lab = Rect::from_min_size(pos2(hx, wr.bottom() - 15.0), vec2(14.0, 14.0));
-                p.rect_filled(lab, 1.0, CUE_COLORS[i]);
-                tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, K_BG);
+                p.rect_filled(lab, 1.0, cue_cor(i));
+                tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, k_bg());
             }
         }
     }
     // Agulha e a cor do deck à esquerda.
-    p.line_segment([pos2(center_x, r.top()), pos2(center_x, r.bottom())], Stroke::new(2.0_f32, K_TEXT));
+    p.line_segment([pos2(center_x, r.top()), pos2(center_x, r.bottom())], Stroke::new(2.0_f32, k_text()));
     p.rect_filled(Rect::from_min_size(r.min, vec2(3.0, r.height())), 0.0, deck_tint(d));
 }
 
 /// Painel do efeito do deck: nome, batida (anterior | atual | seguinte), tempo e força.
 fn draw_fx_pro(p: &Painter, r: Rect, d: usize, s: &DeckSnap, pick: Option<FxKind>) {
     let f = s.fx[0];
-    p.rect_filled(r, 0.0, K_PANEL);
+    p.rect_filled(r, 0.0, k_panel());
     let head = Rect::from_min_size(r.min, vec2(r.width(), 22.0));
-    p.rect_filled(head, 0.0, K_PANEL2);
-    tr(p, head.center(), Align2::CENTER_CENTER, format!("EFEITO · DECK {}", d + 1), 12.0, K_DIM);
+    p.rect_filled(head, 0.0, k_panel2());
+    tr(p, head.center(), Align2::CENTER_CENTER, format!("EFEITO · DECK {}", d + 1), 12.0, k_dim());
     if f.active {
-        tag(p, head.right_center() - vec2(4.0, 0.0), "ON", K_ORANGE, K_BG);
+        tag(p, head.right_center() - vec2(4.0, 0.0), "ON", k_orange(), k_bg());
     }
     let name = pick.unwrap_or(f.kind).name().to_uppercase();
-    tb(p, pos2(r.center().x, head.bottom() + 6.0), Align2::CENTER_TOP, name, 24.0, if pick.is_some() { K_ORANGE } else { K_TEXT });
+    tb(p, pos2(r.center().x, head.bottom() + 6.0), Align2::CENTER_TOP, name, 24.0, if pick.is_some() { k_orange() } else { k_text() });
     // Batidas.
     let by = head.bottom() + 40.0;
     let cw = (r.width() - 16.0) / 3.0;
     for (k, b) in [step_beats(f.beats, -1), f.beats, step_beats(f.beats, 1)].into_iter().enumerate() {
         let c = Rect::from_min_size(pos2(r.left() + 8.0 + k as f32 * cw, by), vec2(cw - 2.0, 30.0));
         let cur = k == 1;
-        p.rect_filled(c, 0.0, if cur { K_LINE } else { K_PANEL2 });
-        tb(p, c.center(), Align2::CENTER_CENTER, beats_label(b), if cur { 18.0 } else { 14.0 }, if cur { K_TEXT } else { K_DIM });
+        p.rect_filled(c, 0.0, if cur { k_line() } else { k_panel2() });
+        tb(p, c.center(), Align2::CENTER_CENTER, beats_label(b), if cur { 18.0 } else { 14.0 }, if cur { k_text() } else { k_dim() });
     }
     let mut y = by + 38.0;
     // Tempo da batida em ms (no BPM do deck).
     if s.bpm > 0.0 && y + 18.0 < r.bottom() {
-        tr(p, pos2(r.left() + 10.0, y), Align2::LEFT_TOP, "TEMPO", 11.0, K_DIM);
-        tb(p, pos2(r.right() - 10.0, y - 2.0), Align2::RIGHT_TOP, format!("{:.0} ms", 60000.0 / s.bpm * f.beats as f64), 16.0, K_TEXT);
+        tr(p, pos2(r.left() + 10.0, y), Align2::LEFT_TOP, "TEMPO", 11.0, k_dim());
+        tb(p, pos2(r.right() - 10.0, y - 2.0), Align2::RIGHT_TOP, format!("{:.0} ms", 60000.0 / s.bpm * f.beats as f64), 16.0, k_text());
         y += 24.0;
     }
     // Força (dry/wet).
     if y + 20.0 < r.bottom() {
-        tr(p, pos2(r.left() + 10.0, y), Align2::LEFT_TOP, "FORÇA", 11.0, K_DIM);
-        tb(p, pos2(r.right() - 10.0, y - 2.0), Align2::RIGHT_TOP, format!("{:.0}%", f.level * 100.0), 14.0, K_TEXT);
+        tr(p, pos2(r.left() + 10.0, y), Align2::LEFT_TOP, "FORÇA", 11.0, k_dim());
+        tb(p, pos2(r.right() - 10.0, y - 2.0), Align2::RIGHT_TOP, format!("{:.0}%", f.level * 100.0), 14.0, k_text());
         let bar = Rect::from_min_size(pos2(r.left() + 10.0, y + 16.0), vec2(r.width() - 20.0, 4.0));
-        p.rect_filled(bar, 0.0, K_PANEL2);
-        p.rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * f.level.clamp(0.0, 1.0), 4.0)), 0.0, if f.active { K_ORANGE } else { K_DIM });
+        p.rect_filled(bar, 0.0, k_panel2());
+        p.rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * f.level.clamp(0.0, 1.0), 4.0)), 0.0, if f.active { k_orange() } else { k_dim() });
     }
 }
 
 /// Faixa dos hot cues de um deck: A–D em cima, E–H embaixo, com a cor e o tempo de cada um.
 fn draw_cue_strip(p: &Painter, r: Rect, s: &DeckSnap, t: Option<&Track>) {
-    tr(p, pos2(r.center().x, r.top()), Align2::CENTER_TOP, "HOT CUE", 10.0, K_DIM);
+    tr(p, pos2(r.center().x, r.top()), Align2::CENTER_TOP, "HOT CUE", 10.0, k_dim());
     let top = r.top() + 13.0;
     let cw = r.width() / 4.0;
     let ch = (r.height() - 15.0) / 2.0;
     for i in 0..8 {
         let c = Rect::from_min_size(pos2(r.left() + (i % 4) as f32 * cw, top + (i / 4) as f32 * ch), vec2(cw - 3.0, ch - 2.0));
-        p.rect_filled(c, 0.0, K_PANEL);
+        p.rect_filled(c, 0.0, k_panel());
         let lab = Rect::from_min_size(pos2(c.left() + 3.0, c.center().y - 7.0), vec2(14.0, 14.0));
         match (s.hotcues[i], t) {
             (Some(pos), Some(t)) => {
-                p.rect_filled(lab, 1.0, CUE_COLORS[i]);
-                tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, K_BG);
+                p.rect_filled(lab, 1.0, cue_cor(i));
+                tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, k_bg());
                 let secs = pos / t.sr;
-                tr(p, pos2(lab.right() + 6.0, c.center().y), Align2::LEFT_CENTER, format!("{:02}:{:02}", (secs / 60.0) as u32, (secs % 60.0) as u32), 12.0, K_TEXT);
+                tr(p, pos2(lab.right() + 6.0, c.center().y), Align2::LEFT_CENTER, format!("{:02}:{:02}", (secs / 60.0) as u32, (secs % 60.0) as u32), 12.0, k_text());
             }
             _ => {
-                tr(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, K_DIM);
+                tr(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, k_dim());
             }
         }
     }

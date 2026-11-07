@@ -1,0 +1,44 @@
+# Skin "Preta": a de fábrica, com todas as opções escritas (copie e mude o que quiser).
+# Formato: docs/skins.md. Cores em #RRGGBB.
+nome = Preta
+
+# ---- cores da tela ----
+fundo = #000000
+painel = #0E0F11
+painel2 = #1A1B1F
+linha = #34363C
+texto = #ECECEC
+apagado = #808288
+destaque = #1E8CFF
+laranja = #FF8C14
+vermelho = #E61E28
+verde = #3CD25A
+selecao = #146EDC
+selecao_fraca = #263A5C
+
+# ---- cor de cada deck ----
+deck1 = #1E8CFF
+deck2 = #FF8C14
+deck3 = #AA5AFF
+deck4 = #28C896
+
+# ---- waveform (grave, médio, agudo) ----
+grave = #1964F0
+medio = #EB8C1E
+agudo = #FAEEDA
+
+# ---- hot cues A a H ----
+cue_a = #EB3C3C
+cue_b = #28BEE6
+cue_c = #46CD50
+cue_d = #8C50F5
+cue_e = #82DC3C
+cue_f = #FF821E
+cue_g = #325FFF
+cue_h = #F0CD28
+
+# ---- layout da tela principal ----
+painel_deck = 176       # cartão de cada deck à esquerda (0 esconde)
+painel_efeitos = 236    # painel de efeitos à direita (0 esconde)
+hotcues = sim           # faixa dos hot cues
+decks_embaixo = sim     # painéis dos decks embaixo

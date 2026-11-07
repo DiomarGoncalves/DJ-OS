@@ -1,0 +1,17 @@
+# Skin clara: para cabine com muita luz (festa de dia, ao ar livre).
+nome = Clara
+fundo = #EEF0F3
+painel = #FFFFFF
+painel2 = #E2E5EA
+linha = #C3C8CF
+texto = #15171A
+apagado = #66707C
+destaque = #0B63D8
+laranja = #E07000
+vermelho = #D01822
+verde = #128A3A
+selecao = #0B63D8
+selecao_fraca = #B9CFF2
+grave = #1550D8
+medio = #E07800
+agudo = #2B2E33

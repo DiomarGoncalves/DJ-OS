@@ -1,0 +1,5 @@
+# Só as waveforms, grandes, e os hot cues: sem os cartões, os efeitos e os decks embaixo.
+nome = Waveform grande
+painel_deck = 0
+painel_efeitos = 0
+decks_embaixo = nao

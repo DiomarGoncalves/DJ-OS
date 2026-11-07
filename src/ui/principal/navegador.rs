@@ -19,9 +19,13 @@ use crate::library::Focus;
 use parking_lot::Mutex;
 use std::path::PathBuf;
 
-const K_SEL: Color32 = Color32::from_rgb(20, 110, 220);
+fn k_sel() -> Color32 {
+    super::super::skin::atual().selecao
+}
 /// Seleção do lado que não está com o BROWSE (pastas ou músicas).
-const K_SEL_OFF: Color32 = Color32::from_rgb(38, 58, 92);
+fn k_sel_off() -> Color32 {
+    super::super::skin::atual().selecao_fraca
+}
 
 /// Primeira linha que aparece em cada lado (pastas, músicas): a lista só rola quando a seleção
 /// sai da tela, para o clique do mouse não mudar de linha.
@@ -54,7 +58,7 @@ enum Click {
 impl DjOsApp {
     /// Browser em tela cheia.
     pub(in crate::ui) fn draw_navegador(&mut self, ui: &mut egui::Ui, p: &Painter, body: Rect, snap: &Snapshot, tracks: &[Option<Arc<Track>>]) {
-        p.rect_filled(body.expand(8.0), 0.0, K_BG);
+        p.rect_filled(body.expand(8.0), 0.0, k_bg());
         let four = self.app.lock().settings.four_decks;
         let gap = 4.0;
         let top_h = 44.0;
@@ -95,8 +99,8 @@ impl DjOsApp {
         let on_tracks = lib.focus == Focus::Tracks;
 
         // ---- barra de cima: BROWSE e a pasta aberta (com as pastas de cima) ----
-        p.rect_filled(top, 0.0, K_PANEL);
-        let t = tb(p, pos2(top.left() + 14.0, top.center().y), Align2::LEFT_CENTER, "BROWSE", 20.0, K_TEXT);
+        p.rect_filled(top, 0.0, k_panel());
+        let t = tb(p, pos2(top.left() + 14.0, top.center().y), Align2::LEFT_CENTER, "BROWSE", 20.0, k_text());
         let mut path = Vec::new();
         if let Some(n) = lib.folders.get(lib.folder_sel) {
             let mut depth = n.depth;
@@ -110,13 +114,13 @@ impl DjOsApp {
         }
         let crumb = std::iter::once("PASTAS".to_string()).chain(path.iter().rev().map(|n| plain(n).to_string())).collect::<Vec<_>>().join("  ›  ");
         let cp = p.with_clip_rect(Rect::from_min_max(pos2(t.right() + 14.0, top.top()), pos2(top.right() - 8.0, top.bottom())));
-        tr(&cp, pos2(t.right() + 14.0, top.center().y + 1.0), Align2::LEFT_CENTER, crumb, 15.0, K_DIM);
+        tr(&cp, pos2(t.right() + 14.0, top.center().y + 1.0), Align2::LEFT_CENTER, crumb, 15.0, k_dim());
 
         // ---- pastas (árvore) ----
         let th = Rect::from_min_size(tree.min, vec2(tree.width(), head_h));
-        p.rect_filled(th, 0.0, K_PANEL2);
-        tr(p, pos2(th.left() + 10.0, th.center().y), Align2::LEFT_CENTER, "Pastas", 13.0, if on_folders { K_BLUE } else { K_DIM });
-        p.line_segment([pos2(tree.right() + 1.0, tree.top()), pos2(tree.right() + 1.0, tree.bottom())], Stroke::new(1.0_f32, K_LINE));
+        p.rect_filled(th, 0.0, k_panel2());
+        tr(p, pos2(th.left() + 10.0, th.center().y), Align2::LEFT_CENTER, "Pastas", 13.0, if on_folders { k_blue() } else { k_dim() });
+        p.line_segment([pos2(tree.right() + 1.0, tree.top()), pos2(tree.right() + 1.0, tree.bottom())], Stroke::new(1.0_f32, k_line()));
         let tree_rows = Rect::from_min_max(pos2(tree.left(), th.bottom()), tree.max);
         let rows = (tree_rows.height() / row_h).floor().max(1.0) as usize;
         let mut first = FIRST.lock();
@@ -126,10 +130,10 @@ impl DjOsApp {
             let n = &lib.folders[i];
             let r = Rect::from_min_size(pos2(tree_rows.left(), tree_rows.top() + k as f32 * row_h), vec2(tree_rows.width(), row_h));
             let bg = match (i == lib.folder_sel, on_folders) {
-                (true, true) => K_SEL,
-                (true, false) => K_SEL_OFF,
+                (true, true) => k_sel(),
+                (true, false) => k_sel_off(),
                 _ if k % 2 == 0 => Color32::from_rgb(24, 25, 28),
-                _ => K_BG,
+                _ => k_bg(),
             };
             tp.rect_filled(r, 0.0, bg);
             let x = r.left() + 10.0 + n.depth as f32 * 18.0;
@@ -141,7 +145,7 @@ impl DjOsApp {
                 } else {
                     vec![c + vec2(-3.0, -5.0), c + vec2(4.0, 0.0), c + vec2(-3.0, 5.0)]
                 };
-                tp.add(Shape::convex_polygon(tri, K_DIM, Stroke::NONE));
+                tp.add(Shape::convex_polygon(tri, k_dim(), Stroke::NONE));
             }
             // Unidades, pesquisa e tocadas hoje já vêm com o ícone no nome (o microfone das
             // gravações a fonte não tem: vai o de gravar).
@@ -149,8 +153,8 @@ impl DjOsApp {
                 Some((ic, rest)) if !ic.chars().next().is_some_and(char::is_alphanumeric) => (if ic == "🎙" { "⏺" } else { ic }, rest),
                 _ => ("📁", n.name.as_str()),
             };
-            tr(&tp, pos2(x + 16.0, r.center().y), Align2::LEFT_CENTER, icon, font * 0.8, K_DIM);
-            tr(&tp, pos2(x + 40.0, r.center().y), Align2::LEFT_CENTER, name, font * 0.9, K_TEXT);
+            tr(&tp, pos2(x + 16.0, r.center().y), Align2::LEFT_CENTER, icon, font * 0.8, k_dim());
+            tr(&tp, pos2(x + 40.0, r.center().y), Align2::LEFT_CENTER, name, font * 0.9, k_text());
             let (c, dc) = click(ui, r.intersect(tree_rows), ("nav-pasta", i));
             if c || dc {
                 clicks.push(Click::Folder(i, dc));
@@ -162,21 +166,21 @@ impl DjOsApp {
 
         // ---- músicas da pasta ----
         let head = Rect::from_min_size(list.min, vec2(list.width(), head_h));
-        p.rect_filled(head, 0.0, K_PANEL2);
+        p.rect_filled(head, 0.0, k_panel2());
         let key_w = if s.browser_key { 86.0 } else { 0.0 };
         let bpm_w = if s.browser_bpm { 92.0 } else { 0.0 };
         let x_title = list.left();
         let x_bpm = list.right() - key_w - bpm_w;
         let x_key = list.right() - key_w;
-        let tt = tr(p, pos2(x_title + 10.0, head.center().y), Align2::LEFT_CENTER, "Música", 13.0, if on_tracks { K_BLUE } else { K_DIM });
-        tr(p, pos2(tt.right() + 10.0, head.center().y), Align2::LEFT_CENTER, format!("[{:04}]", lib.tracks.len()), 13.0, K_DIM);
+        let tt = tr(p, pos2(x_title + 10.0, head.center().y), Align2::LEFT_CENTER, "Música", 13.0, if on_tracks { k_blue() } else { k_dim() });
+        tr(p, pos2(tt.right() + 10.0, head.center().y), Align2::LEFT_CENTER, format!("[{:04}]", lib.tracks.len()), 13.0, k_dim());
         if s.browser_bpm {
-            tr(p, pos2(x_bpm + bpm_w - 10.0, head.center().y), Align2::RIGHT_CENTER, "BPM", 13.0, K_DIM);
-            p.line_segment([pos2(x_bpm, list.top()), pos2(x_bpm, list.bottom())], Stroke::new(1.0_f32, K_LINE));
+            tr(p, pos2(x_bpm + bpm_w - 10.0, head.center().y), Align2::RIGHT_CENTER, "BPM", 13.0, k_dim());
+            p.line_segment([pos2(x_bpm, list.top()), pos2(x_bpm, list.bottom())], Stroke::new(1.0_f32, k_line()));
         }
         if s.browser_key {
-            tr(p, pos2(x_key + 10.0, head.center().y), Align2::LEFT_CENTER, "Tom", 13.0, K_DIM);
-            p.line_segment([pos2(x_key, list.top()), pos2(x_key, list.bottom())], Stroke::new(1.0_f32, K_LINE));
+            tr(p, pos2(x_key + 10.0, head.center().y), Align2::LEFT_CENTER, "Tom", 13.0, k_dim());
+            p.line_segment([pos2(x_key, list.top()), pos2(x_key, list.bottom())], Stroke::new(1.0_f32, k_line()));
         }
         let rows_r = Rect::from_min_max(pos2(list.left(), head.bottom()), list.max);
         let rows = (rows_r.height() / row_h).floor().max(1.0) as usize;
@@ -187,19 +191,19 @@ impl DjOsApp {
             let e = &lib.tracks[i];
             let r = Rect::from_min_size(pos2(rows_r.left(), rows_r.top() + k as f32 * row_h), vec2(rows_r.width(), row_h));
             let bg = match (i == lib.track_sel, on_tracks) {
-                (true, true) => K_SEL,
-                (true, false) => K_SEL_OFF,
+                (true, true) => k_sel(),
+                (true, false) => k_sel_off(),
                 _ if k % 2 == 0 => Color32::from_rgb(24, 25, 28),
-                _ => K_BG,
+                _ => k_bg(),
             };
             lp.rect_filled(r, 0.0, bg);
-            lp.line_segment([pos2(r.left(), r.bottom()), pos2(r.right(), r.bottom())], Stroke::new(1.0_f32, K_PANEL2));
+            lp.line_segment([pos2(r.left(), r.bottom()), pos2(r.right(), r.bottom())], Stroke::new(1.0_f32, k_panel2()));
             // Nome (▶ verde se está num deck; ✓ se já tocou).
             let is_loaded = loaded.contains(&e.path);
             let played = lib.played.contains(&e.path);
-            let col = if is_loaded { K_GREEN } else if played { K_DIM } else { K_TEXT };
+            let col = if is_loaded { k_green() } else if played { k_dim() } else { k_text() };
             let mark = if is_loaded { "▶" } else if played { "✓" } else { "♪" };
-            tr(&lp, pos2(x_title + 12.0, r.center().y), Align2::LEFT_CENTER, mark, font * 0.8, if is_loaded { K_GREEN } else { K_DIM });
+            tr(&lp, pos2(x_title + 12.0, r.center().y), Align2::LEFT_CENTER, mark, font * 0.8, if is_loaded { k_green() } else { k_dim() });
             let np = lp.with_clip_rect(Rect::from_min_max(pos2(x_title, r.top()), pos2(x_bpm - 8.0, r.bottom())));
             let name = if e.artist.is_empty() { e.title.clone() } else { format!("{}  ·  {}", e.title, e.artist) };
             let name = match &e.when {
@@ -215,9 +219,9 @@ impl DjOsApp {
                 let kr = Rect::from_min_max(pos2(x_key + 1.0, r.top()), r.max);
                 let good = master_key.is_some_and(|m| keys_match(m, key));
                 if good {
-                    lp.rect_filled(kr, 0.0, K_GREEN);
+                    lp.rect_filled(kr, 0.0, k_green());
                 }
-                tr(&lp, pos2(x_key + 12.0, r.center().y), Align2::LEFT_CENTER, crate::key::label(key), font, if good { K_BG } else { col });
+                tr(&lp, pos2(x_key + 12.0, r.center().y), Align2::LEFT_CENTER, crate::key::label(key), font, if good { k_bg() } else { col });
             }
             let (c, dc) = click(ui, r.intersect(rows_r), ("nav-musica", i));
             if c || dc {
@@ -226,7 +230,7 @@ impl DjOsApp {
         }
         if n == 0 {
             let msg = if lib.folders.get(lib.folder_sel).is_some_and(|f| f.has_children) { "Nenhuma música aqui (LOAD abre as subpastas)" } else { "Nenhuma música aqui" };
-            tr(&lp, rows_r.center(), Align2::CENTER_CENTER, msg, 16.0, K_DIM);
+            tr(&lp, rows_r.center(), Align2::CENTER_CENTER, msg, 16.0, k_dim());
         }
         if n > rows {
             scrollbar(p, rows_r, first.1, rows, n);
@@ -234,10 +238,10 @@ impl DjOsApp {
         // ---- fila ----
         let queue_rows = Rect::from_min_max(pos2(queue.left(), queue.top() + head_h), queue.max);
         if queue_w > 0.0 {
-            p.line_segment([pos2(queue.left() - 1.0, queue.top()), pos2(queue.left() - 1.0, queue.bottom())], Stroke::new(1.0_f32, K_LINE));
+            p.line_segment([pos2(queue.left() - 1.0, queue.top()), pos2(queue.left() - 1.0, queue.bottom())], Stroke::new(1.0_f32, k_line()));
             let qh = Rect::from_min_size(queue.min, vec2(queue.width(), head_h));
-            p.rect_filled(qh, 0.0, K_PANEL2);
-            tr(p, pos2(qh.left() + 10.0, qh.center().y), Align2::LEFT_CENTER, format!("Fila [{}]", lib.prepare.len()), 13.0, if queue_focus { K_BLUE } else { K_DIM });
+            p.rect_filled(qh, 0.0, k_panel2());
+            tr(p, pos2(qh.left() + 10.0, qh.center().y), Align2::LEFT_CENTER, format!("Fila [{}]", lib.prepare.len()), 13.0, if queue_focus { k_blue() } else { k_dim() });
             let rows = (queue_rows.height() / row_h).floor().max(1.0) as usize;
             let start = if lib.prepare.len() <= rows { 0 } else { lib.prepare_sel.saturating_sub(rows - 1).min(lib.prepare.len() - rows) };
             let qp = p.with_clip_rect(queue_rows);
@@ -245,13 +249,13 @@ impl DjOsApp {
                 let e = &lib.prepare[i];
                 let r = Rect::from_min_size(pos2(queue_rows.left(), queue_rows.top() + k as f32 * row_h), vec2(queue_rows.width(), row_h));
                 let bg = match (i == lib.prepare_sel, queue_focus) {
-                    (true, true) => K_SEL,
-                    (true, false) => K_SEL_OFF,
+                    (true, true) => k_sel(),
+                    (true, false) => k_sel_off(),
                     _ if k % 2 == 0 => Color32::from_rgb(24, 25, 28),
-                    _ => K_BG,
+                    _ => k_bg(),
                 };
                 qp.rect_filled(r, 0.0, bg);
-                let col = if loaded.contains(&e.path) { K_GREEN } else { K_TEXT };
+                let col = if loaded.contains(&e.path) { k_green() } else { k_text() };
                 tr(&qp, pos2(r.left() + 10.0, r.center().y), Align2::LEFT_CENTER, &e.title, font * 0.85, col);
                 let (c, dc) = click(ui, r.intersect(queue_rows), ("nav-fila", i));
                 if c || dc {
@@ -332,31 +336,31 @@ impl DjOsApp {
     /// Deck em miniatura embaixo do browser: música, tom, tempo restante, BPM e a música inteira
     /// com os hot cues.
     fn draw_mini_deck(&mut self, p: &Painter, r: Rect, d: usize, t: Option<Arc<Track>>, s: &DeckSnap) {
-        p.rect_filled(r, 0.0, K_PANEL);
+        p.rect_filled(r, 0.0, k_panel());
         let head = Rect::from_min_size(r.min, vec2(r.width(), 22.0));
-        p.rect_filled(head, 0.0, K_PANEL2);
+        p.rect_filled(head, 0.0, k_panel2());
         let num = Rect::from_min_size(head.min, vec2(22.0, 22.0));
-        p.rect_filled(num, 0.0, if on_air(s) { deck_tint(d) } else { K_LINE });
-        tb(p, num.center(), Align2::CENTER_CENTER, d + 1, 14.0, if on_air(s) { K_BG } else { K_TEXT });
+        p.rect_filled(num, 0.0, if on_air(s) { deck_tint(d) } else { k_line() });
+        tb(p, num.center(), Align2::CENTER_CENTER, d + 1, 14.0, if on_air(s) { k_bg() } else { k_text() });
         let mut right = head.right() - 6.0;
         if let Some(k) = t.as_ref().and_then(|t| crate::key::from_raw(t.key)) {
-            right = tb(p, pos2(right, head.center().y), Align2::RIGHT_CENTER, crate::key::label(k), 13.0, K_TEXT).left() - 8.0;
+            right = tb(p, pos2(right, head.center().y), Align2::RIGHT_CENTER, crate::key::label(k), 13.0, k_text()).left() - 8.0;
         }
         let hp = p.with_clip_rect(Rect::from_min_max(pos2(num.right(), head.top()), pos2(right, head.bottom())));
         let title = t.as_ref().map_or("Sem música".to_string(), |t| format!("♪ {}", t.title));
-        tr(&hp, pos2(num.right() + 8.0, head.center().y), Align2::LEFT_CENTER, title, 13.0, if t.is_some() { K_TEXT } else { K_DIM });
+        tr(&hp, pos2(num.right() + 8.0, head.center().y), Align2::LEFT_CENTER, title, 13.0, if t.is_some() { k_text() } else { k_dim() });
 
         let y = head.bottom() + 4.0;
-        tr(p, pos2(r.left() + 8.0, y), Align2::LEFT_TOP, "RESTANTE", 9.0, K_DIM);
+        tr(p, pos2(r.left() + 8.0, y), Align2::LEFT_TOP, "RESTANTE", 9.0, k_dim());
         let time = if t.is_some() { remain_text(s) } else { "--:--.-".into() };
-        tb(p, pos2(r.left() + 8.0, y + 9.0), Align2::LEFT_TOP, time, 24.0, K_TEXT);
-        tr(p, pos2(r.right() - 70.0, y), Align2::RIGHT_TOP, "BPM", 9.0, K_DIM);
+        tb(p, pos2(r.left() + 8.0, y + 9.0), Align2::LEFT_TOP, time, 24.0, k_text());
+        tr(p, pos2(r.right() - 70.0, y), Align2::RIGHT_TOP, "BPM", 9.0, k_dim());
         let bpm = if s.loaded && s.bpm > 0.0 { format!("{:.1}", s.bpm) } else { "--.-".into() };
-        tb(p, pos2(r.right() - 8.0, y + 9.0), Align2::RIGHT_TOP, bpm, 24.0, if s.sync_ok && s.loaded { K_GREEN } else { K_TEXT });
+        tb(p, pos2(r.right() - 8.0, y + 9.0), Align2::RIGHT_TOP, bpm, 24.0, if s.sync_ok && s.loaded { k_green() } else { k_text() });
 
         // Música inteira, com o que já tocou mais escuro, hot cues e posição.
         let ov = Rect::from_min_max(pos2(r.left() + 8.0, r.bottom() - 26.0), pos2(r.right() - 8.0, r.bottom() - 6.0));
-        p.rect_filled(ov, 0.0, K_BG);
+        p.rect_filled(ov, 0.0, k_bg());
         let Some(t) = t else { return };
         let width = ov.width().max(1.0) as usize;
         let pal = band_colors();
@@ -380,12 +384,12 @@ impl DjOsApp {
             if let Some(hp) = h {
                 let hx = x_of(*hp);
                 let lab = Rect::from_center_size(pos2(hx, ov.top() - 4.0), vec2(11.0, 11.0));
-                p.rect_filled(lab, 1.0, CUE_COLORS[i]);
-                tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 9.0, K_BG);
+                p.rect_filled(lab, 1.0, cue_cor(i));
+                tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 9.0, k_bg());
             }
         }
         let nx = x_of(s.pos);
-        p.line_segment([pos2(nx, ov.top() - 2.0), pos2(nx, ov.bottom() + 2.0)], Stroke::new(2.0_f32, K_TEXT));
+        p.line_segment([pos2(nx, ov.top() - 2.0), pos2(nx, ov.bottom() + 2.0)], Stroke::new(2.0_f32, k_text()));
     }
 }
 
@@ -399,5 +403,5 @@ fn scrollbar(p: &Painter, r: Rect, first: usize, rows: usize, n: usize) {
     let bar = Rect::from_min_max(pos2(r.right() - 4.0, r.top()), r.max);
     let h = (bar.height() * rows as f32 / n as f32).max(20.0);
     let y = bar.top() + (bar.height() - h) * first as f32 / (n - rows) as f32;
-    p.rect_filled(Rect::from_min_size(pos2(bar.left(), y), vec2(4.0, h)), 2.0, K_DIM);
+    p.rect_filled(Rect::from_min_size(pos2(bar.left(), y), vec2(4.0, h)), 2.0, k_dim());
 }

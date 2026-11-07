@@ -2,6 +2,7 @@
 //! Pensada para 1366x768 e operada pela controladora; o teclado serve para testes.
 
 mod principal;
+pub mod skin;
 
 use crate::app::{Loader, SharedApp};
 use crate::engine::fx::{beats_label, step_beats, FxKind};
@@ -1517,6 +1518,7 @@ impl eframe::App for DjOsApp {
                 (a.settings_ui.is_some(), a.search.is_some(), a.settings.palette, a.settings.scale)
             };
             PALETTE.store(palette, std::sync::atomic::Ordering::Relaxed);
+            skin::garantir(&self.app.lock().settings.skin);
             let is_light = {
                 let a = self.app.lock();
                 std::env::var("DJOS_MODO_LEVE").is_ok_and(|v| v == "1")

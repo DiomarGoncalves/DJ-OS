@@ -1,0 +1,21 @@
+# Neon: preto com cores fortes.
+nome = Neon
+fundo = #05030A
+painel = #0E0A18
+painel2 = #1A1430
+linha = #3A2E5C
+texto = #F2EEFF
+apagado = #8A80A8
+destaque = #FF2BD6
+laranja = #FFB21E
+vermelho = #FF2E5A
+verde = #19FFB4
+selecao = #B4209A
+selecao_fraca = #3E1A4E
+deck1 = #FF2BD6
+deck2 = #19E6FF
+deck3 = #B4FF1E
+deck4 = #FFB21E
+grave = #8A2BFF
+medio = #19E6FF
+agudo = #FFFFFF
