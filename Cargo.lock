@@ -994,7 +994,7 @@ dependencies = [
 
 [[package]]
 name = "dj-os"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "chrono",
  "cpal",
@@ -1011,14 +1011,14 @@ dependencies = [
 
 [[package]]
 name = "dj-os-analise"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "symphonia",
 ]
 
 [[package]]
 name = "dj-os-preparar"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "cpal",
  "dj-os-analise",

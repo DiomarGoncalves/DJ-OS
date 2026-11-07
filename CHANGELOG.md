@@ -6,6 +6,11 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+## [0.1.5] - 2026-11-06
+
+Som mais aberto, waveform com as cores dos aparelhos de cabine, zoom pelo BROWSE e o DJ OS
+Preparar novo (dividido no meio, com player e hot cues). Testado na cabine com a DDJ-REV1.
+
 ### Novo
 - **DJ OS Preparar** repaginado, no visual preto do aparelho, dividido no meio:
   - à esquerda o **computador** (escolhe o disco: Músicas, pasta pessoal, HDs internos e
