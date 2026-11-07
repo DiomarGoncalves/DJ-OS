@@ -1,0 +1,208 @@
+# Pioneer DDJ-400 para o DJ OS (formato em docs/mapeamento.md).
+# Endereços MIDI tirados do mapeamento do Mixxx (Pioneer-DDJ-400.midi.xml), de Warker, nschloe, dj3730, jusko, tiesjan.
+# Obrigado! (GPL-2.0 ou posterior, compatível com o DJ OS.)
+# Canais: 1 e 2 = decks, 5 = BEAT FX, 7 = browser/mixer, 8-11 = pads (deck 1, deck 1 + SHIFT,
+# deck 2, deck 2 + SHIFT). Os pads mandam notas diferentes em cada modo.
+# Ninguém conferiu com o aparelho ainda: se algo não responder, use CONFIG > CONTROLADORA >
+# Registrar os botões e corrija o número aqui.
+
+nome = Pioneer DDJ-400
+porta = DDJ-400
+situacao = em teste
+fonte = Mapeamento do Mixxx (Pioneer-DDJ-400.midi.xml e script, GPL-2.0+)
+
+# ---- SHIFT (a controladora também troca as notas sozinha)
+nota 1  0x3F  shift
+nota 2  0x3F  shift
+
+# ---- deck 1
+nota 1  0x0B  play             deck=1
+nota 1  0x47  stutter          deck=1                # SHIFT + PLAY
+nota 1  0x0C  cue              deck=1
+nota 1  0x48  inicio           deck=1                # SHIFT + CUE
+nota 1  0x58  sync             deck=1
+nota 1  0x60  faixa_pitch      deck=1                # SHIFT + BEAT SYNC
+nota 1  0x54  pfl              deck=1                # CUE do fone
+nota 1  0x10  loop_in          deck=1                # LOOP IN / 4 BEAT
+nota 1  0x11  loop_out         deck=1
+nota 1  0x4D  loop_sair        deck=1                # RELOOP/EXIT
+nota 1  0x51  loop_metade      deck=1                # CUE/LOOP CALL <
+nota 1  0x53  loop_dobro       deck=1                # CUE/LOOP CALL >
+nota 1  0x3E  beatjump         deck=1 b=-32          # SHIFT + CUE/LOOP CALL <
+nota 1  0x3D  beatjump         deck=1 b=32           # SHIFT + CUE/LOOP CALL >
+nota 1  0x36  jog_toque        deck=1
+nota 1  0x67  jog_toque        deck=1                # com SHIFT
+cc   1  0x22  jog_scratch      deck=1                # prato (modo vinil)
+cc   1  0x23  jog_bend         deck=1                # prato (vinil desligado)
+cc   1  0x21  jog_bend         deck=1                # lateral do jog
+cc   1  0x29  jog_busca        deck=1                # SHIFT + jog
+cc   1  0x13  volume           deck=1 lsb=0x33
+cc   1  0x00  tempo            deck=1 lsb=0x20
+cc   1  0x04  trim             deck=1 lsb=0x24
+cc   1  0x07  agudo            deck=1 lsb=0x27
+cc   1  0x0B  medio            deck=1 lsb=0x2B
+cc   1  0x0F  grave            deck=1 lsb=0x2F
+
+# ---- deck 2
+nota 2  0x0B  play             deck=2
+nota 2  0x47  stutter          deck=2                # SHIFT + PLAY
+nota 2  0x0C  cue              deck=2
+nota 2  0x48  inicio           deck=2                # SHIFT + CUE
+nota 2  0x58  sync             deck=2
+nota 2  0x60  faixa_pitch      deck=2                # SHIFT + BEAT SYNC
+nota 2  0x54  pfl              deck=2                # CUE do fone
+nota 2  0x10  loop_in          deck=2                # LOOP IN / 4 BEAT
+nota 2  0x11  loop_out         deck=2
+nota 2  0x4D  loop_sair        deck=2                # RELOOP/EXIT
+nota 2  0x51  loop_metade      deck=2                # CUE/LOOP CALL <
+nota 2  0x53  loop_dobro       deck=2                # CUE/LOOP CALL >
+nota 2  0x3E  beatjump         deck=2 b=-32          # SHIFT + CUE/LOOP CALL <
+nota 2  0x3D  beatjump         deck=2 b=32           # SHIFT + CUE/LOOP CALL >
+nota 2  0x36  jog_toque        deck=2
+nota 2  0x67  jog_toque        deck=2                # com SHIFT
+cc   2  0x22  jog_scratch      deck=2                # prato (modo vinil)
+cc   2  0x23  jog_bend         deck=2                # prato (vinil desligado)
+cc   2  0x21  jog_bend         deck=2                # lateral do jog
+cc   2  0x29  jog_busca        deck=2                # SHIFT + jog
+cc   2  0x13  volume           deck=2 lsb=0x33
+cc   2  0x00  tempo            deck=2 lsb=0x20
+cc   2  0x04  trim             deck=2 lsb=0x24
+cc   2  0x07  agudo            deck=2 lsb=0x27
+cc   2  0x0B  medio            deck=2 lsb=0x2B
+cc   2  0x0F  grave            deck=2 lsb=0x2F
+
+# ---- mixer e browser (canal 7)
+cc   7  0x17  filtro           deck=1 lsb=0x37       # CH1 FILTER
+cc   7  0x18  filtro           deck=2 lsb=0x38       # CH2 FILTER
+cc   7  0x1F  crossfader       lsb=0x3F
+cc   7  0x0D  fone_volume      lsb=0x2D              # HEADPHONES LEVEL
+cc   7  0x40  browse_gira
+nota 7  0x41  browse_aperta
+nota 7  0x42  browser                                # SHIFT + BROWSE: lista em tela cheia
+nota 7  0x46  load             deck=1
+nota 7  0x47  load             deck=2
+
+# ---- BEAT FX (canal 5): um efeito só, ligado ao deck 1
+nota 5  0x47  fx_liga          deck=1                # BEAT FX ON/OFF
+cc   5  0x02  fx_nivel         deck=1                # LEVEL/DEPTH
+nota 5  0x4A  fx_batida_menos  deck=1                # BEAT <
+nota 5  0x4B  fx_batida_mais   deck=1                # BEAT >
+nota 5  0x63  fx_proximo       deck=1                # BEAT FX SELECT
+
+# ---- pads do deck 1 (canal 8; com SHIFT canal 9)
+nota 8  0x00  hotcue           deck=1 n=1            # HOT CUE
+nota 8  0x01  hotcue           deck=1 n=2
+nota 8  0x02  hotcue           deck=1 n=3
+nota 8  0x03  hotcue           deck=1 n=4
+nota 8  0x04  hotcue           deck=1 n=5
+nota 8  0x05  hotcue           deck=1 n=6
+nota 8  0x06  hotcue           deck=1 n=7
+nota 8  0x07  hotcue           deck=1 n=8
+nota 9  0x00  apagar_hotcue    deck=1 n=1            # SHIFT + pad: apaga
+nota 9  0x01  apagar_hotcue    deck=1 n=2
+nota 9  0x02  apagar_hotcue    deck=1 n=3
+nota 9  0x03  apagar_hotcue    deck=1 n=4
+nota 9  0x04  apagar_hotcue    deck=1 n=5
+nota 9  0x05  apagar_hotcue    deck=1 n=6
+nota 9  0x06  apagar_hotcue    deck=1 n=7
+nota 9  0x07  apagar_hotcue    deck=1 n=8
+nota 8  0x60  loop_auto        deck=1 b=1/4          # BEAT LOOP
+nota 8  0x61  loop_auto        deck=1 b=1/2
+nota 8  0x62  loop_auto        deck=1 b=1
+nota 8  0x63  loop_auto        deck=1 b=2
+nota 8  0x64  loop_auto        deck=1 b=4
+nota 8  0x65  loop_auto        deck=1 b=8
+nota 8  0x66  loop_auto        deck=1 b=16
+nota 8  0x67  loop_auto        deck=1 b=32
+nota 8  0x20  beatjump         deck=1 b=-1           # BEAT JUMP
+nota 8  0x21  beatjump         deck=1 b=1
+nota 8  0x22  beatjump         deck=1 b=-2
+nota 8  0x23  beatjump         deck=1 b=2
+nota 8  0x24  beatjump         deck=1 b=-4
+nota 8  0x25  beatjump         deck=1 b=4
+nota 8  0x26  beatjump         deck=1 b=-8
+nota 8  0x27  beatjump         deck=1 b=8
+
+# ---- pads do deck 2 (canal 10; com SHIFT canal 11)
+nota 10 0x00  hotcue           deck=2 n=1            # HOT CUE
+nota 10 0x01  hotcue           deck=2 n=2
+nota 10 0x02  hotcue           deck=2 n=3
+nota 10 0x03  hotcue           deck=2 n=4
+nota 10 0x04  hotcue           deck=2 n=5
+nota 10 0x05  hotcue           deck=2 n=6
+nota 10 0x06  hotcue           deck=2 n=7
+nota 10 0x07  hotcue           deck=2 n=8
+nota 11 0x00  apagar_hotcue    deck=2 n=1            # SHIFT + pad: apaga
+nota 11 0x01  apagar_hotcue    deck=2 n=2
+nota 11 0x02  apagar_hotcue    deck=2 n=3
+nota 11 0x03  apagar_hotcue    deck=2 n=4
+nota 11 0x04  apagar_hotcue    deck=2 n=5
+nota 11 0x05  apagar_hotcue    deck=2 n=6
+nota 11 0x06  apagar_hotcue    deck=2 n=7
+nota 11 0x07  apagar_hotcue    deck=2 n=8
+nota 10 0x60  loop_auto        deck=2 b=1/4          # BEAT LOOP
+nota 10 0x61  loop_auto        deck=2 b=1/2
+nota 10 0x62  loop_auto        deck=2 b=1
+nota 10 0x63  loop_auto        deck=2 b=2
+nota 10 0x64  loop_auto        deck=2 b=4
+nota 10 0x65  loop_auto        deck=2 b=8
+nota 10 0x66  loop_auto        deck=2 b=16
+nota 10 0x67  loop_auto        deck=2 b=32
+nota 10 0x20  beatjump         deck=2 b=-1           # BEAT JUMP
+nota 10 0x21  beatjump         deck=2 b=1
+nota 10 0x22  beatjump         deck=2 b=-2
+nota 10 0x23  beatjump         deck=2 b=2
+nota 10 0x24  beatjump         deck=2 b=-4
+nota 10 0x25  beatjump         deck=2 b=4
+nota 10 0x26  beatjump         deck=2 b=-8
+nota 10 0x27  beatjump         deck=2 b=8
+
+# ---- LEDs
+led nota 1  0x0B  tocando   deck=1
+led nota 1  0x47  tocando   deck=1                   # PLAY com SHIFT
+led nota 1  0x0C  cue       deck=1
+led nota 1  0x58  sync      deck=1
+led nota 1  0x54  pfl       deck=1
+led nota 1  0x4D  loop      deck=1                   # RELOOP/EXIT
+led nota 1  0x50  loop      deck=1                   # RELOOP/EXIT com SHIFT
+led nota 2  0x0B  tocando   deck=2
+led nota 2  0x47  tocando   deck=2                   # PLAY com SHIFT
+led nota 2  0x0C  cue       deck=2
+led nota 2  0x58  sync      deck=2
+led nota 2  0x54  pfl       deck=2
+led nota 2  0x4D  loop      deck=2                   # RELOOP/EXIT
+led nota 2  0x50  loop      deck=2                   # RELOOP/EXIT com SHIFT
+led nota 5  0x47  fx_ligado deck=1                   # BEAT FX ON/OFF
+led nota 5  0x43  fx_ligado deck=1                   # BEAT FX ON/OFF com SHIFT
+led nota 8  0x00  hotcue    deck=1 n=1
+led nota 8  0x01  hotcue    deck=1 n=2
+led nota 8  0x02  hotcue    deck=1 n=3
+led nota 8  0x03  hotcue    deck=1 n=4
+led nota 8  0x04  hotcue    deck=1 n=5
+led nota 8  0x05  hotcue    deck=1 n=6
+led nota 8  0x06  hotcue    deck=1 n=7
+led nota 8  0x07  hotcue    deck=1 n=8
+led nota 9  0x00  hotcue    deck=1 n=1
+led nota 9  0x01  hotcue    deck=1 n=2
+led nota 9  0x02  hotcue    deck=1 n=3
+led nota 9  0x03  hotcue    deck=1 n=4
+led nota 9  0x04  hotcue    deck=1 n=5
+led nota 9  0x05  hotcue    deck=1 n=6
+led nota 9  0x06  hotcue    deck=1 n=7
+led nota 9  0x07  hotcue    deck=1 n=8
+led nota 10 0x00  hotcue    deck=2 n=1
+led nota 10 0x01  hotcue    deck=2 n=2
+led nota 10 0x02  hotcue    deck=2 n=3
+led nota 10 0x03  hotcue    deck=2 n=4
+led nota 10 0x04  hotcue    deck=2 n=5
+led nota 10 0x05  hotcue    deck=2 n=6
+led nota 10 0x06  hotcue    deck=2 n=7
+led nota 10 0x07  hotcue    deck=2 n=8
+led nota 11 0x00  hotcue    deck=2 n=1
+led nota 11 0x01  hotcue    deck=2 n=2
+led nota 11 0x02  hotcue    deck=2 n=3
+led nota 11 0x03  hotcue    deck=2 n=4
+led nota 11 0x04  hotcue    deck=2 n=5
+led nota 11 0x05  hotcue    deck=2 n=6
+led nota 11 0x06  hotcue    deck=2 n=7
+led nota 11 0x07  hotcue    deck=2 n=8

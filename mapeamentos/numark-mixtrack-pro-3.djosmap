@@ -1,0 +1,149 @@
+# Numark Mixtrack Pro 3 (e Mixtrack 3, que é a mesma controladora sem placa de som).
+# Endereços tirados do mapeamento do Mixxx "Numark Mixtrack (Pro) 3", de Stéphane Morin
+# (modificado por Radu Suciu e outros), GPL-2.0 ou posterior. Obrigado!
+#
+# Canais: 1 = mixer/browser, 2 = deck 1, 3 = deck 2.
+# O SHIFT é feito pelo programa: a controladora manda a mesma nota com e sem SHIFT,
+# por isso as funções com SHIFT usam a opção "shift".
+# O jog manda 1, 2, 3... horário e 127, 126... anti-horário (complemento de dois): valor=relativo.
+
+nome = Numark Mixtrack Pro 3
+porta = mixtrack pro 3
+porta = mixtrack 3
+situacao = em teste
+fonte = mapeamento do Mixxx Numark-Mixtrack-3.midi.xml e Numark-Mixtrack-3-scripts.js (Stéphane Morin)
+
+# ---------------------------------------------------------------- mixer e browser
+cc      1   0x07  crossfader
+cc      1   0x0A  master
+cc      1   0x08  fone_volume
+cc      1   0x09  fone_mix
+cc      1   0x17  browse_gira
+nota    1   0x12  browse_aperta
+nota    1   0x10  load          deck=1
+nota    1   0x11  load          deck=2
+nota    1   0x0E  pfl           deck=1
+nota    1   0x0F  pfl           deck=2
+
+# SHIFT (um em cada deck; os dois fazem o mesmo)
+nota    2   0x0B  shift
+nota    3   0x0B  shift
+
+# ---------------------------------------------------------------- deck 1 (canal 2)
+nota    2   0x01  play          deck=1
+nota    2   0x01  stutter       deck=1 shift
+nota    2   0x03  cue           deck=1
+nota    2   0x03  inicio        deck=1 shift
+nota    2   0x02  sync          deck=1
+nota    2   0x02  keylock       deck=1 shift
+cc      2   0x05  volume        deck=1
+cc      2   0x18  tempo         deck=1 lsb=0x38
+cc      2   0x03  grave         deck=1
+cc      2   0x02  medio         deck=1
+cc      2   0x01  agudo         deck=1
+cc      2   0x04  filtro        deck=1
+cc      2   0x04  trim          deck=1 shift     # SHIFT + filtro = ganho (como no Mixxx)
+nota    2   0x0C  jog_toque     deck=1
+cc      2   0x11  jog_scratch   deck=1 valor=relativo
+cc      2   0x11  jog_busca     deck=1 valor=relativo shift
+nota    2   0x06  vinil         deck=1           # botão do jog: modo scratch
+nota    2   0x06  slip          deck=1 shift
+# PITCH BEND -/+ com SHIFT: beat jump
+nota    2   0x04  beatjump      deck=1 b=-4 shift
+nota    2   0x05  beatjump      deck=1 b=4 shift
+# loop
+nota    2   0x13  loop_in       deck=1
+nota    2   0x14  loop_out      deck=1
+nota    2   0x15  loop_sair     deck=1
+nota    2   0x16  loop_metade   deck=1
+nota    2   0x16  loop_dobro    deck=1 shift
+# pads de hot cue (SHIFT apaga)
+nota    2   0x1B  hotcue        deck=1 n=1
+nota    2   0x1C  hotcue        deck=1 n=2
+nota    2   0x1D  hotcue        deck=1 n=3
+nota    2   0x1E  hotcue        deck=1 n=4
+nota    2   0x1B  apagar_hotcue deck=1 n=1 shift
+nota    2   0x1C  apagar_hotcue deck=1 n=2 shift
+nota    2   0x1D  apagar_hotcue deck=1 n=3 shift
+nota    2   0x1E  apagar_hotcue deck=1 n=4 shift
+# pads de auto loop: 2, 4, 8, 16 batidas; com SHIFT 1/8, 1/4, 1/2, 1
+nota    2   0x17  loop_auto     deck=1 b=2
+nota    2   0x18  loop_auto     deck=1 b=4
+nota    2   0x19  loop_auto     deck=1 b=8
+nota    2   0x1A  loop_auto     deck=1 b=16
+nota    2   0x17  loop_auto     deck=1 b=1/8 shift
+nota    2   0x18  loop_auto     deck=1 b=1/4 shift
+nota    2   0x19  loop_auto     deck=1 b=1/2 shift
+nota    2   0x1A  loop_auto     deck=1 b=1 shift
+# FX 1 liga o efeito; SHIFT + FX 1 troca o efeito
+nota    2   0x07  fx_liga       deck=1
+nota    2   0x07  fx_proximo    deck=1 shift
+
+# ---------------------------------------------------------------- deck 2 (canal 3)
+nota    3   0x01  play          deck=2
+nota    3   0x01  stutter       deck=2 shift
+nota    3   0x03  cue           deck=2
+nota    3   0x03  inicio        deck=2 shift
+nota    3   0x02  sync          deck=2
+nota    3   0x02  keylock       deck=2 shift
+cc      3   0x05  volume        deck=2
+cc      3   0x18  tempo         deck=2 lsb=0x38
+cc      3   0x03  grave         deck=2
+cc      3   0x02  medio         deck=2
+cc      3   0x01  agudo         deck=2
+cc      3   0x04  filtro        deck=2
+cc      3   0x04  trim          deck=2 shift
+nota    3   0x0C  jog_toque     deck=2
+cc      3   0x11  jog_scratch   deck=2 valor=relativo
+cc      3   0x11  jog_busca     deck=2 valor=relativo shift
+nota    3   0x06  vinil         deck=2
+nota    3   0x06  slip          deck=2 shift
+nota    3   0x04  beatjump      deck=2 b=-4 shift
+nota    3   0x05  beatjump      deck=2 b=4 shift
+nota    3   0x13  loop_in       deck=2
+nota    3   0x14  loop_out      deck=2
+nota    3   0x15  loop_sair     deck=2
+nota    3   0x16  loop_metade   deck=2
+nota    3   0x16  loop_dobro    deck=2 shift
+nota    3   0x1B  hotcue        deck=2 n=1
+nota    3   0x1C  hotcue        deck=2 n=2
+nota    3   0x1D  hotcue        deck=2 n=3
+nota    3   0x1E  hotcue        deck=2 n=4
+nota    3   0x1B  apagar_hotcue deck=2 n=1 shift
+nota    3   0x1C  apagar_hotcue deck=2 n=2 shift
+nota    3   0x1D  apagar_hotcue deck=2 n=3 shift
+nota    3   0x1E  apagar_hotcue deck=2 n=4 shift
+nota    3   0x17  loop_auto     deck=2 b=2
+nota    3   0x18  loop_auto     deck=2 b=4
+nota    3   0x19  loop_auto     deck=2 b=8
+nota    3   0x1A  loop_auto     deck=2 b=16
+nota    3   0x17  loop_auto     deck=2 b=1/8 shift
+nota    3   0x18  loop_auto     deck=2 b=1/4 shift
+nota    3   0x19  loop_auto     deck=2 b=1/2 shift
+nota    3   0x1A  loop_auto     deck=2 b=1 shift
+nota    3   0x07  fx_liga       deck=2
+nota    3   0x07  fx_proximo    deck=2 shift
+
+# ---------------------------------------------------------------- LEDs (0x7F aceso, 0x00 apagado)
+led nota 2  0x01  tocando  deck=1
+led nota 2  0x03  cue      deck=1
+led nota 2  0x02  sync     deck=1
+led nota 2  0x06  vinil    deck=1
+led nota 2  0x15  loop     deck=1
+led nota 2  0x07  fx_ligado deck=1
+led nota 2  0x1B  hotcue   deck=1 n=1
+led nota 2  0x1C  hotcue   deck=1 n=2
+led nota 2  0x1D  hotcue   deck=1 n=3
+led nota 2  0x1E  hotcue   deck=1 n=4
+led nota 1  0x0E  pfl      deck=1
+led nota 3  0x01  tocando  deck=2
+led nota 3  0x03  cue      deck=2
+led nota 3  0x02  sync     deck=2
+led nota 3  0x06  vinil    deck=2
+led nota 3  0x15  loop     deck=2
+led nota 3  0x07  fx_ligado deck=2
+led nota 3  0x1B  hotcue   deck=2 n=1
+led nota 3  0x1C  hotcue   deck=2 n=2
+led nota 3  0x1D  hotcue   deck=2 n=3
+led nota 3  0x1E  hotcue   deck=2 n=4
+led nota 1  0x0F  pfl      deck=2

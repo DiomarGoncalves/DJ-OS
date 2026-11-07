@@ -755,6 +755,20 @@ led nota 1 0x00 hotcue deck=1 n=1 ligado=0x7F desligado=0x01
     }
 
     #[test]
+    fn uma_controladora_nao_pega_a_porta_de_outra() {
+        let mapas: Vec<Mapa> = EMBUTIDOS.iter().map(|(_, t)| ler(t).unwrap()).collect();
+        for a in &mapas {
+            assert!(!a.reconhece("DDJ-REV1:DDJ-REV1 MIDI 1 28:0"), "{} pega a porta da REV1", a.nome);
+            for b in mapas.iter().filter(|b| b.nome != a.nome) {
+                for p in &b.portas {
+                    // A porta de b (o nome que ela teria) não pode ser reconhecida por a.
+                    assert!(!a.reconhece(p), "{} pega a porta de {} ({p})", a.nome, b.nome);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn embutidos_estao_certos() {
         for (arq, texto) in EMBUTIDOS {
             let m = ler(texto).unwrap_or_else(|e| panic!("{arq}: {e}"));

@@ -1,0 +1,135 @@
+# Hercules DJControl Inpulse 200.
+# Endereços tirados do mapeamento do Mixxx "Hercules DJControl Inpulse 200", de DJ Phatso
+# (suporte técnico da Hercules), GPL-2.0 ou posterior. Obrigado!
+#
+# O SHIFT é feito pela própria controladora: com SHIFT ela manda outro canal
+# (canal 4 = mixer, 5 = deck 1, 6 = deck 2), por isso não precisa da opção "shift".
+# Os modos dos pads também são da controladora: cada modo manda outras notas (canal 7 = deck 1,
+# canal 8 = deck 2).
+# Jog: 1 = horário, 127 = anti-horário (complemento de dois): valor=relativo.
+# Master e fone são analógicos (placa de som) e não mandam MIDI. Não tem EQ médio.
+
+nome = Hercules DJControl Inpulse 200
+porta = inpulse 200
+situacao = em teste
+fonte = mapeamento do Mixxx Hercules_DJControl_Inpulse_200.midi.xml e Hercules-DJControl-Inpulse-200-script.js (DJ Phatso / Hercules)
+
+# ---------------------------------------------------------------- mixer e browser
+cc      1   0x00  crossfader
+cc      1   0x01  browse_gira
+cc      4   0x01  browse_gira               # SHIFT + BROWSE girado
+nota    1   0x00  browse_aperta
+nota    4   0x00  browser                   # SHIFT + BROWSE: browser em tela cheia
+
+# ---------------------------------------------------------------- deck 1 (canal 2; com SHIFT canal 5)
+nota    2   0x07  play          deck=1
+nota    5   0x07  stutter       deck=1
+nota    2   0x06  cue           deck=1
+nota    5   0x06  inicio        deck=1
+nota    2   0x05  sync          deck=1
+nota    2   0x0C  pfl           deck=1
+nota    2   0x0D  load          deck=1
+nota    2   0x03  vinil         deck=1
+nota    2   0x09  loop_auto     deck=1 b=4   # LOOP IN: loop de 4 batidas
+nota    2   0x0A  loop_sair     deck=1       # LOOP OUT: reloop / sai
+nota    5   0x09  loop_metade   deck=1
+nota    5   0x0A  loop_dobro    deck=1
+cc      2   0x00  volume        deck=1
+cc      2   0x08  tempo         deck=1 lsb=0x28 invertido
+cc      2   0x05  trim          deck=1
+cc      2   0x02  grave         deck=1
+cc      2   0x04  agudo         deck=1
+cc      2   0x01  filtro        deck=1
+nota    2   0x08  jog_toque     deck=1
+nota    5   0x08  jog_toque     deck=1       # toque com SHIFT (para soltar certo)
+cc      2   0x0A  jog_scratch   deck=1 valor=relativo
+cc      2   0x09  jog_bend      deck=1 valor=relativo
+cc      5   0x0A  jog_busca     deck=1 valor=relativo
+# pads (canal 7): hot cue, SHIFT + hot cue apaga, loop, efeito
+nota    7   0x00  hotcue        deck=1 n=1
+nota    7   0x01  hotcue        deck=1 n=2
+nota    7   0x02  hotcue        deck=1 n=3
+nota    7   0x03  hotcue        deck=1 n=4
+nota    7   0x08  apagar_hotcue deck=1 n=1
+nota    7   0x09  apagar_hotcue deck=1 n=2
+nota    7   0x0A  apagar_hotcue deck=1 n=3
+nota    7   0x0B  apagar_hotcue deck=1 n=4
+nota    7   0x10  loop_auto     deck=1 b=1   # modo ROLL: no Mixxx é loop roll de 1, 2, 4, 8
+nota    7   0x11  loop_auto     deck=1 b=2
+nota    7   0x12  loop_auto     deck=1 b=4
+nota    7   0x13  loop_auto     deck=1 b=8
+nota    7   0x23  fx_liga       deck=1       # modo FX, pad 4: liga o efeito do deck
+nota    7   0x2B  fx_liga       deck=1
+
+# ---------------------------------------------------------------- deck 2 (canal 3; com SHIFT canal 6)
+nota    3   0x07  play          deck=2
+nota    6   0x07  stutter       deck=2
+nota    3   0x06  cue           deck=2
+nota    6   0x06  inicio        deck=2
+nota    3   0x05  sync          deck=2
+nota    3   0x0C  pfl           deck=2
+nota    3   0x0D  load          deck=2
+nota    3   0x03  vinil         deck=2
+nota    3   0x09  loop_auto     deck=2 b=4
+nota    3   0x0A  loop_sair     deck=2
+nota    6   0x09  loop_metade   deck=2
+nota    6   0x0A  loop_dobro    deck=2
+cc      3   0x00  volume        deck=2
+cc      3   0x08  tempo         deck=2 lsb=0x28 invertido
+cc      3   0x05  trim          deck=2
+cc      3   0x02  grave         deck=2
+cc      3   0x04  agudo         deck=2
+cc      3   0x01  filtro        deck=2
+nota    3   0x08  jog_toque     deck=2
+nota    6   0x08  jog_toque     deck=2
+cc      3   0x0A  jog_scratch   deck=2 valor=relativo
+cc      3   0x09  jog_bend      deck=2 valor=relativo
+cc      6   0x0A  jog_busca     deck=2 valor=relativo
+nota    8   0x00  hotcue        deck=2 n=1
+nota    8   0x01  hotcue        deck=2 n=2
+nota    8   0x02  hotcue        deck=2 n=3
+nota    8   0x03  hotcue        deck=2 n=4
+nota    8   0x08  apagar_hotcue deck=2 n=1
+nota    8   0x09  apagar_hotcue deck=2 n=2
+nota    8   0x0A  apagar_hotcue deck=2 n=3
+nota    8   0x0B  apagar_hotcue deck=2 n=4
+nota    8   0x10  loop_auto     deck=2 b=1
+nota    8   0x11  loop_auto     deck=2 b=2
+nota    8   0x12  loop_auto     deck=2 b=4
+nota    8   0x13  loop_auto     deck=2 b=8
+nota    8   0x23  fx_liga       deck=2
+nota    8   0x2B  fx_liga       deck=2
+
+# ---------------------------------------------------------------- LEDs
+led nota 2  0x07  tocando   deck=1
+led nota 2  0x06  cue       deck=1
+led nota 2  0x05  sync      deck=1
+led nota 2  0x0C  pfl       deck=1
+led nota 2  0x09  loop      deck=1
+led nota 2  0x03  vinil     deck=1
+led nota 7  0x00  hotcue    deck=1 n=1 ligado=0x7E
+led nota 7  0x01  hotcue    deck=1 n=2 ligado=0x7E
+led nota 7  0x02  hotcue    deck=1 n=3 ligado=0x7E
+led nota 7  0x03  hotcue    deck=1 n=4 ligado=0x7E
+led nota 7  0x08  hotcue    deck=1 n=1 ligado=0x7E
+led nota 7  0x09  hotcue    deck=1 n=2 ligado=0x7E
+led nota 7  0x0A  hotcue    deck=1 n=3 ligado=0x7E
+led nota 7  0x0B  hotcue    deck=1 n=4 ligado=0x7E
+led nota 7  0x23  fx_ligado deck=1
+led nota 7  0x2B  fx_ligado deck=1
+led nota 3  0x07  tocando   deck=2
+led nota 3  0x06  cue       deck=2
+led nota 3  0x05  sync      deck=2
+led nota 3  0x0C  pfl       deck=2
+led nota 3  0x09  loop      deck=2
+led nota 3  0x03  vinil     deck=2
+led nota 8  0x00  hotcue    deck=2 n=1 ligado=0x7E
+led nota 8  0x01  hotcue    deck=2 n=2 ligado=0x7E
+led nota 8  0x02  hotcue    deck=2 n=3 ligado=0x7E
+led nota 8  0x03  hotcue    deck=2 n=4 ligado=0x7E
+led nota 8  0x08  hotcue    deck=2 n=1 ligado=0x7E
+led nota 8  0x09  hotcue    deck=2 n=2 ligado=0x7E
+led nota 8  0x0A  hotcue    deck=2 n=3 ligado=0x7E
+led nota 8  0x0B  hotcue    deck=2 n=4 ligado=0x7E
+led nota 8  0x23  fx_ligado deck=2
+led nota 8  0x2B  fx_ligado deck=2

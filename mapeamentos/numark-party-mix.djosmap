@@ -1,0 +1,84 @@
+# Numark Party Mix (o primeiro modelo).
+# Endereços tirados do mapeamento do Mixxx "Numark Party Mix", de olaf, GPL-2.0 ou posterior.
+# Obrigado!
+#
+# Canais: deck 1 = canal 1, deck 2 = canal 2; pads do deck 1 = canal 5, do deck 2 = canal 6;
+# browser, LOAD e mixer = canal 16.
+# Não tem SHIFT. Os modos dos pads são do programa: os botões HOT CUE, LOOP e SAMPLER trocam
+# o modo no DJ OS e os 4 pads fazem o que o modo mandar. O modo EFX não tem par no DJ OS.
+# Jog: 1, 2, 3... horário e 127, 126... anti-horário: valor=relativo. O jog não tem sensor de
+# toque, então serve para ajuste fino (tocando) e para andar pela música (parado); o botão
+# SCRATCH fica sem função.
+# Pitch: o Mixxx usa o fader sem inverter, por isso aqui vai "invertido" (no DJ OS o valor
+# baixo é mais lento).
+
+nome = Numark Party Mix
+porta = party mix
+situacao = em teste
+fonte = mapeamento do Mixxx Numark-Party-Mix.midi.xml e Numark-Party-Mix.scripts.js (olaf)
+
+# ---------------------------------------------------------------- mixer e browser
+cc      16  0x08  crossfader
+cc      16  0x0A  master
+cc      16  0x0C  fone_volume
+cc      16  0x0D  fone_mix
+cc      16  0x00  browse_gira
+nota    16  0x00  browse_aperta
+nota    16  0x02  load          deck=1
+nota    16  0x03  load          deck=2
+
+# ---------------------------------------------------------------- deck 1 (canal 1; pads canal 5)
+nota    1   0x00  play          deck=1
+nota    1   0x01  cue           deck=1
+nota    1   0x02  sync          deck=1
+nota    1   0x1B  pfl           deck=1
+cc      1   0x1C  volume        deck=1
+cc      1   0x09  tempo         deck=1 invertido
+cc      1   0x17  trim          deck=1
+cc      1   0x19  grave         deck=1
+cc      1   0x18  agudo         deck=1
+cc      1   0x06  jog_scratch   deck=1 valor=relativo
+nota    5   0x00  pad_modo      deck=1 modo=hotcue
+nota    5   0x0B  pad_modo      deck=1 modo=loop
+nota    5   0x0E  pad_modo      deck=1 modo=sampler
+nota    5   0x14  pad           deck=1 n=1
+nota    5   0x15  pad           deck=1 n=2
+nota    5   0x16  pad           deck=1 n=3
+nota    5   0x17  pad           deck=1 n=4
+
+# ---------------------------------------------------------------- deck 2 (canal 2; pads canal 6)
+nota    2   0x00  play          deck=2
+nota    2   0x01  cue           deck=2
+nota    2   0x02  sync          deck=2
+nota    2   0x1B  pfl           deck=2
+cc      2   0x1C  volume        deck=2
+cc      2   0x09  tempo         deck=2 invertido
+cc      2   0x17  trim          deck=2
+cc      2   0x19  grave         deck=2
+cc      2   0x18  agudo         deck=2
+cc      2   0x06  jog_scratch   deck=2 valor=relativo
+nota    6   0x00  pad_modo      deck=2 modo=hotcue
+nota    6   0x0B  pad_modo      deck=2 modo=loop
+nota    6   0x0E  pad_modo      deck=2 modo=sampler
+nota    6   0x14  pad           deck=2 n=1
+nota    6   0x15  pad           deck=2 n=2
+nota    6   0x16  pad           deck=2 n=3
+nota    6   0x17  pad           deck=2 n=4
+
+# ---------------------------------------------------------------- LEDs (0x7F aceso, 0x01 apagado, como no Mixxx)
+led nota 1  0x00  tocando  deck=1 desligado=0x01
+led nota 1  0x01  cue      deck=1 desligado=0x01
+led nota 1  0x02  sync     deck=1 desligado=0x01
+led nota 1  0x1B  pfl      deck=1 desligado=0x01
+led nota 5  0x14  pad      deck=1 n=1 desligado=0x01
+led nota 5  0x15  pad      deck=1 n=2 desligado=0x01
+led nota 5  0x16  pad      deck=1 n=3 desligado=0x01
+led nota 5  0x17  pad      deck=1 n=4 desligado=0x01
+led nota 2  0x00  tocando  deck=2 desligado=0x01
+led nota 2  0x01  cue      deck=2 desligado=0x01
+led nota 2  0x02  sync     deck=2 desligado=0x01
+led nota 2  0x1B  pfl      deck=2 desligado=0x01
+led nota 6  0x14  pad      deck=2 n=1 desligado=0x01
+led nota 6  0x15  pad      deck=2 n=2 desligado=0x01
+led nota 6  0x16  pad      deck=2 n=3 desligado=0x01
+led nota 6  0x17  pad      deck=2 n=4 desligado=0x01

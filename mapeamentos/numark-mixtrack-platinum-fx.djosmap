@@ -1,0 +1,303 @@
+# Numark Mixtrack Platinum FX (4 decks).
+# Endereços tirados do mapeamento do Mixxx "Numark Mixtrack Platinum FX", de Evoixmr, QGazQ,
+# Octopussy, h67ma, bad1dea5, photoenix, Matthew Nicholson, Ending e Kaj Bostrom,
+# GPL-2.0 ou posterior. Obrigado!
+#
+# Canais: deck 1 a 4 = canais 1 a 4; pads e loop do deck 1 a 4 = canais 5 a 8;
+# browser, LOAD e mixer = canal 16; MASTER = canal 15.
+# O botão DECK troca o canal na própria controladora (os decks 3 e 4 têm canais próprios).
+# O SHIFT é misto: PLAY, CUE, SYNC, os pads, os botões de loop e o PITCH BEND mandam outra
+# nota com SHIFT; o jog e o PFL mandam a mesma, por isso usam a opção "shift".
+# Os modos dos pads são do programa: os botões de modo trocam o modo no DJ OS e os pads
+# fazem o que o modo mandar (SHIFT + pad manda outra nota, que vira "pad com SHIFT").
+# Jog: 1, 2, 3... horário e 127, 126... anti-horário: valor=relativo.
+# LEDs: 0x7F aceso, 0x01 meia-luz (o Mixxx usa 0x01 para "apagado").
+
+nome = Numark Mixtrack Platinum FX
+porta = mixtrack platinum fx
+situacao = em teste
+fonte = mapeamento do Mixxx "Numark Mixtrack Platinum FX.midi.xml" e Numark-Mixtrack-Platinum-FX-scripts.js (Evoixmr e outros)
+
+# ---------------------------------------------------------------- mixer e browser
+cc      16  0x08  crossfader
+cc      15  0x23  master
+cc      16  0x0C  fone_volume
+cc      16  0x0D  fone_mix
+cc      16  0x00  browse_gira
+cc      16  0x01  browse_gira               # SHIFT + BROWSE
+nota    16  0x06  browse_aperta
+nota    16  0x07  browse_aperta             # SHIFT + BROWSE apertado
+nota    16  0x02  load          deck=1
+nota    16  0x03  load          deck=2
+nota    16  0x04  load          deck=3
+nota    16  0x05  load          deck=4
+
+# ---------------------------------------------------------------- deck 1 (canal 1; pads canal 5)
+nota    1   0x20  shift
+nota    1   0x00  play          deck=1
+nota    1   0x01  cue           deck=1
+nota    1   0x05  inicio        deck=1 # SHIFT + CUE
+nota    1   0x02  sync          deck=1
+nota    1   0x0D  keylock       deck=1
+nota    1   0x2B  keylock       deck=1 # SHIFT + PITCH BEND +
+nota    1   0x2C  faixa_pitch   deck=1 # SHIFT + PITCH BEND -
+nota    1   0x1B  pfl           deck=1
+nota    1   0x1B  slip          deck=1 shift
+nota    1   0x07  vinil         deck=1 # botão SCRATCH
+cc      1   0x1C  volume        deck=1
+cc      1   0x09  tempo         deck=1 lsb=0x29
+cc      1   0x16  trim          deck=1
+cc      1   0x19  grave         deck=1
+cc      1   0x18  medio         deck=1
+cc      1   0x17  agudo         deck=1
+cc      1   0x1A  filtro        deck=1
+nota    1   0x06  jog_toque     deck=1
+cc      1   0x06  jog_scratch   deck=1 valor=relativo
+cc      1   0x06  jog_busca     deck=1 valor=relativo shift
+nota    5   0x40  loop          deck=1 # AUTO LOOP
+nota    5   0x41  loop_sair     deck=1 # SHIFT + AUTO LOOP
+nota    5   0x34  loop_metade   deck=1
+nota    5   0x35  loop_dobro    deck=1
+nota    5   0x36  loop_in       deck=1 # SHIFT + 1/2X
+nota    5   0x37  loop_out      deck=1 # SHIFT + 2X
+# botões de modo dos pads: HOT CUE, AUTO LOOP, SAMPLE
+nota    5   0x00  pad_modo      deck=1 modo=hotcue
+nota    5   0x0D  pad_modo      deck=1 modo=loop
+nota    5   0x0B  pad_modo      deck=1 modo=sampler
+nota    5   0x14  pad           deck=1 n=1
+nota    5   0x15  pad           deck=1 n=2
+nota    5   0x16  pad           deck=1 n=3
+nota    5   0x17  pad           deck=1 n=4
+nota    5   0x18  pad           deck=1 n=5
+nota    5   0x19  pad           deck=1 n=6
+nota    5   0x1A  pad           deck=1 n=7
+nota    5   0x1B  pad           deck=1 n=8
+nota    5   0x1C  pad           deck=1 n=1   # SHIFT + pad
+nota    5   0x1D  pad           deck=1 n=2   # SHIFT + pad
+nota    5   0x1E  pad           deck=1 n=3   # SHIFT + pad
+nota    5   0x1F  pad           deck=1 n=4   # SHIFT + pad
+nota    5   0x20  pad           deck=1 n=5   # SHIFT + pad
+nota    5   0x21  pad           deck=1 n=6   # SHIFT + pad
+nota    5   0x22  pad           deck=1 n=7   # SHIFT + pad
+nota    5   0x23  pad           deck=1 n=8   # SHIFT + pad
+
+# ---------------------------------------------------------------- deck 2 (canal 2; pads canal 6)
+nota    2   0x20  shift
+nota    2   0x00  play          deck=2
+nota    2   0x01  cue           deck=2
+nota    2   0x05  inicio        deck=2 # SHIFT + CUE
+nota    2   0x02  sync          deck=2
+nota    2   0x0D  keylock       deck=2
+nota    2   0x2B  keylock       deck=2 # SHIFT + PITCH BEND +
+nota    2   0x2C  faixa_pitch   deck=2 # SHIFT + PITCH BEND -
+nota    2   0x1B  pfl           deck=2
+nota    2   0x1B  slip          deck=2 shift
+nota    2   0x07  vinil         deck=2 # botão SCRATCH
+cc      2   0x1C  volume        deck=2
+cc      2   0x09  tempo         deck=2 lsb=0x29
+cc      2   0x16  trim          deck=2
+cc      2   0x19  grave         deck=2
+cc      2   0x18  medio         deck=2
+cc      2   0x17  agudo         deck=2
+cc      2   0x1A  filtro        deck=2
+nota    2   0x06  jog_toque     deck=2
+cc      2   0x06  jog_scratch   deck=2 valor=relativo
+cc      2   0x06  jog_busca     deck=2 valor=relativo shift
+nota    6   0x40  loop          deck=2 # AUTO LOOP
+nota    6   0x41  loop_sair     deck=2 # SHIFT + AUTO LOOP
+nota    6   0x34  loop_metade   deck=2
+nota    6   0x35  loop_dobro    deck=2
+nota    6   0x36  loop_in       deck=2 # SHIFT + 1/2X
+nota    6   0x37  loop_out      deck=2 # SHIFT + 2X
+# botões de modo dos pads: HOT CUE, AUTO LOOP, SAMPLE
+nota    6   0x00  pad_modo      deck=2 modo=hotcue
+nota    6   0x0D  pad_modo      deck=2 modo=loop
+nota    6   0x0B  pad_modo      deck=2 modo=sampler
+nota    6   0x14  pad           deck=2 n=1
+nota    6   0x15  pad           deck=2 n=2
+nota    6   0x16  pad           deck=2 n=3
+nota    6   0x17  pad           deck=2 n=4
+nota    6   0x18  pad           deck=2 n=5
+nota    6   0x19  pad           deck=2 n=6
+nota    6   0x1A  pad           deck=2 n=7
+nota    6   0x1B  pad           deck=2 n=8
+nota    6   0x1C  pad           deck=2 n=1   # SHIFT + pad
+nota    6   0x1D  pad           deck=2 n=2   # SHIFT + pad
+nota    6   0x1E  pad           deck=2 n=3   # SHIFT + pad
+nota    6   0x1F  pad           deck=2 n=4   # SHIFT + pad
+nota    6   0x20  pad           deck=2 n=5   # SHIFT + pad
+nota    6   0x21  pad           deck=2 n=6   # SHIFT + pad
+nota    6   0x22  pad           deck=2 n=7   # SHIFT + pad
+nota    6   0x23  pad           deck=2 n=8   # SHIFT + pad
+
+# ---------------------------------------------------------------- deck 3 (canal 3; pads canal 7)
+nota    3   0x20  shift
+nota    3   0x00  play          deck=3
+nota    3   0x01  cue           deck=3
+nota    3   0x05  inicio        deck=3 # SHIFT + CUE
+nota    3   0x02  sync          deck=3
+nota    3   0x0D  keylock       deck=3
+nota    3   0x2B  keylock       deck=3 # SHIFT + PITCH BEND +
+nota    3   0x2C  faixa_pitch   deck=3 # SHIFT + PITCH BEND -
+nota    3   0x1B  pfl           deck=3
+nota    3   0x1B  slip          deck=3 shift
+nota    3   0x07  vinil         deck=3 # botão SCRATCH
+cc      3   0x1C  volume        deck=3
+cc      3   0x09  tempo         deck=3 lsb=0x29
+cc      3   0x16  trim          deck=3
+cc      3   0x19  grave         deck=3
+cc      3   0x18  medio         deck=3
+cc      3   0x17  agudo         deck=3
+cc      3   0x1A  filtro        deck=3
+nota    3   0x06  jog_toque     deck=3
+cc      3   0x06  jog_scratch   deck=3 valor=relativo
+cc      3   0x06  jog_busca     deck=3 valor=relativo shift
+nota    7   0x40  loop          deck=3 # AUTO LOOP
+nota    7   0x41  loop_sair     deck=3 # SHIFT + AUTO LOOP
+nota    7   0x34  loop_metade   deck=3
+nota    7   0x35  loop_dobro    deck=3
+nota    7   0x36  loop_in       deck=3 # SHIFT + 1/2X
+nota    7   0x37  loop_out      deck=3 # SHIFT + 2X
+# botões de modo dos pads: HOT CUE, AUTO LOOP, SAMPLE
+nota    7   0x00  pad_modo      deck=3 modo=hotcue
+nota    7   0x0D  pad_modo      deck=3 modo=loop
+nota    7   0x0B  pad_modo      deck=3 modo=sampler
+nota    7   0x14  pad           deck=3 n=1
+nota    7   0x15  pad           deck=3 n=2
+nota    7   0x16  pad           deck=3 n=3
+nota    7   0x17  pad           deck=3 n=4
+nota    7   0x18  pad           deck=3 n=5
+nota    7   0x19  pad           deck=3 n=6
+nota    7   0x1A  pad           deck=3 n=7
+nota    7   0x1B  pad           deck=3 n=8
+nota    7   0x1C  pad           deck=3 n=1   # SHIFT + pad
+nota    7   0x1D  pad           deck=3 n=2   # SHIFT + pad
+nota    7   0x1E  pad           deck=3 n=3   # SHIFT + pad
+nota    7   0x1F  pad           deck=3 n=4   # SHIFT + pad
+nota    7   0x20  pad           deck=3 n=5   # SHIFT + pad
+nota    7   0x21  pad           deck=3 n=6   # SHIFT + pad
+nota    7   0x22  pad           deck=3 n=7   # SHIFT + pad
+nota    7   0x23  pad           deck=3 n=8   # SHIFT + pad
+
+# ---------------------------------------------------------------- deck 4 (canal 4; pads canal 8)
+nota    4   0x20  shift
+nota    4   0x00  play          deck=4
+nota    4   0x01  cue           deck=4
+nota    4   0x05  inicio        deck=4 # SHIFT + CUE
+nota    4   0x02  sync          deck=4
+nota    4   0x0D  keylock       deck=4
+nota    4   0x2B  keylock       deck=4 # SHIFT + PITCH BEND +
+nota    4   0x2C  faixa_pitch   deck=4 # SHIFT + PITCH BEND -
+nota    4   0x1B  pfl           deck=4
+nota    4   0x1B  slip          deck=4 shift
+nota    4   0x07  vinil         deck=4 # botão SCRATCH
+cc      4   0x1C  volume        deck=4
+cc      4   0x09  tempo         deck=4 lsb=0x29
+cc      4   0x16  trim          deck=4
+cc      4   0x19  grave         deck=4
+cc      4   0x18  medio         deck=4
+cc      4   0x17  agudo         deck=4
+cc      4   0x1A  filtro        deck=4
+nota    4   0x06  jog_toque     deck=4
+cc      4   0x06  jog_scratch   deck=4 valor=relativo
+cc      4   0x06  jog_busca     deck=4 valor=relativo shift
+nota    8   0x40  loop          deck=4 # AUTO LOOP
+nota    8   0x41  loop_sair     deck=4 # SHIFT + AUTO LOOP
+nota    8   0x34  loop_metade   deck=4
+nota    8   0x35  loop_dobro    deck=4
+nota    8   0x36  loop_in       deck=4 # SHIFT + 1/2X
+nota    8   0x37  loop_out      deck=4 # SHIFT + 2X
+# botões de modo dos pads: HOT CUE, AUTO LOOP, SAMPLE
+nota    8   0x00  pad_modo      deck=4 modo=hotcue
+nota    8   0x0D  pad_modo      deck=4 modo=loop
+nota    8   0x0B  pad_modo      deck=4 modo=sampler
+nota    8   0x14  pad           deck=4 n=1
+nota    8   0x15  pad           deck=4 n=2
+nota    8   0x16  pad           deck=4 n=3
+nota    8   0x17  pad           deck=4 n=4
+nota    8   0x18  pad           deck=4 n=5
+nota    8   0x19  pad           deck=4 n=6
+nota    8   0x1A  pad           deck=4 n=7
+nota    8   0x1B  pad           deck=4 n=8
+nota    8   0x1C  pad           deck=4 n=1   # SHIFT + pad
+nota    8   0x1D  pad           deck=4 n=2   # SHIFT + pad
+nota    8   0x1E  pad           deck=4 n=3   # SHIFT + pad
+nota    8   0x1F  pad           deck=4 n=4   # SHIFT + pad
+nota    8   0x20  pad           deck=4 n=5   # SHIFT + pad
+nota    8   0x21  pad           deck=4 n=6   # SHIFT + pad
+nota    8   0x22  pad           deck=4 n=7   # SHIFT + pad
+nota    8   0x23  pad           deck=4 n=8   # SHIFT + pad
+
+# ---------------------------------------------------------------- LEDs
+led nota 1  0x00  tocando  deck=1 desligado=0x01
+led nota 1  0x01  cue      deck=1 desligado=0x01
+led nota 1  0x02  sync     deck=1 desligado=0x01
+led nota 1  0x0D  keylock  deck=1 desligado=0x01
+led nota 1  0x07  vinil    deck=1 desligado=0x01
+led nota 1  0x1B  pfl      deck=1 desligado=0x01
+led nota 5  0x40  loop     deck=1 desligado=0x01
+led nota 5  0x00  pad_modo deck=1 modo=hotcue desligado=0x01
+led nota 5  0x0D  pad_modo deck=1 modo=loop desligado=0x01
+led nota 5  0x0B  pad_modo deck=1 modo=sampler desligado=0x01
+led nota 5  0x14  pad      deck=1 n=1 desligado=0x01
+led nota 5  0x15  pad      deck=1 n=2 desligado=0x01
+led nota 5  0x16  pad      deck=1 n=3 desligado=0x01
+led nota 5  0x17  pad      deck=1 n=4 desligado=0x01
+led nota 5  0x18  pad      deck=1 n=5 desligado=0x01
+led nota 5  0x19  pad      deck=1 n=6 desligado=0x01
+led nota 5  0x1A  pad      deck=1 n=7 desligado=0x01
+led nota 5  0x1B  pad      deck=1 n=8 desligado=0x01
+led nota 2  0x00  tocando  deck=2 desligado=0x01
+led nota 2  0x01  cue      deck=2 desligado=0x01
+led nota 2  0x02  sync     deck=2 desligado=0x01
+led nota 2  0x0D  keylock  deck=2 desligado=0x01
+led nota 2  0x07  vinil    deck=2 desligado=0x01
+led nota 2  0x1B  pfl      deck=2 desligado=0x01
+led nota 6  0x40  loop     deck=2 desligado=0x01
+led nota 6  0x00  pad_modo deck=2 modo=hotcue desligado=0x01
+led nota 6  0x0D  pad_modo deck=2 modo=loop desligado=0x01
+led nota 6  0x0B  pad_modo deck=2 modo=sampler desligado=0x01
+led nota 6  0x14  pad      deck=2 n=1 desligado=0x01
+led nota 6  0x15  pad      deck=2 n=2 desligado=0x01
+led nota 6  0x16  pad      deck=2 n=3 desligado=0x01
+led nota 6  0x17  pad      deck=2 n=4 desligado=0x01
+led nota 6  0x18  pad      deck=2 n=5 desligado=0x01
+led nota 6  0x19  pad      deck=2 n=6 desligado=0x01
+led nota 6  0x1A  pad      deck=2 n=7 desligado=0x01
+led nota 6  0x1B  pad      deck=2 n=8 desligado=0x01
+led nota 3  0x00  tocando  deck=3 desligado=0x01
+led nota 3  0x01  cue      deck=3 desligado=0x01
+led nota 3  0x02  sync     deck=3 desligado=0x01
+led nota 3  0x0D  keylock  deck=3 desligado=0x01
+led nota 3  0x07  vinil    deck=3 desligado=0x01
+led nota 3  0x1B  pfl      deck=3 desligado=0x01
+led nota 7  0x40  loop     deck=3 desligado=0x01
+led nota 7  0x00  pad_modo deck=3 modo=hotcue desligado=0x01
+led nota 7  0x0D  pad_modo deck=3 modo=loop desligado=0x01
+led nota 7  0x0B  pad_modo deck=3 modo=sampler desligado=0x01
+led nota 7  0x14  pad      deck=3 n=1 desligado=0x01
+led nota 7  0x15  pad      deck=3 n=2 desligado=0x01
+led nota 7  0x16  pad      deck=3 n=3 desligado=0x01
+led nota 7  0x17  pad      deck=3 n=4 desligado=0x01
+led nota 7  0x18  pad      deck=3 n=5 desligado=0x01
+led nota 7  0x19  pad      deck=3 n=6 desligado=0x01
+led nota 7  0x1A  pad      deck=3 n=7 desligado=0x01
+led nota 7  0x1B  pad      deck=3 n=8 desligado=0x01
+led nota 4  0x00  tocando  deck=4 desligado=0x01
+led nota 4  0x01  cue      deck=4 desligado=0x01
+led nota 4  0x02  sync     deck=4 desligado=0x01
+led nota 4  0x0D  keylock  deck=4 desligado=0x01
+led nota 4  0x07  vinil    deck=4 desligado=0x01
+led nota 4  0x1B  pfl      deck=4 desligado=0x01
+led nota 8  0x40  loop     deck=4 desligado=0x01
+led nota 8  0x00  pad_modo deck=4 modo=hotcue desligado=0x01
+led nota 8  0x0D  pad_modo deck=4 modo=loop desligado=0x01
+led nota 8  0x0B  pad_modo deck=4 modo=sampler desligado=0x01
+led nota 8  0x14  pad      deck=4 n=1 desligado=0x01
+led nota 8  0x15  pad      deck=4 n=2 desligado=0x01
+led nota 8  0x16  pad      deck=4 n=3 desligado=0x01
+led nota 8  0x17  pad      deck=4 n=4 desligado=0x01
+led nota 8  0x18  pad      deck=4 n=5 desligado=0x01
+led nota 8  0x19  pad      deck=4 n=6 desligado=0x01
+led nota 8  0x1A  pad      deck=4 n=7 desligado=0x01
+led nota 8  0x1B  pad      deck=4 n=8 desligado=0x01

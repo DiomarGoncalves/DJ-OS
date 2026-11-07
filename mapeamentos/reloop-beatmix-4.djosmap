@@ -1,0 +1,194 @@
+# Reloop Beatmix 4 MK2 (e Beatmix 2 MK2, que é igual com 2 decks).
+# Endereços tirados do mapeamento do Mixxx "Reloop Beatmix 2/4 MK2", de Sébastien Blaisot,
+# GPL-2.0 ou posterior. Obrigado!
+#
+# Canais: deck 1 a 4 = canais 2 a 5; mixer e browser (TRAX) = canal 6.
+# O SHIFT é feito pela própria controladora: com SHIFT os botões mandam outra nota
+# (+0x40, e os pads +0x08), por isso não precisa da opção "shift".
+# Pads: camada A = hot cue 1-4 (pads 1-4) e loops de 1, 2, 4, 8 batidas (pads 5-8).
+# Jog: meio em 64 (relativo64, o padrão); com SHIFT o jog manda o CC 0x70 (busca rápida).
+# TRAX: meio em 64 também (valor=relativo64).
+# Pitch: pitch bend de 14 bits; o Mixxx inverte, então aqui fica sem "invertido".
+# LEDs: a controladora acende o botão numa nota 1 abaixo da que ele manda (SYNC 0x21 -> LED
+# 0x20, CUE 0x23 -> 0x22, PLAY 0x24 -> 0x23), como está no mapeamento do Mixxx.
+# Sem filtro e sem botão de deck no MIDI do Mixxx: os decks 3/4 trocam na controladora.
+
+nome = Reloop Beatmix 4 MK2
+porta = beatmix 4
+porta = beatmix 2
+situacao = em teste
+fonte = mapeamento do Mixxx Reloop-Beatmix-2-4-MK2.midi.xml e Reloop-Beatmix-2-4-MK2-scripts.js (Sébastien Blaisot)
+
+# ---------------------------------------------------------------- mixer e browser (canal 6)
+cc      6   0x2F  crossfader
+cc      6   0x00  master
+cc      6   0x02  fone_mix
+cc      6   0x60  browse_gira   valor=relativo64
+cc      6   0x70  browse_gira   valor=relativo64   # SHIFT + TRAX
+nota    6   0x09  browse_aperta
+
+# ---------------------------------------------------------------- deck 1 (canal 2)
+nota    2   0x24  play          deck=1
+nota    2   0x23  cue           deck=1
+nota    2   0x22  stutter       deck=1 # CUP
+nota    2   0x62  faixa_pitch   deck=1 # SHIFT + CUP
+nota    2   0x21  sync          deck=1
+nota    2   0x52  pfl           deck=1
+nota    2   0x50  load          deck=1
+cc      2   0x14  volume        deck=1
+pb      2         tempo         deck=1
+cc      2   0x10  trim          deck=1
+cc      2   0x13  grave         deck=1
+cc      2   0x12  medio         deck=1
+cc      2   0x11  agudo         deck=1
+nota    2   0x3F  jog_toque     deck=1
+cc      2   0x60  jog_scratch   deck=1
+cc      2   0x70  jog_busca     deck=1
+nota    2   0x00  hotcue        deck=1 n=1
+nota    2   0x01  hotcue        deck=1 n=2
+nota    2   0x02  hotcue        deck=1 n=3
+nota    2   0x03  hotcue        deck=1 n=4
+nota    2   0x08  apagar_hotcue deck=1 n=1
+nota    2   0x09  apagar_hotcue deck=1 n=2
+nota    2   0x0A  apagar_hotcue deck=1 n=3
+nota    2   0x0B  apagar_hotcue deck=1 n=4
+nota    2   0x04  loop_auto     deck=1 b=1
+nota    2   0x05  loop_auto     deck=1 b=2
+nota    2   0x06  loop_auto     deck=1 b=4
+nota    2   0x07  loop_auto     deck=1 b=8
+nota    2   0x0D  loop_metade   deck=1      # SHIFT + pad 6
+nota    2   0x0E  loop_dobro    deck=1      # SHIFT + pad 7
+nota    2   0x0F  loop_sair     deck=1      # SHIFT + pad 8
+
+# ---------------------------------------------------------------- deck 2 (canal 3)
+nota    3   0x24  play          deck=2
+nota    3   0x23  cue           deck=2
+nota    3   0x22  stutter       deck=2 # CUP
+nota    3   0x62  faixa_pitch   deck=2 # SHIFT + CUP
+nota    3   0x21  sync          deck=2
+nota    3   0x52  pfl           deck=2
+nota    3   0x50  load          deck=2
+cc      3   0x14  volume        deck=2
+pb      3         tempo         deck=2
+cc      3   0x10  trim          deck=2
+cc      3   0x13  grave         deck=2
+cc      3   0x12  medio         deck=2
+cc      3   0x11  agudo         deck=2
+nota    3   0x3F  jog_toque     deck=2
+cc      3   0x60  jog_scratch   deck=2
+cc      3   0x70  jog_busca     deck=2
+nota    3   0x00  hotcue        deck=2 n=1
+nota    3   0x01  hotcue        deck=2 n=2
+nota    3   0x02  hotcue        deck=2 n=3
+nota    3   0x03  hotcue        deck=2 n=4
+nota    3   0x08  apagar_hotcue deck=2 n=1
+nota    3   0x09  apagar_hotcue deck=2 n=2
+nota    3   0x0A  apagar_hotcue deck=2 n=3
+nota    3   0x0B  apagar_hotcue deck=2 n=4
+nota    3   0x04  loop_auto     deck=2 b=1
+nota    3   0x05  loop_auto     deck=2 b=2
+nota    3   0x06  loop_auto     deck=2 b=4
+nota    3   0x07  loop_auto     deck=2 b=8
+nota    3   0x0D  loop_metade   deck=2      # SHIFT + pad 6
+nota    3   0x0E  loop_dobro    deck=2      # SHIFT + pad 7
+nota    3   0x0F  loop_sair     deck=2      # SHIFT + pad 8
+
+# ---------------------------------------------------------------- deck 3 (canal 4)
+nota    4   0x24  play          deck=3
+nota    4   0x23  cue           deck=3
+nota    4   0x22  stutter       deck=3 # CUP
+nota    4   0x62  faixa_pitch   deck=3 # SHIFT + CUP
+nota    4   0x21  sync          deck=3
+nota    4   0x52  pfl           deck=3
+nota    4   0x50  load          deck=3
+cc      4   0x14  volume        deck=3
+pb      4         tempo         deck=3
+cc      4   0x10  trim          deck=3
+cc      4   0x13  grave         deck=3
+cc      4   0x12  medio         deck=3
+cc      4   0x11  agudo         deck=3
+nota    4   0x3F  jog_toque     deck=3
+cc      4   0x60  jog_scratch   deck=3
+cc      4   0x70  jog_busca     deck=3
+nota    4   0x00  hotcue        deck=3 n=1
+nota    4   0x01  hotcue        deck=3 n=2
+nota    4   0x02  hotcue        deck=3 n=3
+nota    4   0x03  hotcue        deck=3 n=4
+nota    4   0x08  apagar_hotcue deck=3 n=1
+nota    4   0x09  apagar_hotcue deck=3 n=2
+nota    4   0x0A  apagar_hotcue deck=3 n=3
+nota    4   0x0B  apagar_hotcue deck=3 n=4
+nota    4   0x04  loop_auto     deck=3 b=1
+nota    4   0x05  loop_auto     deck=3 b=2
+nota    4   0x06  loop_auto     deck=3 b=4
+nota    4   0x07  loop_auto     deck=3 b=8
+nota    4   0x0D  loop_metade   deck=3      # SHIFT + pad 6
+nota    4   0x0E  loop_dobro    deck=3      # SHIFT + pad 7
+nota    4   0x0F  loop_sair     deck=3      # SHIFT + pad 8
+
+# ---------------------------------------------------------------- deck 4 (canal 5)
+nota    5   0x24  play          deck=4
+nota    5   0x23  cue           deck=4
+nota    5   0x22  stutter       deck=4 # CUP
+nota    5   0x62  faixa_pitch   deck=4 # SHIFT + CUP
+nota    5   0x21  sync          deck=4
+nota    5   0x52  pfl           deck=4
+nota    5   0x50  load          deck=4
+cc      5   0x14  volume        deck=4
+pb      5         tempo         deck=4
+cc      5   0x10  trim          deck=4
+cc      5   0x13  grave         deck=4
+cc      5   0x12  medio         deck=4
+cc      5   0x11  agudo         deck=4
+nota    5   0x3F  jog_toque     deck=4
+cc      5   0x60  jog_scratch   deck=4
+cc      5   0x70  jog_busca     deck=4
+nota    5   0x00  hotcue        deck=4 n=1
+nota    5   0x01  hotcue        deck=4 n=2
+nota    5   0x02  hotcue        deck=4 n=3
+nota    5   0x03  hotcue        deck=4 n=4
+nota    5   0x08  apagar_hotcue deck=4 n=1
+nota    5   0x09  apagar_hotcue deck=4 n=2
+nota    5   0x0A  apagar_hotcue deck=4 n=3
+nota    5   0x0B  apagar_hotcue deck=4 n=4
+nota    5   0x04  loop_auto     deck=4 b=1
+nota    5   0x05  loop_auto     deck=4 b=2
+nota    5   0x06  loop_auto     deck=4 b=4
+nota    5   0x07  loop_auto     deck=4 b=8
+nota    5   0x0D  loop_metade   deck=4      # SHIFT + pad 6
+nota    5   0x0E  loop_dobro    deck=4      # SHIFT + pad 7
+nota    5   0x0F  loop_sair     deck=4      # SHIFT + pad 8
+
+# ---------------------------------------------------------------- LEDs (hot cue: 0x55, como no Mixxx)
+led nota 2  0x20  sync     deck=1
+led nota 2  0x22  cue      deck=1
+led nota 2  0x23  tocando  deck=1
+led nota 2  0x52  pfl      deck=1
+led nota 2  0x00  hotcue   deck=1 n=1 ligado=0x55
+led nota 2  0x01  hotcue   deck=1 n=2 ligado=0x55
+led nota 2  0x02  hotcue   deck=1 n=3 ligado=0x55
+led nota 2  0x03  hotcue   deck=1 n=4 ligado=0x55
+led nota 3  0x20  sync     deck=2
+led nota 3  0x22  cue      deck=2
+led nota 3  0x23  tocando  deck=2
+led nota 3  0x52  pfl      deck=2
+led nota 3  0x00  hotcue   deck=2 n=1 ligado=0x55
+led nota 3  0x01  hotcue   deck=2 n=2 ligado=0x55
+led nota 3  0x02  hotcue   deck=2 n=3 ligado=0x55
+led nota 3  0x03  hotcue   deck=2 n=4 ligado=0x55
+led nota 4  0x20  sync     deck=3
+led nota 4  0x22  cue      deck=3
+led nota 4  0x23  tocando  deck=3
+led nota 4  0x52  pfl      deck=3
+led nota 4  0x00  hotcue   deck=3 n=1 ligado=0x55
+led nota 4  0x01  hotcue   deck=3 n=2 ligado=0x55
+led nota 4  0x02  hotcue   deck=3 n=3 ligado=0x55
+led nota 4  0x03  hotcue   deck=3 n=4 ligado=0x55
+led nota 5  0x20  sync     deck=4
+led nota 5  0x22  cue      deck=4
+led nota 5  0x23  tocando  deck=4
+led nota 5  0x52  pfl      deck=4
+led nota 5  0x00  hotcue   deck=4 n=1 ligado=0x55
+led nota 5  0x01  hotcue   deck=4 n=2 ligado=0x55
+led nota 5  0x02  hotcue   deck=4 n=3 ligado=0x55
+led nota 5  0x03  hotcue   deck=4 n=4 ligado=0x55

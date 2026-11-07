@@ -1,0 +1,182 @@
+# Denon DJ MC6000MK2 (4 decks).
+# Endereços tirados do mapeamento do Mixxx "Denon MC6000MK2", de Uwe Klotz (tapir),
+# GPL-2.0 ou posterior. Obrigado!
+#
+# Canais: deck 1 = canal 1, deck 3 = canal 2, deck 2 = canal 3, deck 4 = canal 4.
+# O mixer (ganho, EQ, volume e CUE dos 4 canais, crossfader e fone) manda tudo no canal 1.
+# Os botões DECK trocam o canal na própria controladora; aqui eles também dizem ao DJ OS
+# qual deck está de cada lado (deck_ativo).
+# O SHIFT é do programa (a controladora manda a mesma nota): as funções com SHIFT usam a
+# opção "shift".
+# Jog: meio em 64 (relativo64, o padrão). O jog manda um CC no modo vinil (0x51) e outro
+# fora dele (0x52), e o toque idem (0x51 / 0x56): os dois vão para o mesmo lugar.
+# Pitch: pitch bend de 14 bits, sem inverter no Mixxx, por isso aqui vai "invertido".
+# Sem LEDs: a MC6000MK2 acende os LEDs com o número do LED no lugar do valor
+# (protocolo da Denon), e o formato .djosmap ainda não tem como dizer isso.
+# Sem BROWSE girado: o knob manda 0x00 para um lado e 0x7F para o outro, um jeito que
+# o .djosmap ainda não lê. O filtro é um só por lado (vale para o deck daquele lado) e
+# também ficou de fora.
+
+nome = Denon DJ MC6000MK2
+porta = mc6000mk2
+situacao = em teste
+fonte = mapeamento do Mixxx Denon-MC6000MK2.midi.xml e Denon-MC6000MK2-scripts.js (Uwe Klotz)
+
+# ---------------------------------------------------------------- mixer (canal 1)
+cc      1   0x16  crossfader
+cc      1   0x44  fone_volume
+cc      1   0x43  fone_mix
+nota    1   0x28  browse_aperta             # TRACK SELECT apertado
+
+cc      1   0x01  trim          deck=1
+cc      1   0x02  agudo         deck=1
+cc      1   0x03  medio         deck=1
+cc      1   0x04  grave         deck=1
+cc      1   0x05  volume        deck=1
+nota    1   0x01  pfl           deck=1
+cc      1   0x07  trim          deck=2
+cc      1   0x08  agudo         deck=2
+cc      1   0x09  medio         deck=2
+cc      1   0x0A  grave         deck=2
+cc      1   0x0B  volume        deck=2
+nota    1   0x02  pfl           deck=2
+cc      1   0x0C  trim          deck=3
+cc      1   0x0D  agudo         deck=3
+cc      1   0x0E  medio         deck=3
+cc      1   0x0F  grave         deck=3
+cc      1   0x10  volume        deck=3
+nota    1   0x05  pfl           deck=3
+cc      1   0x11  trim          deck=4
+cc      1   0x12  agudo         deck=4
+cc      1   0x13  medio         deck=4
+cc      1   0x14  grave         deck=4
+cc      1   0x15  volume        deck=4
+nota    1   0x07  pfl           deck=4
+
+# ---------------------------------------------------------------- deck 1 (canal 1)
+nota    1   0x60  shift
+nota    1   0x03  deck_ativo    deck=1
+nota    1   0x62  load          deck=1
+nota    1   0x43  play          deck=1
+nota    1   0x43  stutter       deck=1 shift
+nota    1   0x42  cue           deck=1
+nota    1   0x42  inicio        deck=1 shift
+nota    1   0x6B  sync          deck=1
+nota    1   0x06  keylock       deck=1
+nota    1   0x04  vinil         deck=1
+pb      1         tempo         deck=1 invertido
+nota    1   0x51  jog_toque     deck=1
+nota    1   0x56  jog_toque     deck=1
+cc      1   0x51  jog_scratch   deck=1
+cc      1   0x52  jog_scratch   deck=1
+cc      1   0x51  jog_busca     deck=1 shift
+cc      1   0x52  jog_busca     deck=1 shift
+nota    1   0x1D  loop          deck=1 # AUTO LOOP
+nota    1   0x37  loop_in       deck=1
+nota    1   0x39  loop_out      deck=1
+nota    1   0x69  loop_metade   deck=1 # LOOP CUT -
+nota    1   0x6A  loop_dobro    deck=1 # LOOP CUT +
+nota    1   0x17  hotcue        deck=1 n=1
+nota    1   0x18  hotcue        deck=1 n=2
+nota    1   0x19  hotcue        deck=1 n=3
+nota    1   0x20  hotcue        deck=1 n=4
+nota    1   0x17  apagar_hotcue deck=1 n=1 shift
+nota    1   0x18  apagar_hotcue deck=1 n=2 shift
+nota    1   0x19  apagar_hotcue deck=1 n=3 shift
+nota    1   0x20  apagar_hotcue deck=1 n=4 shift
+
+# ---------------------------------------------------------------- deck 3 (canal 2)
+nota    2   0x60  shift
+nota    2   0x09  deck_ativo    deck=3
+nota    2   0x62  load          deck=3
+nota    2   0x43  play          deck=3
+nota    2   0x43  stutter       deck=3 shift
+nota    2   0x42  cue           deck=3
+nota    2   0x42  inicio        deck=3 shift
+nota    2   0x6B  sync          deck=3
+nota    2   0x06  keylock       deck=3
+nota    2   0x04  vinil         deck=3
+pb      2         tempo         deck=3 invertido
+nota    2   0x51  jog_toque     deck=3
+nota    2   0x56  jog_toque     deck=3
+cc      2   0x51  jog_scratch   deck=3
+cc      2   0x52  jog_scratch   deck=3
+cc      2   0x51  jog_busca     deck=3 shift
+cc      2   0x52  jog_busca     deck=3 shift
+nota    2   0x1D  loop          deck=3 # AUTO LOOP
+nota    2   0x37  loop_in       deck=3
+nota    2   0x39  loop_out      deck=3
+nota    2   0x69  loop_metade   deck=3 # LOOP CUT -
+nota    2   0x6A  loop_dobro    deck=3 # LOOP CUT +
+nota    2   0x17  hotcue        deck=3 n=1
+nota    2   0x18  hotcue        deck=3 n=2
+nota    2   0x19  hotcue        deck=3 n=3
+nota    2   0x20  hotcue        deck=3 n=4
+nota    2   0x17  apagar_hotcue deck=3 n=1 shift
+nota    2   0x18  apagar_hotcue deck=3 n=2 shift
+nota    2   0x19  apagar_hotcue deck=3 n=3 shift
+nota    2   0x20  apagar_hotcue deck=3 n=4 shift
+
+# ---------------------------------------------------------------- deck 2 (canal 3)
+nota    3   0x61  shift
+nota    3   0x08  deck_ativo    deck=2
+nota    3   0x63  load          deck=2
+nota    3   0x43  play          deck=2
+nota    3   0x43  stutter       deck=2 shift
+nota    3   0x42  cue           deck=2
+nota    3   0x42  inicio        deck=2 shift
+nota    3   0x6B  sync          deck=2
+nota    3   0x06  keylock       deck=2
+nota    3   0x04  vinil         deck=2
+pb      3         tempo         deck=2 invertido
+nota    3   0x51  jog_toque     deck=2
+nota    3   0x56  jog_toque     deck=2
+cc      3   0x51  jog_scratch   deck=2
+cc      3   0x52  jog_scratch   deck=2
+cc      3   0x51  jog_busca     deck=2 shift
+cc      3   0x52  jog_busca     deck=2 shift
+nota    3   0x1D  loop          deck=2 # AUTO LOOP
+nota    3   0x37  loop_in       deck=2
+nota    3   0x39  loop_out      deck=2
+nota    3   0x69  loop_metade   deck=2 # LOOP CUT -
+nota    3   0x6A  loop_dobro    deck=2 # LOOP CUT +
+nota    3   0x17  hotcue        deck=2 n=1
+nota    3   0x18  hotcue        deck=2 n=2
+nota    3   0x19  hotcue        deck=2 n=3
+nota    3   0x20  hotcue        deck=2 n=4
+nota    3   0x17  apagar_hotcue deck=2 n=1 shift
+nota    3   0x18  apagar_hotcue deck=2 n=2 shift
+nota    3   0x19  apagar_hotcue deck=2 n=3 shift
+nota    3   0x20  apagar_hotcue deck=2 n=4 shift
+
+# ---------------------------------------------------------------- deck 4 (canal 4)
+nota    4   0x61  shift
+nota    4   0x0A  deck_ativo    deck=4
+nota    4   0x63  load          deck=4
+nota    4   0x43  play          deck=4
+nota    4   0x43  stutter       deck=4 shift
+nota    4   0x42  cue           deck=4
+nota    4   0x42  inicio        deck=4 shift
+nota    4   0x6B  sync          deck=4
+nota    4   0x06  keylock       deck=4
+nota    4   0x04  vinil         deck=4
+pb      4         tempo         deck=4 invertido
+nota    4   0x51  jog_toque     deck=4
+nota    4   0x56  jog_toque     deck=4
+cc      4   0x51  jog_scratch   deck=4
+cc      4   0x52  jog_scratch   deck=4
+cc      4   0x51  jog_busca     deck=4 shift
+cc      4   0x52  jog_busca     deck=4 shift
+nota    4   0x1D  loop          deck=4 # AUTO LOOP
+nota    4   0x37  loop_in       deck=4
+nota    4   0x39  loop_out      deck=4
+nota    4   0x69  loop_metade   deck=4 # LOOP CUT -
+nota    4   0x6A  loop_dobro    deck=4 # LOOP CUT +
+nota    4   0x17  hotcue        deck=4 n=1
+nota    4   0x18  hotcue        deck=4 n=2
+nota    4   0x19  hotcue        deck=4 n=3
+nota    4   0x20  hotcue        deck=4 n=4
+nota    4   0x17  apagar_hotcue deck=4 n=1 shift
+nota    4   0x18  apagar_hotcue deck=4 n=2 shift
+nota    4   0x19  apagar_hotcue deck=4 n=3 shift
+nota    4   0x20  apagar_hotcue deck=4 n=4 shift
