@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=DJ OS
+Comment=Sistema de DJ: 4 decks, controladora, efeitos e browser
+Exec=dj-os
+Icon=dj-os
+Categories=AudioVideo;Audio;
+Terminal=false
+StartupWMClass=dj-os

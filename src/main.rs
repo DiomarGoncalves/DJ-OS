@@ -6,6 +6,9 @@
 //! - `ui`: tela no estilo XDJ;
 //! - `library` e `track`: pendrives/SSDs, leitura e análise das músicas.
 
+// No Windows: sem a janela preta do terminal atrás do programa.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 mod audio_out;
 mod bluetooth;
@@ -161,11 +164,15 @@ fn main() -> eframe::Result<()> {
     let fullscreen = std::env::args().any(|a| a == "--tela-cheia");
     // Em tela cheia (no aparelho) a janela fica do tamanho da tela, sem tamanho fixo e sem barra
     // de título: no Wayland a barra desenhada pelo programa ocuparia 35 px da altura da tela.
-    let viewport = eframe::egui::ViewportBuilder::default().with_title("DJ OS");
+    let viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("DJ OS")
+        .with_app_id("dj-os")
+        .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../pacote/dj-os.png")).unwrap_or_default());
     let viewport = if fullscreen {
         viewport.with_fullscreen(true).with_decorations(false)
     } else {
-        viewport.with_inner_size([1366.0, 768.0])
+        // No PC: janela normal, já maximizada.
+        viewport.with_inner_size([1366.0, 768.0]).with_min_inner_size([1024.0, 600.0]).with_maximized(true)
     };
     let options = eframe::NativeOptions {
         viewport,
