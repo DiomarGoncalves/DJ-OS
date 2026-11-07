@@ -106,8 +106,44 @@ fn prepare_one(root: &Path, f: &Path) -> Outcome {
     }
 }
 
-/// Quantas análises ao mesmo tempo: metade dos núcleos (cada uma decodifica a música inteira na
-/// memória, ~100 MB por música de 5 min), entre 1 e 4.
+/// Quantas análises ao mesmo tempo: todos os núcleos menos 2 (o computador continua usável), no
+/// máximo 10, e só o que cabe na memória livre (cada uma decodifica a música inteira, ~100 MB por
+/// música de 5 min; conta 400 MB de folga por análise). Medido num i5-1235U (12 núcleos): ~1,1 s
+/// por música de 3 min num núcleo; com 10 ao mesmo tempo, 12 mil músicas em ~25-30 min.
 pub fn default_threads() -> usize {
-    std::thread::available_parallelism().map_or(1, |n| n.get() / 2).clamp(1, 4)
+    let nucleos = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let pela_memoria = memoria_livre_mb().map_or(usize::MAX, |mb| (mb / 400) as usize);
+    nucleos.saturating_sub(2).min(10).min(pela_memoria).max(1)
+}
+
+/// Memória livre agora (MB), quando o sistema diz (Linux).
+fn memoria_livre_mb() -> Option<u64> {
+    let t = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let kb: u64 = t.lines().find_map(|l| l.strip_prefix("MemAvailable:"))?.trim().trim_end_matches("kB").trim().parse().ok()?;
+    Some(kb / 1024)
+}
+
+#[cfg(test)]
+mod medir {
+    #[test]
+    fn analises_ao_mesmo_tempo() {
+        let n = super::default_threads();
+        assert!((1..=10).contains(&n), "{n}");
+        assert!(super::memoria_livre_mb().is_none_or(|mb| mb > 0));
+    }
+
+    /// Quanto tempo cada parte da análise leva numa música de verdade.
+    /// DJOS_MEDIR=<música> cargo test --release -p dj-os-analise medir_analise -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn medir_analise() {
+        let Some(f) = std::env::var_os("DJOS_MEDIR").map(std::path::PathBuf::from) else { return };
+        let t0 = std::time::Instant::now();
+        let t = crate::track::load(&f, false).unwrap();
+        let decode = t0.elapsed();
+        let t1 = std::time::Instant::now();
+        let _ = crate::rekordbox::first_analysis(&f).unwrap();
+        let tudo = t1.elapsed();
+        println!("música de {:.0} s · só abrir (decodificar): {:.2} s · análise completa: {:.2} s", t.frames as f64 / t.sr, decode.as_secs_f64(), tudo.as_secs_f64());
+    }
 }
