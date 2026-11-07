@@ -6,6 +6,22 @@ para diferenciar firmwares de teste da mesma versão.
 
 ## [Não lançado]
 
+### Novo
+- **DJ OS para PC (Linux e Windows):** o DJ OS como programa de computador, com a controladora no
+  USB. No PC ele não mexe em Wi-Fi, Bluetooth, firmware nem desliga o computador (essas partes
+  somem); janela normal, maximizada. Nas Releases: `DJ-OS-PC-….AppImage` e `DJ-OS-PC-….exe`.
+- **Controladoras por arquivo** (`.djosmap`, [docs/mapeamento.md](docs/mapeamento.md)): uma linha
+  por botão, knob, fader e LED, sem programar. Vêm 21 controladoras **em teste**: Pioneer DDJ-400,
+  FLX4, SB3, FLX6, SR2, 1000; CDJ-2000NXS2, CDJ-3000, CDJ-900NXS, XDJ-RX2, XDJ-RX3, XDJ-XZ;
+  Numark Mixtrack Pro 3, Platinum FX, Party Mix; Hercules Inpulse 200/300/500; Denon MC7000,
+  MC6000MK2; Reloop Beatmix 4. Os seus em `~/DJOS/mapeamentos/`.
+- **MIDI learn:** CONFIG → CONTROLADORA → escolha a função e o deck, "Ensinar agora" e aperte o
+  botão. Vale por cima do mapeamento (também na REV1); dá para apagar.
+- **Saída do som** em CONFIG → ÁUDIO: automática (a controladora, de qualquer marca, com master
+  1-2 e fone 3-4; senão a placa do computador) ou escolhida na lista.
+- **Skins** (`.djosskin`, [docs/skins.md](docs/skins.md)) em CONFIG → TELA: cores de tudo e o
+  layout da tela principal. Vêm Preta, Clara, Neon e Waveform grande; as suas em `~/DJOS/skins/`.
+
 ### Corrigido
 - **Estalos e estática no som depois de um tempo** (fone e master), principalmente ao carregar um
   set longo (50 min ocupam ~1 GB e levam ~30 s para analisar num notebook antigo) ou com o HD
