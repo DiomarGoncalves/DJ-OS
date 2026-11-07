@@ -44,7 +44,7 @@ pub fn refresh_info(shared: &SharedApp) {
     let shared = shared.clone();
     std::thread::spawn(move || {
         let info = match run(&["info"]) {
-            None => format!("DJ OS {} · desenvolvimento (firmware só no aparelho)", env!("CARGO_PKG_VERSION")),
+            None => format!("DJ OS {} para PC", env!("CARGO_PKG_VERSION")),
             Some(out) => {
                 let get = |k: &str| out.lines().find_map(|l| l.strip_prefix(k).map(|v| v.trim().to_string()));
                 let versao = pretty_version(&get("VERSAO").unwrap_or_default());

@@ -56,6 +56,14 @@ impl PadMode {
 
 }
 
+/// Rodando no aparelho (a ISO do DJ OS) ou num computador comum? No aparelho o DJ OS cuida do
+/// sistema (Wi-Fi, Bluetooth, firmware, desligar); no PC isso é do sistema do computador e não se
+/// mexe. `DJOS_APARELHO=1` força o modo aparelho (testes).
+pub fn aparelho() -> bool {
+    static A: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *A.get_or_init(|| std::env::var_os("DJOS_APARELHO").is_some() || std::path::Path::new("/etc/dj-os-versao").exists())
+}
+
 #[derive(Default)]
 pub struct DeckMeta {
     pub track: Option<Arc<Track>>,

@@ -136,7 +136,7 @@ fn query_words(q: &str) -> Vec<String> {
 }
 
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
+    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
 }
 
 fn is_hidden(p: &Path) -> bool {
@@ -203,6 +203,14 @@ pub fn sources() -> Vec<(String, PathBuf)> {
     if std::fs::read_dir(&rec).is_ok_and(|mut d| d.next().is_some()) {
         out.push(("🎙 Records (gravações)".to_string(), rec));
     }
+    // Windows: os outros discos e pendrives são as letras (D:, E:...); o C: é o do Windows.
+    #[cfg(windows)]
+    for c in b'D'..=b'Z' {
+        let d = PathBuf::from(format!("{}:\\", c as char));
+        if d.is_dir() {
+            out.push((format!("💾 {}:", c as char), d));
+        }
+    }
     let user = std::env::var("USER").unwrap_or_default();
     for base in [PathBuf::from("/media").join(&user), PathBuf::from("/run/media").join(&user)] {
         // Só pendrives montados de verdade: uma pasta que sobrou de uma montagem que falhou
@@ -222,12 +230,18 @@ pub fn sources() -> Vec<(String, PathBuf)> {
 }
 
 /// A pasta é o começo de outro disco (está num dispositivo diferente da pasta de cima)?
+#[cfg(unix)]
 fn is_mountpoint(p: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
     match (std::fs::metadata(p), p.parent().map(std::fs::metadata)) {
         (Ok(m), Some(Ok(parent))) => m.dev() != parent.dev(),
         _ => false,
     }
+}
+
+#[cfg(not(unix))]
+fn is_mountpoint(_p: &Path) -> bool {
+    false
 }
 
 /// Varre as unidades em segundo plano e preenche o índice de busca.

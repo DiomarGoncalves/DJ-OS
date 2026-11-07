@@ -27,6 +27,7 @@ pub struct ImportProgress {
 }
 
 /// Espaço livre (em bytes) no disco onde está `path`.
+#[cfg(unix)]
 pub fn free_space(path: &Path) -> Option<u64> {
     let c = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).ok()?;
     let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
@@ -36,12 +37,23 @@ pub fn free_space(path: &Path) -> Option<u64> {
     Some(st.f_bavail as u64 * st.f_frsize as u64)
 }
 
+/// No Windows o espaço livre não é conferido antes de copiar (a cópia avisa se faltar).
+#[cfg(not(unix))]
+pub fn free_space(_path: &Path) -> Option<u64> {
+    None
+}
+
 /// Baixa a prioridade da thread atual (para cópia e análise não atrapalharem o áudio).
+#[cfg(target_os = "linux")]
 pub fn low_priority() {
     unsafe {
         libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as libc::id_t, 19);
     }
 }
+
+/// Fora do Linux, a thread fica na prioridade normal.
+#[cfg(not(target_os = "linux"))]
+pub fn low_priority() {}
 
 fn audio_files(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();

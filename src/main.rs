@@ -148,9 +148,12 @@ fn main() -> eframe::Result<()> {
     if let Ok(m) = std::env::var("DJOS_BT") {
         app.lock().bt_mode = if m == "retorno" { bluetooth::BtMode::Retorno } else { bluetooth::BtMode::Master };
     }
-    bluetooth::start(app.clone(), cmd.clone());
-    // Celular por Bluetooth (só liga o Bluetooth se a opção estiver ligada nas configurações).
-    phone::start(app.clone(), cmd.clone());
+    // Bluetooth e celular: só no aparelho (no PC quem cuida do Bluetooth é o sistema do computador).
+    if app::aparelho() {
+        bluetooth::start(app.clone(), cmd.clone());
+        // Celular por Bluetooth (só liga o Bluetooth se a opção estiver ligada nas configurações).
+        phone::start(app.clone(), cmd.clone());
+    }
     // Versão do sistema e, depois de 30 s rodando bem, confirma uma atualização em teste.
     firmware::refresh_info(&app);
     firmware::confirm_later(&app);

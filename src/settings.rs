@@ -293,7 +293,7 @@ pub enum Row {
 /// Estado da tela de configurações aberta.
 #[derive(Default)]
 pub struct SettingsUi {
-    /// Aba aberta (índice em Tab::ALL).
+    /// Aba aberta (índice em Tab::all()).
     pub tab: usize,
     /// O BROWSE está nas abas (true) ou nos itens da aba (false).
     pub on_tabs: bool,
@@ -320,7 +320,16 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [Tab::Audio, Tab::Mixer, Tab::Bluetooth, Tab::Phone, Tab::Wifi, Tab::Controller, Tab::Screen, Tab::System];
+    /// Abas que aparecem: no PC ficam de fora as do sistema do aparelho (Bluetooth, celular, Wi-Fi).
+    pub fn all() -> &'static [Tab] {
+        const APARELHO: [Tab; 8] = [Tab::Audio, Tab::Mixer, Tab::Bluetooth, Tab::Phone, Tab::Wifi, Tab::Controller, Tab::Screen, Tab::System];
+        const PC: [Tab; 5] = [Tab::Audio, Tab::Mixer, Tab::Controller, Tab::Screen, Tab::System];
+        if crate::app::aparelho() {
+            &APARELHO
+        } else {
+            &PC
+        }
+    }
 
     pub fn name(self) -> &'static str {
         match self {
@@ -356,7 +365,7 @@ pub fn tab_summary(app: &AppState, tab: Tab) -> String {
 
 /// Aba aberta agora.
 pub fn current_tab(app: &AppState) -> Tab {
-    Tab::ALL[app.settings_ui.as_ref().map_or(0, |u| u.tab).min(Tab::ALL.len() - 1)]
+    Tab::all()[app.settings_ui.as_ref().map_or(0, |u| u.tab).min(Tab::all().len() - 1)]
 }
 
 /// Itens da aba aberta, com os valores atuais.
@@ -471,17 +480,23 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
         }
         Tab::System => {
             v.push(Row::Info(app.fw.info.clone()));
-            v.push(Row::Item { label: "Atualizar firmware (pendrive)".into(), value: app.fw.msg.clone(), action: Action::FwSearch });
-            for f in &app.fw.files {
-                let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                let act = Action::FwInstall(f.clone());
-                v.push(Row::Item { label: format!("   {name}"), value: confirm(&act, "instalar".into()), action: act });
+            // Firmware, reiniciar e desligar só no aparelho.
+            let aparelho = crate::app::aparelho();
+            if aparelho {
+                v.push(Row::Item { label: "Atualizar firmware (pendrive)".into(), value: app.fw.msg.clone(), action: Action::FwSearch });
+                for f in &app.fw.files {
+                    let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    let act = Action::FwInstall(f.clone());
+                    v.push(Row::Item { label: format!("   {name}"), value: confirm(&act, "instalar".into()), action: act });
+                }
             }
             let analyzing = crate::import::ANALYZE_ALL.load(std::sync::atomic::Ordering::Relaxed);
             let value = if analyzing { "ANALISANDO… (para enquanto um deck toca)" } else { "ANALISAR" };
             v.push(Row::Item { label: "Analisar todas as músicas (BPM, tom, volume)".into(), value: value.into(), action: Action::AnalyzeAll });
-            v.push(Row::Item { label: "Reiniciar".into(), value: confirm(&Action::Restart, String::new()), action: Action::Restart });
-            v.push(Row::Item { label: "Desligar".into(), value: confirm(&Action::PowerOff, String::new()), action: Action::PowerOff });
+            if aparelho {
+                v.push(Row::Item { label: "Reiniciar".into(), value: confirm(&Action::Restart, String::new()), action: Action::Restart });
+                v.push(Row::Item { label: "Desligar".into(), value: confirm(&Action::PowerOff, String::new()), action: Action::PowerOff });
+            }
         }
     }
     v
@@ -502,7 +517,7 @@ pub fn open(app: &mut AppState) {
 /// Toque/clique numa aba: abre a aba e passa para os itens dela.
 pub fn select_tab(app: &mut AppState, tab: usize) {
     if let Some(ui) = app.settings_ui.as_mut() {
-        ui.tab = tab.min(Tab::ALL.len() - 1);
+        ui.tab = tab.min(Tab::all().len() - 1);
         ui.sel = 0;
         ui.on_tabs = false;
         app.settings_tab = ui.tab;
@@ -538,7 +553,7 @@ pub fn scroll(app: &mut AppState, delta: i32) {
     let n = selectable(&rows(app)).len();
     let Some(ui) = app.settings_ui.as_mut() else { return };
     if ui.on_tabs {
-        ui.tab = (ui.tab as i64 + delta as i64).clamp(0, Tab::ALL.len() as i64 - 1) as usize;
+        ui.tab = (ui.tab as i64 + delta as i64).clamp(0, Tab::all().len() as i64 - 1) as usize;
         ui.sel = 0;
         app.settings_tab = ui.tab;
     } else if delta < 0 && ui.sel == 0 {
@@ -847,7 +862,7 @@ mod tests {
         let app = std::sync::Arc::new(parking_lot::Mutex::new(AppState::new()));
         open(&mut app.lock());
         // Aba MIXER: acha o item "Curva do crossfader" e aciona.
-        select_tab(&mut app.lock(), Tab::ALL.iter().position(|t| *t == Tab::Mixer).unwrap());
+        select_tab(&mut app.lock(), Tab::all().iter().position(|t| *t == Tab::Mixer).unwrap());
         let idx = {
             let a = app.lock();
             let r = rows(&a);
@@ -866,12 +881,25 @@ mod tests {
     }
 
     #[test]
+    fn no_pc_nao_tem_as_abas_do_sistema() {
+        if crate::app::aparelho() {
+            return;
+        }
+        assert!(!Tab::all().iter().any(|t| matches!(t, Tab::Wifi | Tab::Bluetooth | Tab::Phone)), "Wi-Fi e Bluetooth são do computador");
+        let mut app = AppState::new();
+        open(&mut app);
+        select_tab(&mut app, Tab::all().iter().position(|t| *t == Tab::System).unwrap());
+        assert!(!rows(&app).iter().any(|r| matches!(r, Row::Item { action: Action::PowerOff | Action::Restart | Action::FwSearch, .. })), "nem desligar nem firmware");
+    }
+
+    #[test]
     fn browse_anda_pelas_abas_entra_e_volta() {
         let mut app = AppState::new();
         open(&mut app);
         assert!(app.settings_ui.as_ref().unwrap().on_tabs, "abre com o BROWSE nas abas");
         scroll(&mut app, 3);
-        assert_eq!(current_tab(&app), Tab::Phone);
+        let quarta = Tab::all()[3]; // CELULAR no aparelho; TELA no PC (sem as abas do sistema)
+        assert_eq!(current_tab(&app), quarta);
         // Apertar o BROWSE entra na aba.
         focus_tabs(&mut app, false);
         let ui = app.settings_ui.as_ref().unwrap();
@@ -879,11 +907,11 @@ mod tests {
         // Girar para cima no primeiro item volta para as abas, na mesma aba.
         scroll(&mut app, -1);
         assert!(app.settings_ui.as_ref().unwrap().on_tabs);
-        assert_eq!(current_tab(&app), Tab::Phone);
+        assert_eq!(current_tab(&app), quarta);
         // Fecha e abre de novo: volta na última aba.
         close(&mut app);
         open(&mut app);
-        assert_eq!(current_tab(&app), Tab::Phone);
+        assert_eq!(current_tab(&app), quarta);
         // Aba ÁUDIO: apertar entra no item do ganho automático.
         select_tab(&mut app, 0);
         let r = rows(&app);

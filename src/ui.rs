@@ -428,7 +428,7 @@ impl DjOsApp {
                 let mut a = self.app.lock();
                 crate::settings::open(&mut a);
                 // DJOS_DEMO_CONFIG=<número da aba> abre nela; sem número, Wi-Fi procurando redes.
-                let wifi = crate::settings::Tab::ALL.iter().position(|t| *t == crate::settings::Tab::Wifi).unwrap_or(0);
+                let wifi = crate::settings::Tab::all().iter().position(|t| *t == crate::settings::Tab::Wifi).unwrap_or(0);
                 let tab = std::env::var("DJOS_DEMO_CONFIG").ok().and_then(|v| v.parse().ok()).unwrap_or(wifi);
                 crate::settings::select_tab(&mut a, tab);
             }
@@ -1236,7 +1236,7 @@ impl DjOsApp {
             let rows = rows(&a);
             let (sel, tab, on_tabs) = a.settings_ui.as_ref().map_or((0, 0, true), |u| (u.sel, u.tab, u.on_tabs));
             let sel_row = if on_tabs { None } else { selectable(&rows).get(sel).copied() };
-            let summaries: Vec<String> = Tab::ALL.iter().map(|t| tab_summary(&a, *t)).collect();
+            let summaries: Vec<String> = Tab::all().iter().map(|t| tab_summary(&a, *t)).collect();
             (rows, sel_row, tab, on_tabs, summaries)
         };
         p.rect_filled(r, 8.0, PANEL);
@@ -1261,9 +1261,9 @@ impl DjOsApp {
 
         // Abas à esquerda.
         let tabs = Rect::from_min_max(r.min + vec2(12.0, 48.0), pos2(r.left() + 250.0, r.bottom() - 12.0));
-        let tab_h = ((tabs.height() - 6.0 * 6.0) / Tab::ALL.len() as f32).min(64.0);
+        let tab_h = ((tabs.height() - 6.0 * 6.0) / Tab::all().len() as f32).min(64.0);
         let mut tab_click = None;
-        for (i, t) in Tab::ALL.iter().enumerate() {
+        for (i, t) in Tab::all().iter().enumerate() {
             let tr = Rect::from_min_size(tabs.min + vec2(0.0, i as f32 * (tab_h + 6.0)), vec2(tabs.width(), tab_h));
             let open = i == tab;
             p.rect_filled(tr, 6.0, if open { ACCENT.gamma_multiply(if on_tabs { 0.35 } else { 0.18 }) } else { PANEL2 });
@@ -1280,7 +1280,7 @@ impl DjOsApp {
 
         // Itens da aba à direita.
         let full_body = Rect::from_min_max(pos2(tabs.right() + 14.0, r.top() + 48.0), r.max - vec2(12.0, 12.0));
-        text(p, full_body.left_top() + vec2(4.0, 2.0), Align2::LEFT_TOP, Tab::ALL[tab].name(), 15.0, ACCENT);
+        text(p, full_body.left_top() + vec2(4.0, 2.0), Align2::LEFT_TOP, Tab::all()[tab].name(), 15.0, ACCENT);
         let full_body = Rect::from_min_max(full_body.min + vec2(0.0, 30.0), full_body.max);
         // Barra de rolagem à direita (arrastar com o mouse ou o dedo).
         let bar = Rect::from_min_max(pos2(full_body.right() - 14.0, full_body.top()), full_body.max);
@@ -1452,9 +1452,10 @@ impl eframe::App for DjOsApp {
                 if ui.interact(recr, ui.id().with("gravar"), egui::Sense::click()).clicked() {
                     crate::record::toggle(&self.app, &self.cmd, snap.sample_rate);
                 }
-                // Botão do Bluetooth: tocar alterna desligado → master → retorno.
+                // Botão do Bluetooth (só no aparelho): tocar alterna desligado → master → retorno.
                 let btr = Rect::from_min_size(pos2(top.left() + 150.0, top.top() + 4.0), vec2(250.0, 26.0));
                 let on = bt_mode != crate::bluetooth::BtMode::Off;
+                if crate::app::aparelho() {
                 p.rect_filled(btr, 5.0, if on { Color32::from_rgb(40, 90, 200) } else { PANEL2 });
                 let bp = p.with_clip_rect(btr);
                 text(&bp, btr.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, &bt_status, 12.0, if on { TEXT } else { DIM });
@@ -1464,6 +1465,7 @@ impl eframe::App for DjOsApp {
                     a.settings.bt_mode = a.bt_mode;
                     a.settings.save();
                     a.bt_status = format!("BT {} · procurando…", a.bt_mode.name());
+                }
                 }
                 // Áudio parado: o motor ainda não rodou nenhum bloco depois de 3 s.
                 let audio_dead = snap.sample_rate == 0.0 && self.frame > 180;
