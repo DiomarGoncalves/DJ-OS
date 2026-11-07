@@ -17,7 +17,7 @@
 use crate::app::{Loader, PadMode, SharedApp};
 use crate::engine::fx::{beats_label, step_beats};
 use crate::shared::{Cmd, CmdTx, SharedSnap, Snapshot, NUM_DECKS};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -701,11 +701,6 @@ impl super::Controller for Mapeado {
     fn leds(&self, app: &crate::app::AppState, snap: &Snapshot, _blink: bool, out: &mut Vec<(u8, u8, u8)>) {
         leds(&self.mapa, app, snap, out);
     }
-}
-
-/// Lê um arquivo de mapeamento do disco (para conferir antes de usar).
-pub fn ler_arquivo(p: &Path) -> Result<Mapa, String> {
-    ler(&std::fs::read_to_string(p).map_err(|e| e.to_string())?)
 }
 
 #[cfg(test)]

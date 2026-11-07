@@ -408,16 +408,6 @@ impl Library {
         }
     }
 
-    /// Unidades ligadas (pendrives, SSDs, músicas internas), como itens da árvore.
-    pub fn source_nodes() -> Vec<Node> {
-        sources().into_iter().map(|(n, p)| Self::node(n, p, 0, NodeKind::Source)).collect()
-    }
-
-    /// Unidades ligadas agora.
-    pub fn sources_sig(&self) -> &[PathBuf] {
-        &self.sources_sig
-    }
-
     /// Depois de uma importação: relê as pastas (mantendo a seleção) e reindexa.
     pub fn force_reload(&mut self) {
         let sel = self.folder_sel;

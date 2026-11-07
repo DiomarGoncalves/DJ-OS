@@ -31,7 +31,9 @@ canal é `x + 1` (`90` = canal 1, `96` = canal 7, `9F` = canal 16). A documenta�
 cada controladora (a "MIDI Message List" da Pioneer, por exemplo) traz a mesma tabela.
 
 Também dá para ensinar botão por botão sem editar o arquivo: **CONFIG → CONTROLADORA → Ensinar
-um botão (MIDI learn)**, escolha a função e aperte o botão na controladora.
+botões (MIDI learn)**, escolha a função e o deck, toque em "Ensinar agora" e aperte o botão na
+controladora. Uma controladora que ainda não tem mapeamento conecta assim mesmo ("sem
+mapeamento"), justamente para dar para ensinar os botões dela.
 
 ## O arquivo
 

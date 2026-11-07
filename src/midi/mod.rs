@@ -30,6 +30,26 @@ pub trait Controller: Send {
 
 type Criar = Box<dyn Fn(SharedApp, CmdTx, SharedSnap, Loader) -> Box<dyn Controller> + Send + Sync>;
 
+/// Controladora sem mapeamento: não faz nada sozinha, só com os botões ensinados (MIDI learn).
+struct SemMapeamento;
+
+impl Controller for SemMapeamento {
+    fn handle(&mut self, msg: &[u8]) {
+        if log_left() > 0 && msg.len() >= 3 {
+            eprintln!("[midi] {:02X} {:02X} {:02X}", msg[0], msg[1], msg[2]);
+        }
+    }
+
+    fn leds(&self, _: &AppState, _: &Snapshot, _: bool, _: &mut Vec<(u8, u8, u8)>) {}
+}
+
+/// Controladora que ninguém mapeou ainda (pela primeira parte do nome da porta): conecta assim
+/// mesmo, para dar para ensinar os botões.
+fn sem_mapeamento(nome: &str) -> Arc<Model> {
+    let n = nome.to_lowercase();
+    Arc::new(Model { name: format!("{nome} (sem mapeamento)"), base: nome.to_string(), matches: Box::new(move |p| p.to_lowercase().contains(&n)), create: Box::new(|_, _, _, _| Box::new(SemMapeamento)) })
+}
+
 /// Uma controladora suportada.
 pub struct Model {
     /// Nome mostrado na tela.
@@ -123,7 +143,11 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
                         catalogo = self::catalogo();
                     }
                     let found = scanner.as_ref().and_then(|s| detect(s, &catalogo));
-                    let model = found.as_ref().and_then(|f| f.as_ref().ok()).cloned();
+                    // Desconhecida: conecta "sem mapeamento" (os botões se ensinam em CONFIG).
+                    let model = found.as_ref().map(|f| match f {
+                        Ok(m) => m.clone(),
+                        Err(nome) => sem_mapeamento(nome),
+                    });
                     // A controladora conectada saiu (ou trocou por outra).
                     if let Some((_, name)) = &conn {
                         if model.as_ref().is_none_or(|m| m.name != *name) {
@@ -143,9 +167,13 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
                             match connect(&m, mapping.clone()) {
                                 Ok((i, o)) => {
                                     conn = Some((i, m.name.clone()));
-                                    *out.lock() = Some(o);
+                                    *out.lock() = o;
                                     cache.lock().clear();
-                                    app.lock().midi_status = format!("{} conectada", m.name);
+                                    app.lock().midi_status = if m.name.ends_with("(sem mapeamento)") {
+                                        format!("{}: ensine os botões em CONFIG → CONTROLADORA", m.base)
+                                    } else {
+                                        format!("{} conectada", m.name)
+                                    };
                                     eprintln!("[djos] {} conectada", m.name);
                                 }
                                 Err(e) => app.lock().midi_status = format!("{}: {e}", m.name),
@@ -203,7 +231,8 @@ pub fn start(app: SharedApp, cmd: CmdTx, snap: SharedSnap, loader: Loader) {
         .expect("thread leds");
 }
 
-fn connect(model: &Model, mapping: Arc<Mutex<Option<Box<dyn Controller>>>>) -> Result<(MidiInputConnection<()>, MidiOutputConnection), String> {
+/// Conecta na entrada MIDI da controladora e, se ela tiver, na saída (LEDs).
+fn connect(model: &Model, mapping: Arc<Mutex<Option<Box<dyn Controller>>>>) -> Result<(MidiInputConnection<()>, Option<MidiOutputConnection>), String> {
     let input = MidiInput::new("dj-os").map_err(|e| e.to_string())?;
     let in_port = input
         .ports()
@@ -211,11 +240,7 @@ fn connect(model: &Model, mapping: Arc<Mutex<Option<Box<dyn Controller>>>>) -> R
         .find(|p| input.port_name(p).is_ok_and(|n| (model.matches)(&n)))
         .ok_or("entrada MIDI não encontrada")?;
     let output = MidiOutput::new("dj-os").map_err(|e| e.to_string())?;
-    let out_port = output
-        .ports()
-        .into_iter()
-        .find(|p| output.port_name(p).is_ok_and(|n| (model.matches)(&n)))
-        .ok_or("saída MIDI não encontrada")?;
+    let out_port = output.ports().into_iter().find(|p| output.port_name(p).is_ok_and(|n| (model.matches)(&n)));
     let conn_in = input
         .connect(
             &in_port,
@@ -228,6 +253,7 @@ fn connect(model: &Model, mapping: Arc<Mutex<Option<Box<dyn Controller>>>>) -> R
             (),
         )
         .map_err(|e| e.to_string())?;
-    let conn_out = output.connect(&out_port, "controladora-out").map_err(|e| e.to_string())?;
+    // Sem saída MIDI (controladora sem LEDs): funciona só a entrada.
+    let conn_out = out_port.and_then(|p| output.connect(&p, "controladora-out").ok());
     Ok((conn_in, conn_out))
 }

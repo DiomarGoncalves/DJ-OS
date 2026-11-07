@@ -8,14 +8,17 @@ da próxima:
 1. ~~**Modo PC**~~ (feito): no PC o DJ OS não mexe em Wi-Fi, Bluetooth, firmware nem desliga;
    janela normal maximizada; compila para Windows; AppImage e .exe nas Releases. Falta: escolher
    a saída de som (placa ou controladora) em CONFIG → ÁUDIO; registro em arquivo no Windows.
-2. **Mapeamento por arquivo**: cada controladora num arquivo (MIDI → ação, LEDs, jog), com MIDI
-   learn; a REV1 vira o primeiro arquivo. Escolher a controladora em CONFIG.
-3. **Controladoras novas** pela documentação oficial pública (MIDI Message List de cada modelo):
+2. ~~**Mapeamento por arquivo**~~ (feito): `.djosmap` + MIDI learn (por cima de qualquer
+   controladora, inclusive a REV1, que continua com o mapeamento no código) + saída de som
+   escolhida em CONFIG → ÁUDIO. Controladora desconhecida conecta "sem mapeamento".
+3. ~~**Controladoras novas**~~ (feito, 21 em teste; falta Reloop Mixon 4 e CDJ-2000/NXS antigos,
+   que precisam de reconhecer a porta pelo nome exato) pela documentação oficial pública:
    Pioneer DDJ-400/FLX4, SB3/FLX6/SR2/1000; CDJs/XDJs no modo USB (CDJ-2000NXS2, CDJ-3000,
    XDJ-RX/XZ); Numark, Hercules (Inpulse), Denon, Reloop. Cada uma "em teste" até alguém com o
    aparelho confirmar. Os mapeamentos do Mixxx (GPL) servem de referência.
-4. **Skins editáveis por arquivo** (como no VirtualDJ): posição e tamanho de cada parte da tela,
-   cores e fontes; vários prontos (XDJ preto, claro, 2/4 decks); a pessoa edita e compartilha.
+4. ~~**Skins editáveis por arquivo**~~ (feito: cores de tudo e layout da tela principal; Preta,
+   Clara, Neon, Waveform grande). Depois: posição livre de cada parte e skins do browser e das
+   configurações (a tela das configurações ainda usa as cores antigas).
 
 ## Próxima atualização (combinado em 2026-11-03)
 0. **Qualidade do som (fone e master)** — prioridade. Ele comparou a mesma música no PC e no
