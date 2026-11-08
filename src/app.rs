@@ -91,6 +91,8 @@ pub struct AppState {
     pub phone_status: String,
     pub fw: crate::firmware::FwState,
     pub rec: crate::record::RecState,
+    /// Automix ligado (toca e mistura sozinho).
+    pub automix: Option<crate::automix::Automix>,
     pub history: crate::history::Tracker,
     /// Ajuste da grade aberto (tocar no BPM do deck).
     pub grid_edit: Option<crate::grid::GridEdit>,
@@ -137,6 +139,7 @@ impl AppState {
             phone_status: "desligado".into(),
             fw: Default::default(),
             rec: Default::default(),
+            automix: None,
             history: Default::default(),
             grid_edit: None,
             settings_tab: 0,

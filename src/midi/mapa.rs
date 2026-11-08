@@ -107,6 +107,7 @@ pub enum Acao {
     Quantize,
     FiltroBrowser,
     SalvarFila,
+    Automix,
 }
 
 impl Acao {
@@ -142,6 +143,7 @@ impl Acao {
             "quantize" => Quantize,
             "filtro_browser" => FiltroBrowser,
             "salvar_fila" => SalvarFila,
+            "automix" => Automix,
             "faixa_pitch" => FaixaPitch,
             "volume" => Volume,
             "tempo" => Tempo,
@@ -179,7 +181,7 @@ impl Acao {
 
     /// Ação que precisa saber o deck.
     fn de_deck(self) -> bool {
-        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config | Acao::Quantize | Acao::FiltroBrowser | Acao::SalvarFila)
+        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config | Acao::Quantize | Acao::FiltroBrowser | Acao::SalvarFila | Acao::Automix)
     }
 
     /// Como o valor costuma chegar para esta ação (o arquivo pode trocar com `valor=`).
@@ -584,6 +586,11 @@ impl Mapeado {
                 a.toast(format!("Filtro: {f}"));
             }
             SalvarFila if down => salvar_fila(&mut self.app.lock()),
+            Automix if down => {
+                let mut a = self.app.lock();
+                let msg = crate::automix::alternar(&mut a, &self.cmd);
+                a.toast(msg);
+            }
             FaixaPitch if down => send(Cmd::PitchRangeCycle(d)),
             Volume => send(Cmd::Fader { deck: d, v: x }),
             Tempo => send(Cmd::Tempo { deck: d, v: x as f64 }),

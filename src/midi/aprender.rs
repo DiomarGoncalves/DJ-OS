@@ -67,6 +67,7 @@ pub const FUNCOES: &[(&str, &str, bool)] = &[
     ("QUANTIZE", "quantize", false),
     ("FILTRO DO BROWSER", "filtro_browser", false),
     ("SALVAR A FILA COMO PLAYLIST", "salvar_fila", false),
+    ("AUTOMIX LIGA/DESLIGA", "automix", false),
 ];
 
 /// Pedido de MIDI learn em andamento: a linha (ação e opções) e a controladora.

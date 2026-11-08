@@ -286,6 +286,10 @@ impl DjOsApp {
             if i.modifiers.ctrl && i.key_pressed(Key::P) {
                 crate::midi::mapa::salvar_fila(&mut a);
             }
+            if i.modifiers.ctrl && i.key_pressed(Key::A) {
+                let msg = crate::automix::alternar(&mut a, &self.cmd);
+                a.toast(msg);
+            }
             if i.modifiers.ctrl && i.key_pressed(Key::F) {
                 search::open(&mut a);
                 return;
@@ -457,6 +461,15 @@ impl DjOsApp {
             if crate::settings::current_tab(&self.app.lock()) == crate::settings::Tab::Wifi {
                 crate::settings::activate(&self.app, &self.cmd);
             }
+        }
+        // DJOS_DEMO_AUTOMIX: liga o automix (teste do automix).
+        if std::env::var_os("DJOS_DEMO_AUTOMIX").is_some() {
+            ctx.request_repaint();
+        }
+        if self.frame == 30 && std::env::var_os("DJOS_DEMO_AUTOMIX").is_some() {
+            let mut a = self.app.lock();
+            let msg = crate::automix::alternar(&mut a, &self.cmd);
+            eprintln!("[djos] {msg}");
         }
         if self.frame == 90 && std::env::var_os("DJOS_DEMO_ENTER").is_some() {
             search::submit(&mut self.app.lock());
@@ -1430,6 +1443,11 @@ impl eframe::App for DjOsApp {
                 let dt = self.history_at.elapsed().as_secs_f32();
                 self.history_at = std::time::Instant::now();
                 crate::history::tick(&mut a, &snap, dt);
+                crate::automix::tick(&mut a, &snap, &self.cmd, &self.loader, dt as f64);
+                if a.automix.is_some() {
+                    // Ligado e esperando (carregando, nada tocando): a tela continua chamando.
+                    ctx.request_repaint_after(Duration::from_millis(100));
+                }
                 if self.resume_at.elapsed() > Duration::from_secs(2) {
                     self.resume_at = std::time::Instant::now();
                     crate::resume::save(&a, &snap, &mut self.resume_saved);
@@ -1485,6 +1503,19 @@ impl eframe::App for DjOsApp {
                 }
                 if ui.interact(recr, ui.id().with("gravar"), egui::Sense::click()).clicked() {
                     crate::record::toggle(&self.app, &self.cmd, snap.sample_rate);
+                }
+                // Botão do automix: laranja ligado (com a barra da mixagem em andamento).
+                let amr = Rect::from_min_size(pos2(recr.right() + 8.0, top.top() + 4.0), vec2(104.0, 26.0));
+                let am = crate::automix::estado(&self.app.lock());
+                p.rect_filled(amr, 5.0, if am.is_some() { ORANGE } else { PANEL2 });
+                if let Some(Some(t)) = am {
+                    p.rect_filled(Rect::from_min_size(amr.left_bottom() - vec2(0.0, 4.0), vec2(amr.width() * t as f32, 4.0)), 0.0, TEXT);
+                }
+                text(&p, amr.center(), Align2::CENTER_CENTER, "AUTOMIX", 12.0, if am.is_some() { BG } else { TEXT });
+                if ui.interact(amr, ui.id().with("automix"), egui::Sense::click()).clicked() {
+                    let mut a = self.app.lock();
+                    let msg = crate::automix::alternar(&mut a, &self.cmd);
+                    a.toast(msg);
                 }
                 // Botão do Bluetooth (só no aparelho): tocar alterna desligado → master → retorno.
                 let btr = Rect::from_min_size(pos2(top.left() + 150.0, top.top() + 4.0), vec2(250.0, 26.0));
@@ -1597,7 +1628,7 @@ impl eframe::App for DjOsApp {
                 if nav_on {
                     "Browser: setas cima/baixo andam · Tab pastas/músicas · Enter abre a pasta · 1-4 ou clicar no deck carrega · dois cliques abre/carrega · Ctrl+F pesquisa · B fecha"
                 } else {
-                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F filtro · Ctrl+P salva a fila · F10 configurações · +/- zoom · setas esq/dir crossfader"
+                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F filtro · Ctrl+P salva a fila · Ctrl+A automix · F10 configurações · +/- zoom · setas esq/dir crossfader"
                 },
                 11.0,
                 DIM,
