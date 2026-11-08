@@ -40,6 +40,9 @@ fn into_view(first: &mut usize, sel: usize, rows: usize, n: usize) {
     *first = (*first).min(n.saturating_sub(rows));
 }
 
+/// Tocaram no filtro do browser (aplicado depois de desenhar, sem a trava aberta).
+static FILTRO_CLICADO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Tons que combinam na roda Camelot: o mesmo, ±1 com a mesma letra, ou o relativo.
 pub fn keys_match(a: u8, b: u8) -> bool {
     crate::key::combina(a, b)
@@ -111,7 +114,13 @@ impl DjOsApp {
             }
         }
         let crumb = std::iter::once("PASTAS".to_string()).chain(path.iter().rev().map(|n| plain(n).to_string())).collect::<Vec<_>>().join("  ›  ");
-        let cp = p.with_clip_rect(Rect::from_min_max(pos2(t.right() + 14.0, top.top()), pos2(top.right() - 8.0, top.bottom())));
+        // Filtro da lista (à direita); tocar troca.
+        let filtro = crate::library::FILTROS[lib.filtro];
+        let fr = tb(p, pos2(top.right() - 12.0, top.center().y), Align2::RIGHT_CENTER, format!("FILTRO: {filtro}"), 14.0, if lib.filtro > 0 { k_orange() } else { k_dim() });
+        if ui.interact(fr.expand(6.0), ui.id().with("filtro"), egui::Sense::click()).clicked() {
+            FILTRO_CLICADO.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        let cp = p.with_clip_rect(Rect::from_min_max(pos2(t.right() + 14.0, top.top()), pos2(fr.left() - 12.0, top.bottom())));
         tr(&cp, pos2(t.right() + 14.0, top.center().y + 1.0), Align2::LEFT_CENTER, crumb, 15.0, k_dim());
 
         // ---- pastas (árvore) ----
@@ -285,6 +294,10 @@ impl DjOsApp {
 
         // ---- o que o mouse fez ----
         let mut a = self.app.lock();
+        if FILTRO_CLICADO.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            let f = a.lib.proximo_filtro();
+            a.toast(format!("Filtro: {f}"));
+        }
         if let (Some(f), true) = (wheel_on, wheel_steps != 0) {
             a.lib.focus = f;
             a.lib.scroll(wheel_steps);

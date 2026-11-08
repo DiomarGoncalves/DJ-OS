@@ -312,6 +312,8 @@ pub enum Action {
     TravaLoad,
     FimAviso,
     BrowserNovo,
+    FiltroBrowser,
+    SalvarFila,
     BrowserBpm,
     BrowserKey,
     BrowserFont,
@@ -565,6 +567,9 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Header("BROWSER (SHIFT + BROWSE)"));
             let show = |b: bool| if b { "MOSTRAR" } else { "ESCONDER" }.to_string();
             v.push(Row::Item { label: "Browser em tela cheia".into(), value: if s.browser_novo { "NOVO (PRETO)" } else { "CLÁSSICO" }.into(), action: Action::BrowserNovo });
+            v.push(Row::Item { label: "Filtro da lista de músicas".into(), value: crate::library::FILTROS[app.lib.filtro].into(), action: Action::FiltroBrowser });
+            v.push(Row::Item { label: "Salvar a fila como playlist".into(), value: format!("{} MÚSICA(S) NA FILA", app.lib.prepare.len()), action: Action::SalvarFila });
+            v.push(Row::Info("Fila: SHIFT + LOAD. Playlists salvas e as .m3u do pendrive (VirtualDJ, rekordbox) aparecem nas pastas".into()));
             v.push(Row::Item { label: "Coluna do BPM".into(), value: show(s.browser_bpm), action: Action::BrowserBpm });
             v.push(Row::Item { label: "Coluna do tom".into(), value: show(s.browser_key), action: Action::BrowserKey });
             v.push(Row::Item { label: "Tamanho da letra".into(), value: BROWSER_FONTS[s.browser_font].into(), action: Action::BrowserFont });
@@ -724,6 +729,14 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::TravaLoad => a.settings.trava_load = !a.settings.trava_load,
         Action::FimAviso => a.settings.fim_aviso = next(a.settings.fim_aviso, FIM_AVISOS.len()),
         Action::BrowserNovo => a.settings.browser_novo = !a.settings.browser_novo,
+        Action::FiltroBrowser => {
+            a.lib.proximo_filtro();
+            return;
+        }
+        Action::SalvarFila => {
+            crate::midi::mapa::salvar_fila(&mut a);
+            return;
+        }
         Action::BrowserBpm => a.settings.browser_bpm = !a.settings.browser_bpm,
         Action::BrowserKey => a.settings.browser_key = !a.settings.browser_key,
         Action::BrowserFont => a.settings.browser_font = next(a.settings.browser_font, BROWSER_FONTS.len()),

@@ -27,6 +27,8 @@ pub enum NodeKind {
     History,
     /// "Combina com o deck N": BPM e tom que combinam com o que está tocando no ar.
     Combina,
+    /// Playlist .m3u/.m3u8 (do pendrive, do VirtualDJ/rekordbox, ou salva no aparelho).
+    M3u,
     /// Pendrive do rekordbox: todas as músicas, uma pasta de playlists ou uma playlist (pelo
     /// número no banco). O caminho do nó é a raiz do pendrive.
     RbRoot,
@@ -41,6 +43,11 @@ impl NodeKind {
     }
 
     /// Item das playlists do rekordbox (não é uma pasta: não se copia nem se abre como pasta).
+    /// Uma playlist (não é pasta: não se copia nem se abre como pasta).
+    pub fn is_playlist(self) -> bool {
+        matches!(self, NodeKind::M3u)
+    }
+
     pub fn is_rekordbox(self) -> bool {
         matches!(self, NodeKind::RbRoot | NodeKind::RbFolder(_) | NodeKind::RbPlaylist(_))
     }
@@ -205,6 +212,11 @@ pub fn sources() -> Vec<(String, PathBuf)> {
     if std::fs::read_dir(&rec).is_ok_and(|mut d| d.next().is_some()) {
         out.push(("🎙 Records (gravações)".to_string(), rec));
     }
+    // Playlists salvas no aparelho (só aparece depois da primeira).
+    let pl = pasta_playlists();
+    if !list_m3u(&pl).is_empty() {
+        out.push(("☰ Playlists".to_string(), pl));
+    }
     // Windows: os outros discos e pendrives são as letras (D:, E:...); o C: é o do Windows.
     #[cfg(windows)]
     for c in b'D'..=b'Z' {
@@ -324,6 +336,51 @@ pub struct Library {
     /// "Combina com o deck N": a lista e o que ela usou como referência.
     pub combina: Vec<TrackEntry>,
     combina_ref: Option<Referencia>,
+    /// Filtro da lista de músicas (índice em FILTROS).
+    pub filtro: usize,
+}
+
+/// Filtros da lista de músicas.
+pub const FILTROS: [&str; 4] = ["TODAS", "NÃO TOCADAS", "BPM DO QUE TOCA", "TOM QUE COMBINA"];
+
+/// Playlists (.m3u, .m3u8) de uma pasta.
+fn list_m3u(p: &Path) -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = std::fs::read_dir(p)
+        .map(|rd| rd.flatten().map(|e| e.path()).filter(|f| f.is_file() && !is_hidden(f) && f.extension().is_some_and(|e| matches!(e.to_string_lossy().to_lowercase().as_str(), "m3u" | "m3u8"))).collect())
+        .unwrap_or_default();
+    v.sort_by_key(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()));
+    v
+}
+
+/// Músicas de uma playlist .m3u/.m3u8: caminho relativo à playlist ou absoluto. Playlist feita
+/// no Windows (`D:\Funk\a.mp3`) ou em outro computador: procura pelo mesmo caminho a partir da
+/// pasta da playlist (tirando a letra do disco e as pastas de cima, uma a uma).
+pub fn ler_m3u(f: &Path) -> Vec<PathBuf> {
+    let Ok(bytes) = std::fs::read(f) else { return Vec::new() };
+    let texto = String::from_utf8_lossy(&bytes);
+    let base = f.parent().unwrap_or(Path::new("."));
+    texto
+        .lines()
+        .map(|l| l.trim().trim_start_matches('\u{feff}'))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .filter_map(|l| {
+            let l = l.strip_prefix("file://").unwrap_or(l).replace('\\', "/");
+            let p = Path::new(&l);
+            if p.is_absolute() && p.is_file() {
+                return Some(p.to_path_buf());
+            }
+            // Sem a letra do disco (D:/...) e tentando a partir de cada pasta de cima.
+            let sem_letra = if l.len() > 2 && l.as_bytes()[1] == b':' { &l[2..] } else { &l[..] };
+            let partes: Vec<&str> = sem_letra.split('/').filter(|s| !s.is_empty() && *s != ".").collect();
+            (0..partes.len()).map(|i| base.join(partes[i..].join("/"))).find(|c| c.is_file())
+        })
+        .filter(|p| is_audio(p))
+        .collect()
+}
+
+/// Pasta das playlists salvas no aparelho.
+pub fn pasta_playlists() -> PathBuf {
+    crate::app::data_dir().join("playlists")
 }
 
 /// O que está tocando no ar (referência do "Combina com").
@@ -386,6 +443,7 @@ impl Library {
             generation: 0,
             combina: Vec::new(),
             combina_ref: None,
+            filtro: 0,
         };
         lib.folders.push(Node { name: "♪ Combina com o que toca".into(), path: PathBuf::new(), depth: 0, kind: NodeKind::Combina, expanded: false, has_children: false });
         lib.reload_sources();
@@ -397,7 +455,7 @@ impl Library {
     }
 
     fn node(name: String, path: PathBuf, depth: usize, kind: NodeKind) -> Node {
-        let has_children = !kind.is_virtual() && (!list_dirs(&path).is_empty() || crate::rekordbox::is_export(&path));
+        let has_children = !kind.is_virtual() && kind != NodeKind::M3u && (!list_dirs(&path).is_empty() || !list_m3u(&path).is_empty() || crate::rekordbox::is_export(&path));
         Node { name, path, depth, kind, expanded: false, has_children }
     }
 
@@ -452,7 +510,7 @@ impl Library {
         if self.tracks_for.as_ref() == Some(&key) {
             return;
         }
-        self.tracks = self.node_tracks(n);
+        self.tracks = self.filtrar(self.node_tracks(n));
         self.track_sel = 0;
         self.tracks_for = Some(key);
     }
@@ -464,6 +522,7 @@ impl Library {
             // A mais recente em cima.
             NodeKind::History => self.history.iter().rev().cloned().collect(),
             NodeKind::Combina => self.combina.clone(),
+            NodeKind::M3u => ler_m3u(&n.path).iter().map(|p| TrackEntry::from_path(p).with_saved()).collect(),
             NodeKind::RbRoot | NodeKind::RbFolder(_) | NodeKind::RbPlaylist(_) => rb_tracks(&n.path, n.kind),
             _ => list_tracks(&n.path),
         }
@@ -481,7 +540,7 @@ impl Library {
     /// Música ou pasta selecionada no painel em foco (para apagar/importar).
     pub fn selected_path(&self) -> Option<PathBuf> {
         match self.focus {
-            Focus::Folders => self.folders.get(self.folder_sel).filter(|n| !n.kind.is_virtual() && !n.kind.is_rekordbox()).map(|n| n.path.clone()),
+            Focus::Folders => self.folders.get(self.folder_sel).filter(|n| !n.kind.is_virtual() && !n.kind.is_rekordbox() && !n.kind.is_playlist()).map(|n| n.path.clone()),
             _ => self.selected_track().map(|t| t.path),
         }
     }
@@ -571,6 +630,10 @@ impl Library {
                     has_children: !l.playlists.is_empty(),
                 });
                 rb.into_iter()
+                    .chain(list_m3u(&n.path).into_iter().map(|f| {
+                        let name = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        Node { name: format!("☰ {name}"), path: f, depth: n.depth + 1, kind: NodeKind::M3u, expanded: false, has_children: false }
+                    }))
                     .chain(list_dirs(&n.path).into_iter().map(|d| {
                         let name = d.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
                         Self::node(name, d, n.depth + 1, NodeKind::Dir)
@@ -624,6 +687,48 @@ impl Library {
         }
     }
 
+    /// Aplica o filtro da lista (não tocadas, BPM ou tom do que toca no ar).
+    fn filtrar(&self, v: Vec<TrackEntry>) -> Vec<TrackEntry> {
+        let r = self.combina_ref.as_ref();
+        match self.filtro {
+            1 => v.into_iter().filter(|t| !self.played.contains(&t.path)).collect(),
+            2 => match r {
+                Some(r) => v.into_iter().filter(|t| t.bpm.is_some_and(|b| [1.0, 2.0, 0.5].iter().any(|m| (b * m / r.bpm - 1.0).abs() <= 0.06))).collect(),
+                None => v,
+            },
+            3 => match r.and_then(|r| r.key) {
+                Some(k) => v.into_iter().filter(|t| t.key.is_some_and(|x| crate::key::combina(x, k))).collect(),
+                None => v,
+            },
+            _ => v,
+        }
+    }
+
+    /// Próximo filtro da lista; devolve o nome dele.
+    pub fn proximo_filtro(&mut self) -> &'static str {
+        self.filtro = (self.filtro + 1) % FILTROS.len();
+        self.tracks_for = None;
+        self.refresh_tracks();
+        FILTROS[self.filtro]
+    }
+
+    /// Salva a fila (SHIFT + LOAD) como playlist em ~/DJOS/playlists; devolve o nome.
+    pub fn salvar_fila(&mut self) -> Result<String, String> {
+        if self.prepare.is_empty() {
+            return Err("A fila está vazia: ponha músicas com SHIFT + LOAD".into());
+        }
+        let dir = pasta_playlists();
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let nome = format!("Playlist {}", chrono::Local::now().format("%Y-%m-%d %Hh%M"));
+        let mut texto = String::from("#EXTM3U\n");
+        for t in &self.prepare {
+            texto.push_str(&format!("#EXTINF:-1,{} - {}\n{}\n", t.artist, t.title, t.path.display()));
+        }
+        std::fs::write(dir.join(format!("{nome}.m3u8")), texto).map_err(|e| e.to_string())?;
+        self.force_reload();
+        Ok(nome)
+    }
+
     /// Atualiza o "Combina com o deck N" (chamado sempre; só refaz a lista quando a referência
     /// muda: outra música no ar, outro tom, ou o BPM mudou mais de 0,5).
     pub fn atualizar_combina(&mut self, r: Option<Referencia>) {
@@ -648,6 +753,11 @@ impl Library {
         };
         self.combina = lista;
         self.combina_ref = r;
+        // Filtro pelo BPM/tom do que toca: a lista muda junto.
+        if self.filtro >= 2 {
+            self.tracks_for = None;
+            self.refresh_tracks();
+        }
         if let Some(n) = self.folders.iter_mut().find(|n| n.kind == NodeKind::Combina) {
             n.name = nome;
         }
@@ -772,6 +882,27 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         panic!("índice não terminou");
+    }
+
+    #[test]
+    fn playlist_m3u_do_windows_e_do_aparelho() {
+        let base = std::env::temp_dir().join(format!("dj-os-m3u-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let funk = base.join("Funk");
+        std::fs::create_dir_all(&funk).unwrap();
+        for f in ["a.mp3", "b.mp3"] {
+            std::fs::write(funk.join(f), b"x").unwrap();
+        }
+        // Feita no VirtualDJ do Windows (D:\Funk\...), relativa e com uma que não existe.
+        std::fs::write(base.join("Set.m3u"), "#EXTM3U\r\n#EXTINF:1,x\r\nD:\\Funk\\b.mp3\r\nFunk/a.mp3\r\nnao/existe.mp3\r\n").unwrap();
+        let v = ler_m3u(&base.join("Set.m3u"));
+        assert_eq!(v, vec![funk.join("b.mp3"), funk.join("a.mp3")]);
+        // Aparece na árvore como playlist, antes das pastas.
+        let raiz = Node { name: "x".into(), path: base.clone(), depth: 0, kind: NodeKind::Source, expanded: false, has_children: true };
+        let filhos = Library::children(&raiz);
+        assert_eq!(filhos[0].kind, NodeKind::M3u);
+        assert_eq!(filhos[0].name, "☰ Set");
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]

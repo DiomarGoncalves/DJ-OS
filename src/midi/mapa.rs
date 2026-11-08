@@ -105,6 +105,8 @@ pub enum Acao {
     Browser,
     Config,
     Quantize,
+    FiltroBrowser,
+    SalvarFila,
 }
 
 impl Acao {
@@ -138,6 +140,8 @@ impl Acao {
             "tom_zero" => TomZero,
             "tom_casar" => TomCasar,
             "quantize" => Quantize,
+            "filtro_browser" => FiltroBrowser,
+            "salvar_fila" => SalvarFila,
             "faixa_pitch" => FaixaPitch,
             "volume" => Volume,
             "tempo" => Tempo,
@@ -175,7 +179,7 @@ impl Acao {
 
     /// Ação que precisa saber o deck.
     fn de_deck(self) -> bool {
-        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config | Acao::Quantize)
+        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config | Acao::Quantize | Acao::FiltroBrowser | Acao::SalvarFila)
     }
 
     /// Como o valor costuma chegar para esta ação (o arquivo pode trocar com `valor=`).
@@ -574,6 +578,12 @@ impl Mapeado {
                 crate::app::comando_tom(&mut self.app.lock(), &snap, &self.cmd, d, qual);
             }
             Quantize if down => alternar_quantize(&self.app, &self.cmd),
+            FiltroBrowser if down => {
+                let mut a = self.app.lock();
+                let f = a.lib.proximo_filtro();
+                a.toast(format!("Filtro: {f}"));
+            }
+            SalvarFila if down => salvar_fila(&mut self.app.lock()),
             FaixaPitch if down => send(Cmd::PitchRangeCycle(d)),
             Volume => send(Cmd::Fader { deck: d, v: x }),
             Tempo => send(Cmd::Tempo { deck: d, v: x as f64 }),
@@ -697,6 +707,15 @@ pub fn browse_aperta(app: &SharedApp, cmd: &CmdTx, down: bool) {
             a.browse_released();
         }
     }
+}
+
+/// Salva a fila (SHIFT + LOAD) como playlist e avisa na tela.
+pub fn salvar_fila(a: &mut crate::app::AppState) {
+    let msg = match a.lib.salvar_fila() {
+        Ok(nome) => format!("Fila salva: ☰ Playlists → {nome}"),
+        Err(e) => e,
+    };
+    a.toast(msg);
 }
 
 /// QUANTIZE liga/desliga (vale para os 4 decks e fica salvo).

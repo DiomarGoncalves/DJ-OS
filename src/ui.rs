@@ -278,6 +278,14 @@ impl DjOsApp {
                     return;
                 }
             }
+            // F troca o filtro da lista; Ctrl+P salva a fila como playlist.
+            if !i.modifiers.ctrl && i.key_pressed(Key::F) {
+                let f = a.lib.proximo_filtro();
+                a.toast(format!("Filtro: {f}"));
+            }
+            if i.modifiers.ctrl && i.key_pressed(Key::P) {
+                crate::midi::mapa::salvar_fila(&mut a);
+            }
             if i.modifiers.ctrl && i.key_pressed(Key::F) {
                 search::open(&mut a);
                 return;
@@ -1589,7 +1597,7 @@ impl eframe::App for DjOsApp {
                 if nav_on {
                     "Browser: setas cima/baixo andam · Tab pastas/músicas · Enter abre a pasta · 1-4 ou clicar no deck carrega · dois cliques abre/carrega · Ctrl+F pesquisa · B fecha"
                 } else {
-                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F10 configurações · +/- zoom · setas esq/dir crossfader"
+                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F filtro · Ctrl+P salva a fila · F10 configurações · +/- zoom · setas esq/dir crossfader"
                 },
                 11.0,
                 DIM,

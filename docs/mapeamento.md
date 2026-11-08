@@ -137,6 +137,8 @@ led nota 1     0x0B    tocando       deck=1
 | `browser` | abre/fecha o browser em tela cheia |
 | `config` | abre/fecha as configurações |
 | `quantize` | QUANTIZE liga/desliga (vale para os 4 decks) |
+| `filtro_browser` | troca o filtro da lista: todas, não tocadas, BPM do que toca, tom que combina |
+| `salvar_fila` | salva a fila (SHIFT + LOAD) como playlist em ☰ Playlists |
 
 ## LEDs
 
