@@ -25,6 +25,8 @@ pub enum NodeKind {
     Search,
     /// "Tocadas hoje": o histórico da noite (nó virtual, sem pasta).
     History,
+    /// "Combina com o deck N": BPM e tom que combinam com o que está tocando no ar.
+    Combina,
     /// Pendrive do rekordbox: todas as músicas, uma pasta de playlists ou uma playlist (pelo
     /// número no banco). O caminho do nó é a raiz do pendrive.
     RbRoot,
@@ -35,7 +37,7 @@ pub enum NodeKind {
 impl NodeKind {
     /// Nó sem pasta de verdade por trás (pesquisa, histórico).
     pub fn is_virtual(self) -> bool {
-        matches!(self, NodeKind::Search | NodeKind::History)
+        matches!(self, NodeKind::Search | NodeKind::History | NodeKind::Combina)
     }
 
     /// Item das playlists do rekordbox (não é uma pasta: não se copia nem se abre como pasta).
@@ -278,8 +280,19 @@ fn scan_index(index: Arc<Mutex<Index>>, roots: Vec<PathBuf>, gen: Arc<AtomicU64>
             entries.sort_by(|a, b| a.1.artist.to_lowercase().cmp(&b.1.artist.to_lowercase()).then(a.1.title.to_lowercase().cmp(&b.1.title.to_lowercase())));
             if gen.load(Ordering::Relaxed) == my_gen {
                 let mut ix = index.lock();
-                ix.entries = entries;
+                ix.entries = entries.clone();
                 ix.scanning = false;
+            }
+            // Depois (a pesquisa já funciona): BPM e tom de cada música, para o "Combina com".
+            // Lê só o começo da memória de cada uma, devagar.
+            for (_, t) in entries.iter_mut() {
+                if gen.load(Ordering::Relaxed) != my_gen {
+                    return;
+                }
+                *t = t.clone().with_saved();
+            }
+            if gen.load(Ordering::Relaxed) == my_gen {
+                index.lock().entries = entries;
             }
         })
         .expect("thread do índice");
@@ -308,6 +321,46 @@ pub struct Library {
     pub played: std::collections::HashSet<PathBuf>,
     /// Sobe cada vez que as unidades são relidas (pendrive entrou/saiu, cópia terminou, apagou).
     pub generation: u64,
+    /// "Combina com o deck N": a lista e o que ela usou como referência.
+    pub combina: Vec<TrackEntry>,
+    combina_ref: Option<Referencia>,
+}
+
+/// O que está tocando no ar (referência do "Combina com").
+#[derive(Clone, Debug, PartialEq)]
+pub struct Referencia {
+    pub deck: usize,
+    pub path: PathBuf,
+    /// BPM soando agora (com o pitch).
+    pub bpm: f64,
+    /// Tom soando agora (com o tom mudado).
+    pub key: Option<u8>,
+}
+
+/// Músicas que combinam com a referência: BPM até 6% (ou metade/dobro) e tom compatível. Mesmo
+/// tom primeiro, depois os vizinhos na roda, depois as sem tom analisado; dentro de cada grupo,
+/// o BPM mais perto primeiro.
+pub fn combinam(entries: &[TrackEntry], r: &Referencia) -> Vec<TrackEntry> {
+    let mut v: Vec<(u8, f64, &TrackEntry)> = entries
+        .iter()
+        .filter(|t| t.path != r.path)
+        .filter_map(|t| {
+            let b = t.bpm.filter(|b| *b > 0.0)?;
+            let dif = [1.0, 2.0, 0.5].iter().map(|m| (b * m / r.bpm - 1.0).abs()).fold(f64::MAX, f64::min);
+            if dif > 0.06 {
+                return None;
+            }
+            let grupo = match (t.key, r.key) {
+                (Some(a), Some(b)) if crate::key::camelot(a) == crate::key::camelot(b) => 0,
+                (Some(a), Some(b)) if crate::key::combina(a, b) => 1,
+                (Some(_), Some(_)) => return None,
+                _ => 2,
+            };
+            Some((grupo, dif, t))
+        })
+        .collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    v.into_iter().take(MAX_RESULTS).map(|(_, _, t)| t.clone()).collect()
 }
 
 impl Library {
@@ -331,8 +384,15 @@ impl Library {
             history: Vec::new(),
             played: Default::default(),
             generation: 0,
+            combina: Vec::new(),
+            combina_ref: None,
         };
+        lib.folders.push(Node { name: "♪ Combina com o que toca".into(), path: PathBuf::new(), depth: 0, kind: NodeKind::Combina, expanded: false, has_children: false });
         lib.reload_sources();
+        // Começa na primeira pasta de verdade (o "Combina com" fica em cima, à mão).
+        lib.folder_sel = lib.folders.iter().position(|n| !n.kind.is_virtual()).unwrap_or(0);
+        lib.tracks_for = None;
+        lib.refresh_tracks();
         lib
     }
 
@@ -403,6 +463,7 @@ impl Library {
             NodeKind::Search => self.results.as_ref().map(|(_, r)| r.clone()).unwrap_or_default(),
             // A mais recente em cima.
             NodeKind::History => self.history.iter().rev().cloned().collect(),
+            NodeKind::Combina => self.combina.clone(),
             NodeKind::RbRoot | NodeKind::RbFolder(_) | NodeKind::RbPlaylist(_) => rb_tracks(&n.path, n.kind),
             _ => list_tracks(&n.path),
         }
@@ -563,6 +624,39 @@ impl Library {
         }
     }
 
+    /// Atualiza o "Combina com o deck N" (chamado sempre; só refaz a lista quando a referência
+    /// muda: outra música no ar, outro tom, ou o BPM mudou mais de 0,5).
+    pub fn atualizar_combina(&mut self, r: Option<Referencia>) {
+        let igual = match (&self.combina_ref, &r) {
+            (Some(a), Some(b)) => a.deck == b.deck && a.path == b.path && a.key == b.key && (a.bpm - b.bpm).abs() < 0.5,
+            (None, None) => true,
+            _ => false,
+        };
+        if igual {
+            return;
+        }
+        let (lista, nome) = match &r {
+            Some(r) => {
+                let ix = self.index.lock();
+                let entries: Vec<TrackEntry> = ix.entries.iter().map(|(_, t)| t.clone()).collect();
+                drop(ix);
+                let l = combinam(&entries, r);
+                let n = format!("♪ Combina com o deck {} ({})", r.deck + 1, l.len());
+                (l, n)
+            }
+            None => (Vec::new(), "♪ Combina com o que toca".to_string()),
+        };
+        self.combina = lista;
+        self.combina_ref = r;
+        if let Some(n) = self.folders.iter_mut().find(|n| n.kind == NodeKind::Combina) {
+            n.name = nome;
+        }
+        if self.folders.get(self.folder_sel).is_some_and(|n| n.kind == NodeKind::Combina) {
+            self.tracks_for = None;
+            self.refresh_tracks();
+        }
+    }
+
     /// Uma música tocou (entra nas "Tocadas hoje" e ganha o ✓ nas listas).
     pub fn add_played(&mut self, entry: TrackEntry) {
         self.played.insert(entry.path.clone());
@@ -678,6 +772,26 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         panic!("índice não terminou");
+    }
+
+    #[test]
+    fn combina_com_bpm_e_tom() {
+        let e = |nome: &str, bpm: Option<f64>, key: Option<u8>| TrackEntry { bpm, key, ..TrackEntry::from_path(Path::new(&format!("/x/{nome}.mp3"))) };
+        let am = 12 + 9; // Lá menor (8A)
+        let lista = vec![
+            e("tocando", Some(130.0), Some(am)),
+            e("mesmo tom 128", Some(128.0), Some(am)),
+            e("mesmo tom 130", Some(130.0), Some(am)),
+            e("vizinho 9A", Some(130.0), Some(12 + 4)),
+            e("tom longe", Some(130.0), Some(12 + 1)),
+            e("lento demais", Some(110.0), Some(am)),
+            e("meia velocidade", Some(65.0), Some(am)),
+            e("sem tom", Some(131.0), None),
+            e("sem analise", None, None),
+        ];
+        let r = Referencia { deck: 0, path: PathBuf::from("/x/tocando.mp3"), bpm: 130.0, key: Some(am) };
+        let nomes: Vec<String> = combinam(&lista, &r).into_iter().map(|t| t.title).collect();
+        assert_eq!(nomes, ["mesmo tom 130", "meia velocidade", "mesmo tom 128", "vizinho 9A", "sem tom"]);
     }
 
     #[test]

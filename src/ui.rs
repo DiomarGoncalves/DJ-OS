@@ -1409,6 +1409,16 @@ impl eframe::App for DjOsApp {
             let (side, fx_pick, zoom_idx, big, tracks, loading, midi, audio, toast, sampler_names, scratch_names) = {
                 let mut a = self.app.lock();
                 a.lib.tick();
+                // "Combina com o deck N": o deck tocando no ar mais alto no fader.
+                let no_ar = (0..crate::shared::NUM_DECKS)
+                    .filter(|&d| snap.decks[d].playing && snap.decks[d].loaded && !snap.decks[d].live && snap.decks[d].bpm > 0.0)
+                    .max_by(|&x, &y| snap.decks[x].fader.total_cmp(&snap.decks[y].fader));
+                let referencia = no_ar.and_then(|d| {
+                    let t = a.decks[d].track.as_ref()?;
+                    let key = crate::key::from_raw(t.key).map(|k| crate::key::transpor(k, snap.decks[d].key_shift as i32));
+                    Some(crate::library::Referencia { deck: d, path: t.path.clone(), bpm: snap.decks[d].bpm, key })
+                });
+                a.lib.atualizar_combina(referencia);
                 let dt = self.history_at.elapsed().as_secs_f32();
                 self.history_at = std::time::Instant::now();
                 crate::history::tick(&mut a, &snap, dt);
