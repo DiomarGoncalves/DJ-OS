@@ -45,6 +45,12 @@ pub fn set_bpm(t: &Track, bpm: f64) {
     t.set_grid(bpm.clamp(40.0, 250.0), t.first_beat());
 }
 
+/// Multiplica o BPM (×1,5, ×2/3…), arredondando para o inteiro se ficar a menos de 0,06 dele.
+pub fn set_bpm_ratio(t: &Track, ratio: f64) {
+    let b = t.bpm() * ratio;
+    set_bpm(t, if (b - b.round()).abs() < 0.06 { b.round() } else { (b * 100.0).round() / 100.0 });
+}
+
 /// Desloca a grade em segundos (positivo = batidas mais para a frente).
 pub fn shift_secs(t: &Track, secs: f64) {
     t.set_grid(t.bpm(), wrap(t, t.first_beat() + secs * t.sr));
@@ -73,6 +79,8 @@ pub fn save(t: &Track) {
     let mut s = crate::store::load(&t.path).unwrap_or_else(|| crate::store::Saved::from_track(t));
     s.bpm = t.bpm();
     s.first_beat = t.first_beat();
+    // Acertada à mão: não é medida de novo por um detector novo.
+    s.bpm_v = crate::track::BPM_V;
     crate::store::save(&t.path, &s);
 }
 
@@ -85,6 +93,12 @@ mod tests {
         let t = crate::track::synthetic(10.0, 48000.0, 64.0, 0.1);
         set_bpm(&t, t.bpm() * 2.0);
         assert_eq!(t.bpm(), 128.0, "×2");
+        set_bpm(&t, 86.66);
+        set_bpm_ratio(&t, 1.5);
+        assert_eq!(t.bpm(), 130.0, "86,66 × 1,5 = 130");
+        set_bpm_ratio(&t, 2.0 / 3.0);
+        assert!((t.bpm() - 86.67).abs() < 1e-9);
+        set_bpm(&t, 128.0);
         let fb = t.first_beat();
         shift_secs(&t, 0.010);
         assert!((t.first_beat() - fb - 480.0).abs() < 1e-6, "+10 ms = 480 frames a 48 kHz");

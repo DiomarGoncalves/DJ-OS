@@ -15,10 +15,12 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 /// DXJ1: formato antigo (sem o tom). DXJ2: com 1 byte de tom logo depois do BPM. DXJ3: DXJ2 +
-/// volume (LUFS, f32) no fim.
+/// volume (LUFS, f32) no fim. DXJ4: DXJ3 + 1 byte no fim com a versão do detector de BPM (as
+/// análises antigas medem o BPM de novo, mantendo os cues).
 const MAGIC_V1: &[u8; 4] = b"DXJ1";
 const MAGIC_V2: &[u8; 4] = b"DXJ2";
-const MAGIC: &[u8; 4] = b"DXJ3";
+const MAGIC_V3: &[u8; 4] = b"DXJ3";
+const MAGIC: &[u8; 4] = b"DXJ4";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Saved {
@@ -35,6 +37,9 @@ pub struct Saved {
     pub hotcues: [Option<f64>; HOTCUES],
     /// Loop guardado: entrada, saída e tamanho em batidas.
     pub loop_: Option<(f64, f64, f64)>,
+    /// Versão do detector que mediu o BPM (`track::BPM_V`; grade ajustada à mão ou vinda do
+    /// rekordbox também conta como atual). Menor que a atual: o BPM é medido de novo.
+    pub bpm_v: u8,
 }
 
 impl Saved {
@@ -51,7 +56,13 @@ impl Saved {
             cue: None,
             hotcues: [None; HOTCUES],
             loop_: None,
+            bpm_v: crate::track::BPM_V,
         }
+    }
+
+    /// O BPM foi medido pelo detector atual (ou acertado à mão).
+    pub fn bpm_atual(&self) -> bool {
+        self.bpm_v >= crate::track::BPM_V
     }
 }
 
@@ -98,6 +109,7 @@ fn encode(s: &Saved) -> Vec<u8> {
         b.extend_from_slice(w);
     }
     b.extend_from_slice(&s.loudness.to_le_bytes());
+    b.push(s.bpm_v);
     b
 }
 
@@ -129,7 +141,8 @@ impl Reader<'_> {
 fn decode(b: &[u8]) -> Option<Saved> {
     let mut r = Reader { b, i: 0 };
     let version = match r.take(4)? {
-        m if m == MAGIC => 3,
+        m if m == MAGIC => 4,
+        m if m == MAGIC_V3 => 3,
         m if m == MAGIC_V2 => 2,
         m if m == MAGIC_V1 => 1,
         _ => return None,
@@ -152,7 +165,8 @@ fn decode(b: &[u8]) -> Option<Saved> {
         return None;
     }
     let loudness = if version >= 3 { f32::from_le_bytes(r.take(4)?.try_into().ok()?) } else { f32::NAN };
-    Some(Saved { bpm, key, loudness, first_beat, low, mid, high, cue, hotcues, loop_: has_loop.then_some((a, z, n)) })
+    let bpm_v = if version >= 4 { r.take(1)?[0] } else { 1 };
+    Some(Saved { bpm, key, loudness, first_beat, low, mid, high, cue, hotcues, loop_: has_loop.then_some((a, z, n)), bpm_v })
 }
 
 fn dir() -> PathBuf {
@@ -192,7 +206,7 @@ pub fn save_portable(root: &Path, track: &Path, s: &Saved) -> std::io::Result<()
 pub fn has_portable(root: &Path, track: &Path) -> bool {
     portable_key(track)
         .and_then(|k| peek_file(&root.join(PENDRIVE_DIR).join(format!("{k}.dxj"))))
-        .is_some_and(|p| p.key != crate::key::RAW_UNKNOWN && p.has_loudness)
+        .is_some_and(|p| p.completa())
 }
 
 #[cfg(test)]
@@ -214,8 +228,17 @@ fn save_to(dir: &Path, track: &Path, s: &Saved) -> std::io::Result<()> {
 pub struct Peek {
     pub bpm: f64,
     pub key: u8,
-    /// O volume (ganho automático) já foi medido (formato DXJ3).
+    /// O volume (ganho automático) já foi medido (formato DXJ3 ou mais novo).
     pub has_loudness: bool,
+    /// O BPM foi medido pelo detector atual (formato DXJ4).
+    pub bpm_atual: bool,
+}
+
+impl Peek {
+    /// Análise completa e atual: tom, volume e BPM do detector atual.
+    pub fn completa(&self) -> bool {
+        self.key != crate::key::RAW_UNKNOWN && self.has_loudness && self.bpm_atual
+    }
 }
 
 pub fn peek(track: &Path) -> Option<Peek> {
@@ -225,16 +248,22 @@ pub fn peek(track: &Path) -> Option<Peek> {
 
 fn peek_file(path: &Path) -> Option<Peek> {
     use std::io::Read;
+    use std::io::{Seek, SeekFrom};
     let mut f = std::fs::File::open(path).ok()?;
     let mut b = [0u8; 13];
     let n = f.read(&mut b).ok()?;
     let m = b.get(..4)?;
-    if n < 12 || (m != MAGIC && m != MAGIC_V2 && m != MAGIC_V1) {
+    if n < 12 || (m != MAGIC && m != MAGIC_V3 && m != MAGIC_V2 && m != MAGIC_V1) {
         return None;
     }
     let bpm = f64::from_le_bytes(b[4..12].try_into().ok()?);
     let key = if m != MAGIC_V1 && n == 13 { b[12] } else { crate::key::RAW_UNKNOWN };
-    bpm.is_finite().then_some(Peek { bpm, key, has_loudness: m == MAGIC })
+    // A versão do detector de BPM é o último byte do DXJ4.
+    let bpm_atual = m == MAGIC && {
+        let mut v = [0u8; 1];
+        f.seek(SeekFrom::End(-1)).ok().and_then(|_| f.read_exact(&mut v).ok()).is_some() && v[0] >= crate::track::BPM_V
+    };
+    bpm.is_finite().then_some(Peek { bpm, key, has_loudness: m == MAGIC || m == MAGIC_V3, bpm_atual })
 }
 
 /// O que o aparelho guardou da música ou a análise do pendrive preparado. Se tem os dois, vale o
@@ -285,6 +314,27 @@ mod tests {
         let _ = std::fs::remove_dir_all(base);
     }
 
+    #[test]
+    fn analise_antiga_mede_o_bpm_de_novo_e_mantem_os_cues() {
+        let s = sample();
+        // A mesma análise no formato antigo (DXJ3, sem a versão do detector de BPM).
+        let mut antigo = encode(&s);
+        antigo[..4].copy_from_slice(MAGIC_V3);
+        antigo.pop();
+        let d = decode(&antigo).unwrap();
+        assert!(!d.bpm_atual(), "DXJ3: BPM do detector antigo");
+        assert_eq!((d.cue, d.hotcues, d.loop_), (s.cue, s.hotcues, s.loop_), "cues continuam");
+        let dir = std::env::temp_dir().join(format!("djos-store-bpmv-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("x.dxj");
+        std::fs::write(&f, &antigo).unwrap();
+        let p = peek_file(&f).unwrap();
+        assert!(p.has_loudness && !p.bpm_atual && !p.completa());
+        std::fs::write(&f, encode(&s)).unwrap();
+        assert!(peek_file(&f).unwrap().completa());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     fn sample() -> Saved {
         let mut hotcues = [None; HOTCUES];
         hotcues[0] = Some(12345.5);
@@ -298,6 +348,7 @@ mod tests {
             mid: vec![4, 5, 6],
             high: vec![7, 8, 9],
             cue: Some(1234.0),
+            bpm_v: crate::track::BPM_V,
             hotcues,
             loop_: Some((1000.0, 2000.0, 4.0)),
         }

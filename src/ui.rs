@@ -781,7 +781,7 @@ impl DjOsApp {
         let taps = self.app.lock().grid_edit.as_ref().map_or(0, |g| g.taps());
         let tap_label = if taps > 0 && taps < 4 { format!("TAP ({taps})") } else { "TAP".to_string() };
         let rows: [Vec<(String, u8)>; 2] = [
-            ["÷2", "-1", "-0.1", "-0.01", tap_label.as_str(), "+0.01", "+0.1", "+1", "×2"].iter().enumerate().map(|(i, s)| (s.to_string(), i as u8)).collect(),
+            [("÷2", 0), ("×2/3", 9), ("-1", 1), ("-0.1", 2), ("-0.01", 3), (tap_label.as_str(), 4), ("+0.01", 5), ("+0.1", 6), ("+1", 7), ("×1,5", 10), ("×2", 8)].iter().map(|(s, i)| (s.to_string(), *i)).collect(),
             ["-½ BATIDA", "-10 ms", "-1 ms", "BATIDA AQUI", "+1 ms", "+10 ms", "+½ BATIDA"].iter().enumerate().map(|(i, s)| (s.to_string(), 20 + i as u8)).collect(),
         ];
         let bh = ((r.height() - 90.0) / 2.0 - 8.0).clamp(28.0, 52.0);
@@ -814,6 +814,9 @@ impl DjOsApp {
                     6 => crate::grid::set_bpm(t, t.bpm() + 0.1),
                     7 => crate::grid::set_bpm(t, t.bpm() + 1.0),
                     8 => crate::grid::set_bpm(t, t.bpm() * 2.0),
+                    // Funk e outros ritmos quebrados às vezes saem com 2/3 do BPM (130 → 86,67).
+                    9 => crate::grid::set_bpm_ratio(t, 2.0 / 3.0),
+                    10 => crate::grid::set_bpm_ratio(t, 1.5),
                     20 => crate::grid::shift_beats(t, -0.5),
                     21 => crate::grid::shift_secs(t, -0.010),
                     22 => crate::grid::shift_secs(t, -0.001),
@@ -828,7 +831,7 @@ impl DjOsApp {
             &tp,
             r.left_bottom() + vec2(14.0, -8.0),
             Align2::LEFT_BOTTOM,
-            "TAP: bata 4 vezes no ritmo · BATIDA AQUI: põe uma batida onde a música está agora · grava sozinho",
+            "TAP: bata 4 vezes no ritmo · ×1,5: 86,67 vira 130 · BATIDA AQUI: põe uma batida onde a música está agora · grava sozinho",
             11.0,
             DIM,
         );

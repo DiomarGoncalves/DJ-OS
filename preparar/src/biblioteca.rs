@@ -55,7 +55,7 @@ pub fn musica(f: &Path, raiz_pendrive: Option<&Path>) -> Musica {
     let peek = dj_os_analise::store::peek(f);
     let analisada = match raiz_pendrive {
         Some(r) => dj_os_analise::store::has_portable(r, f),
-        None => peek.as_ref().is_some_and(|p| p.has_loudness),
+        None => peek.as_ref().is_some_and(|p| p.completa()),
     };
     Musica {
         caminho: f.to_path_buf(),

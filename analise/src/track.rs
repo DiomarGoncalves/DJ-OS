@@ -13,6 +13,9 @@ use symphonia::core::probe::Hint;
 
 /// Resolução da waveform: colunas por segundo de música.
 pub const BINS_PER_SEC: f64 = 150.0;
+/// Versão do detector de BPM. 2 (2026-11-08): confere 2 e 4 batidas (acerta o funk, que saía com
+/// 2/3 do BPM). Análises com versão menor medem o BPM de novo (os cues ficam).
+pub const BPM_V: u8 = 2;
 
 static NEXT_GEN: AtomicU64 = AtomicU64::new(1);
 
@@ -291,8 +294,8 @@ pub fn load(path: &Path, analyze: bool) -> Result<Track, String> {
     load_cached(path, analyze, None)
 }
 
-/// Análise já salva: waveform, BPM, primeira batida, tom (0 = não analisado) e volume (NaN = não
-/// analisado).
+/// Análise já salva: waveform, BPM (NaN = medir de novo), primeira batida, tom (0 = não
+/// analisado) e volume (NaN = não analisado).
 pub type Cached = (Waveform, f64, f64, u8, f32);
 
 /// Como `load`, mas reaproveita a análise já salva (sem analisar de novo). Se a análise salva
@@ -310,13 +313,25 @@ pub fn load_cached(path: &Path, analyze: bool, cached: Option<Cached>) -> Result
     let measure = |data: &[f32]| crate::loudness::measure(data, sr).unwrap_or(f32::NEG_INFINITY);
     let (wave, bpm, first_beat, key, loudness) = match cached {
         // Análise de antes do tom/volume existirem: calcula só o que falta.
-        Some((w, b, f, k, l)) => (
+        Some((w, b, f, k, l)) => {
+            // BPM de um detector antigo: mede de novo (só o BPM e a grade).
+            let (b, f) = if b.is_nan() {
+                if analyze {
+                    detect_bpm(&waveform(&data, sr).1, sr)
+                } else {
+                    (0.0, 0.0)
+                }
+            } else {
+                (b, f)
+            };
+            (
             w,
             b,
             f,
             if k == crate::key::RAW_UNKNOWN && analyze { crate::key::to_raw(crate::key::detect(&data, sr)) } else { k },
             if l.is_nan() && analyze { measure(&data) } else { l },
-        ),
+            )
+        }
         None => {
             let (wave, onset) = waveform(&data, sr);
             let (bpm, first_beat) = if analyze { detect_bpm(&onset, sr) } else { (0.0, 0.0) };
@@ -396,18 +411,35 @@ fn detect_bpm(onset: &[f32], sr: f64) -> (f64, f64) {
     if n < (BINS_PER_SEC * 10.0) as usize {
         return (0.0, 0.0);
     }
-    // 1) Autocorrelação grossa entre 70 e 180 BPM, com preferência suave por ~120.
+    // 1) Autocorrelação grossa entre 70 e 180 BPM. Cada candidato é conferido também em 2 e 4
+    //    batidas (o compasso): ritmos quebrados como o tamborzão do funk (3+3+2) têm um pico forte
+    //    em 1,5 batida, que sozinho daria 130 × 2/3 = 86,7 BPM; mas só a batida certa se repete
+    //    certinho a cada 2 e 4 batidas. Preferência suave por ~120.
     let lag_of = |bpm: f64| BINS_PER_SEC * 60.0 / bpm;
     let (lmin, lmax) = (lag_of(180.0).floor() as usize, lag_of(70.0).ceil() as usize);
-    let mut best = (0.0f64, 0usize);
-    for lag in lmin..=lmax {
+    let top = (4 * lmax + 2).min(n / 2);
+    let mut ac = vec![0.0f64; top + 1];
+    for (lag, v) in ac.iter_mut().enumerate().skip(lmin.saturating_sub(1)) {
         let mut s = 0.0f64;
         for i in 0..n - lag {
             s += (onset[i] * onset[i + lag]) as f64;
         }
+        *v = s / (n - lag) as f64;
+    }
+    // Pico perto de `l` (o período certo quase nunca é um número inteiro de colunas).
+    let acm = |l: usize| -> f64 {
+        if l + 1 > top {
+            return 0.0;
+        }
+        ac[l - 1].max(ac[l]).max(ac[l + 1])
+    };
+    // Pesos iguais para 1, 2 e 4 batidas: medido em 85 eletrofunks (de 40 para 65 em 130 BPM,
+    // nenhum mais em 86,66) e 103 house (sem mudança, fora 2 mixagens com vários BPMs).
+    let mut best = (0.0f64, 0usize);
+    for lag in lmin..=lmax {
         let bpm = BINS_PER_SEC * 60.0 / lag as f64;
         let prior = (-0.5 * ((bpm / 120.0).log2() / 0.9).powi(2)).exp();
-        let score = s * prior;
+        let score = (acm(lag) + acm(2 * lag) + acm(4 * lag)) * prior;
         if score > best.0 {
             best = (score, lag);
         }
@@ -419,8 +451,8 @@ fn detect_bpm(onset: &[f32], sr: f64) -> (f64, f64) {
 
     // 2) Refinamento fino: varre BPM e fase somando os ataques sobre a grade.
     let mut fine = (f64::MIN, coarse, 0.0f64);
-    let mut bpm = coarse - 2.0;
-    while bpm <= coarse + 2.0 {
+    let mut bpm = coarse - 2.5;
+    while bpm <= coarse + 2.5 {
         let period = lag_of(bpm);
         let mut phase = 0.0;
         while phase < period {

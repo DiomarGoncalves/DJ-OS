@@ -225,18 +225,20 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>, snap: S
                     }
                     match crate::store::peek(&p) {
                         // Já analisada, com o tom e o volume.
-                        Some(k) if k.key != crate::key::RAW_UNKNOWN && k.has_loudness => continue,
-                        // Analisada antes do tom/volume existirem: calcula só o que falta e mantém
-                        // os cues.
+                        Some(k) if k.completa() => continue,
+                        // Analisada antes do tom/volume existirem ou com o BPM do detector antigo:
+                        // calcula só o que falta e mantém os cues.
                         Some(_) => {
                             if let Some(s) = crate::store::load(&p) {
-                                let cached = (crate::track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness);
+                                let bpm = if s.bpm_atual() { s.bpm } else { f64::NAN };
+                                let cached = (crate::track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, bpm, s.first_beat, s.key, s.loudness);
                                 if let Ok(t) = crate::track::load_cached(&p, true, Some(cached)) {
-                                    crate::store::save(&p, &crate::store::Saved { key: t.key, loudness: t.loudness, ..s });
+                                    let (bpm, first_beat) = (t.bpm(), t.first_beat());
+                                    crate::store::save(&p, &crate::store::Saved { key: t.key, loudness: t.loudness, bpm, first_beat, bpm_v: crate::track::BPM_V, ..s });
                                     counter.fetch_add(1, Ordering::Relaxed);
                                     did += 1;
                                 }
-                                if crate::store::peek(&p).is_none_or(|k| k.key == crate::key::RAW_UNKNOWN || !k.has_loudness) {
+                                if crate::store::peek(&p).is_none_or(|k| !k.completa()) {
                                     failed.insert(p.clone());
                                 }
                             }

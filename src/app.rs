@@ -326,7 +326,8 @@ fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path, 
             t
         }),
         None => {
-            let cached = saved.as_ref().map(|s| (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness));
+            // BPM medido por um detector antigo: NaN = mede de novo (os cues ficam).
+            let cached = saved.as_ref().map(|s| (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, if s.bpm_atual() { s.bpm } else { f64::NAN }, s.first_beat, s.key, s.loudness));
             track::load_cached(path, true, cached)
         }
     };
@@ -336,10 +337,13 @@ fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path, 
             match &saved {
                 // Primeira vez: guarda a análise para abrir rápido nas próximas.
                 None => crate::store::save(path, &crate::store::Saved::from_track(&t)),
-                // Análise de antes do tom/volume existirem: guarda o que foi calculado agora
-                // (mantém os cues).
-                Some(s) if s.key != t.key || s.loudness.is_nan() != t.loudness.is_nan() => {
-                    crate::store::save(path, &crate::store::Saved { key: t.key, loudness: t.loudness, ..s.clone() })
+                // Análise de antes do tom/volume existirem ou com o BPM do detector antigo: guarda o
+                // que foi calculado agora (mantém os cues).
+                Some(s) if s.key != t.key || s.loudness.is_nan() != t.loudness.is_nan() || !s.bpm_atual() => {
+                    if !s.bpm_atual() && (s.bpm - t.bpm()).abs() > 0.05 {
+                        eprintln!("[djos] BPM medido de novo: {:.2} → {:.2} ({})", s.bpm, t.bpm(), t.display_name());
+                    }
+                    crate::store::save(path, &crate::store::Saved { key: t.key, loudness: t.loudness, bpm: t.bpm(), first_beat: t.first_beat(), bpm_v: track::BPM_V, ..s.clone() })
                 }
                 _ => {}
             }

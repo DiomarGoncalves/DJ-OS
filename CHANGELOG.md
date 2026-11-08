@@ -39,6 +39,15 @@ para diferenciar firmwares de teste da mesma versão.
   - MIDI learn com mais funções: hot cues E–H, loop in/out, reloop, slip, reverse, freio e quantize.
 
 ### Corrigido
+- **BPM errado no funk:** o tamborzão (3+3+2) enganava o detector, que pegava 1,5 batida como se
+  fosse uma e dava 2/3 do BPM (130 → 86,66), deixando a grade apertada numa música e espaçada na
+  outra. O detector agora confere se a batida se repete a cada 2 e 4 batidas. Medido em 85
+  eletrofunks: de 40 para 65 em 130 BPM e nenhum mais em 86,66; em 103 músicas de house nada
+  mudou (fora 2 mixagens com vários BPMs).
+  - As músicas já analisadas medem o BPM de novo sozinhas no LOAD (só o BPM e a grade: cues, hot
+    cues e loops ficam). No Preparar, "preparar o pendrive" refaz só o BPM das antigas. Grade
+    acertada à mão não é mexida.
+  - No ajuste da grade (tocar no BPM): botões **×1,5** (86,66 vira 130) e **×2/3**, além do ÷2 e ×2.
 - **Estalos e estática no som depois de um tempo** (fone e master), principalmente ao carregar um
   set longo (50 min ocupam ~1 GB e levam ~30 s para analisar num notebook antigo) ou com o HD
   inteiro sendo lido para a pesquisa:
