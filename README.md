@@ -24,6 +24,8 @@ Sistema de DJ livre, de dois jeitos:
 - O que se usa nas CDJs: QUANTIZE, slip, reverse, medidor de fase, contagem até o próximo cue,
   aviso de fim da música, trava do LOAD com o deck no ar, instant doubles (clonar o deck) e busca
   pela agulha na música inteira.
+- Automix, play na batida, troca e casamento de tom, "combina com o que toca", playlists .m3u,
+  filtros e os efeitos ROLL, CRUSH, BRAKE e BACKSPIN.
 - Mixer com EQ, filtro e efeitos por canal sincronizados à batida.
 - Browser com pesquisa por teclado virtual; músicas direto do pendrive ou guardadas no aparelho,
   com BPM, tom e volume analisados ao carregar no deck.

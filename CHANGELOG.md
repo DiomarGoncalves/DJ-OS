@@ -37,6 +37,22 @@ para diferenciar firmwares de teste da mesma versão.
   - **Busca pela agulha:** tocar na música inteira (a mini-onda embaixo) pula para aquele ponto
     (com o deck no ar não pula, para não estragar o set).
   - MIDI learn com mais funções: hot cues E–H, loop in/out, reloop, slip, reverse, freio e quantize.
+- **Inspirado no VirtualDJ** (no jeito de usar; nada do programa deles):
+  - **Automix** (botão AUTOMIX em cima, Ctrl+A ou botão ensinado): toca a fila (SHIFT + LOAD) ou
+    a lista aberta a partir da música selecionada; a próxima entra no BPM e na batida da que está
+    tocando e os faders cruzam em 16 batidas; a anterior para sozinha.
+  - **Play na batida** (como o Smart Play; CONFIG → CONTROLADORA, ligado de fábrica): dar PLAY com
+    o outro deck tocando já entra na batida dele.
+  - **Tom (key)**: subir/descer até ±6 semitons sem mudar a velocidade e **casar o tom** com o
+    outro deck (tocar no TOM do cartão do deck, ou botões pelo MIDI learn).
+  - **"♪ Combina com o deck N"** no topo das pastas do browser: músicas com BPM até 6% (ou
+    metade/dobro) e tom compatível com o que toca no ar, as do mesmo tom primeiro.
+  - **Playlists**: as .m3u/.m3u8 do pendrive (exportadas do VirtualDJ ou do rekordbox, inclusive
+    feitas no Windows) aparecem nas pastas; a fila vira playlist salva no aparelho
+    (CONFIG → TELA, Ctrl+P ou botão ensinado), em "☰ Playlists".
+  - **Filtro do browser** (tocar em FILTRO no canto, tecla F ou botão ensinado): todas, não
+    tocadas, BPM do que toca, tom que combina.
+  - **Efeitos novos**: ROLL, CRUSH, BRAKE e BACKSPIN (WAVs para ouvir com `dj-os --demo-efeitos`).
 
 ### Corrigido
 - **BPM errado no funk:** o tamborzão (3+3+2) enganava o detector, que pegava 1,5 batida como se
