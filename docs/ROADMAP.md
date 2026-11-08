@@ -20,6 +20,15 @@ da próxima:
    Clara, Neon, Waveform grande). Depois: posição livre de cada parte e skins do browser e das
    configurações (a tela das configurações ainda usa as cores antigas).
 
+## Funções inspiradas no VirtualDJ (pedido em 2026-11-08)
+Feito: automix, play na batida, tom (±6 e casar), "combina com o que toca", playlists .m3u e
+fila salva, filtro do browser, efeitos ROLL/CRUSH/BRAKE/BACKSPIN. Falta:
+- **Stems (voz/instrumental)**: no notebook velho não dá para separar ao vivo. Plano (teste de
+  2026-10-30 em `~/DJOS/stems-teste`): o Preparar separa no PC (Demucs/RoFormer) e grava só uma
+  "receita" (máscara por faixa de frequência, comprimida) no pendrive; o aparelho aplica a receita
+  na música original com STFT (4096/1024) por deck. Falta escolher o separador que roda no
+  Windows sem Python (ONNX), medir o tempo por música e a CPU da receita no i5-2430M.
+
 ## Próxima atualização (combinado em 2026-11-03)
 0. **Qualidade do som (fone e master)** — prioridade. Ele comparou a mesma música no PC e no
    aparelho e o aparelho soa pior ("não é aquele áudio gostoso"). Suspeitos, medir um a um com WAVs
