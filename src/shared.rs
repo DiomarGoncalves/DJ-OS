@@ -47,6 +47,8 @@ pub enum Cmd {
     Vinyl { deck: usize, on: bool },
     Slip { deck: usize, on: bool },
     Keylock { deck: usize, on: bool },
+    /// Play na batida: PLAY com outro deck tocando entra na fase dele.
+    SmartPlay(bool),
     /// QUANTIZE (todos os decks): cue, hot cue e loop caem na batida.
     Quantize(bool),
     /// REVERSE: a música toca de trás para frente.

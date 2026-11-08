@@ -24,6 +24,8 @@ struct Voice {
 
 pub struct Engine {
     fs: f64,
+    /// Play na batida: ao dar PLAY com outro deck tocando, a música entra na fase dele.
+    smart_play: bool,
     decks: Vec<Deck>,
     cmds: rtrb::Consumer<Cmd>,
     trash: rtrb::Producer<Arc<Track>>,
@@ -149,6 +151,7 @@ impl Engine {
             xf_curve: 0,
             xf_side: std::array::from_fn(|d| if d % 2 == 0 { 0 } else { 2 }),
             hp_split: false,
+            smart_play: true,
             line_in: None,
             line_route: Some(3),
             ambient_vol: 0.7,
@@ -204,8 +207,17 @@ impl Engine {
             }
             Cmd::SetPos { deck, pos } if ok(deck) => self.decks[deck].pos = pos.max(0.0),
             Cmd::RestoreCues { deck, cue, hotcues, loop_ } if ok(deck) => self.decks[deck].restore(cue, hotcues, loop_),
-            Cmd::PlayToggle(d) if ok(d) => self.decks[d].play_toggle(),
-            Cmd::Play(d) if ok(d) => self.decks[d].play(),
+            Cmd::PlayToggle(d) if ok(d) => {
+                let parado = !self.decks[d].playing;
+                self.decks[d].play_toggle();
+                self.play_na_batida(d, parado);
+            }
+            Cmd::Play(d) if ok(d) => {
+                let parado = !self.decks[d].playing;
+                self.decks[d].play();
+                self.play_na_batida(d, parado);
+            }
+            Cmd::SmartPlay(on) => self.smart_play = on,
             Cmd::Cue { deck, down } if ok(deck) => self.decks[deck].cue_button(down),
             Cmd::GotoCue(d) if ok(d) => self.decks[d].goto_cue(),
             Cmd::CueStop(d) if ok(d) => self.decks[d].cue_stop(),
@@ -335,6 +347,22 @@ impl Engine {
             .unwrap_or(1.0);
         let key = 2f64.powf(self.decks[d].key_semis / 12.0);
         self.decks[d].set_synced_rate(r / key);
+        self.align_phase(d, m);
+    }
+
+    /// Play na batida: o deck acabou de começar a tocar e outro deck está tocando: a música
+    /// entra na fase dele (anda no máximo meia batida). O andamento continua com o DJ (ou SYNC).
+    fn play_na_batida(&mut self, d: usize, estava_parado: bool) {
+        if !self.smart_play || !estava_parado || !self.decks[d].playing || !self.decks[d].has_bpm() {
+            return;
+        }
+        if let Some(m) = self.sync_master(d).filter(|&m| self.decks[m].playing) {
+            self.align_phase(d, m);
+        }
+    }
+
+    /// Põe o deck `d` na mesma fase da batida do deck `m`.
+    fn align_phase(&mut self, d: usize, m: usize) {
         let pm = self.decks[m].beats_at(self.decks[m].pos).rem_euclid(1.0);
         let pd = self.decks[d].beats_at(self.decks[d].pos).rem_euclid(1.0);
         let mut diff = pm - pd;

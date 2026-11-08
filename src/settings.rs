@@ -81,6 +81,8 @@ pub struct Settings {
     pub trava_load: bool,
     /// Aviso de fim da música (índice em FIM_AVISOS).
     pub fim_aviso: usize,
+    /// Play na batida (como o Smart Play do VirtualDJ).
+    pub play_batida: bool,
 }
 
 impl Default for Settings {
@@ -118,6 +120,7 @@ impl Default for Settings {
             quantize: true,
             trava_load: true,
             fim_aviso: 1,
+            play_batida: true,
         }
     }
 }
@@ -178,6 +181,7 @@ impl Settings {
                 "quantize" => s.quantize = v != "nao",
                 "trava_load" => s.trava_load = v != "nao",
                 "aviso_fim" => s.fim_aviso = num(FIM_AVISOS.len()).unwrap_or(1),
+                "play_na_batida" => s.play_batida = v != "nao",
                 _ => {}
             }
         }
@@ -196,7 +200,7 @@ impl Settings {
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
              browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\nsaida_som={}\nsaida_som_nome={}\nskin={}\n\
-             quantize={}\ntrava_load={}\naviso_fim={}\n",
+             quantize={}\ntrava_load={}\naviso_fim={}\nplay_na_batida={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -227,7 +231,8 @@ impl Settings {
             self.skin,
             yn(self.quantize),
             yn(self.trava_load),
-            self.fim_aviso
+            self.fim_aviso,
+            yn(self.play_batida)
         )
     }
 
@@ -256,6 +261,7 @@ impl Settings {
         }
         cmd.send(Cmd::XfCurve(self.xf_curve as u8));
         cmd.send(Cmd::Quantize(self.quantize));
+        cmd.send(Cmd::SmartPlay(self.play_batida));
         cmd.send(Cmd::EqIso(self.eq_iso));
         cmd.send(Cmd::FaderCurve(self.fader_curve as u8));
         cmd.send(Cmd::HpSplit(self.hp_split));
@@ -302,6 +308,7 @@ pub enum Action {
     HpSplit,
     Slip,
     Quantize,
+    PlayBatida,
     TravaLoad,
     FimAviso,
     BrowserNovo,
@@ -502,6 +509,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Item { label: "Keylock ao carregar".into(), value: if s.keylock { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Keylock });
             v.push(Row::Item { label: "Slip".into(), value: if s.slip { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Slip });
             v.push(Row::Item { label: "Quantize".into(), value: if s.quantize { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Quantize });
+            v.push(Row::Item { label: "Play na batida".into(), value: if s.play_batida { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::PlayBatida });
             v.push(Row::Item { label: "Trava do LOAD (deck no ar)".into(), value: if s.trava_load { "LIGADA" } else { "DESLIGADA" }.into(), action: Action::TravaLoad });
             let fim = FIM_AVISOS[s.fim_aviso.min(FIM_AVISOS.len() - 1)];
             v.push(Row::Item { label: "Aviso de fim da música".into(), value: if fim == 0 { "DESLIGADO".into() } else { format!("{fim} s ANTES") }, action: Action::FimAviso });
@@ -509,6 +517,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Info("Segurar o BROWSE e girar: zoom da waveform. No modo zoom, o browser abre apertando o BROWSE ou SHIFT + BROWSE".into()));
             v.push(Row::Info("Slip: scratch, backspin e loop por cima da música; ao soltar, ela volta onde estaria".into()));
             v.push(Row::Info("Quantize: cue, hot cue e loop caem na batida; pular para um hot cue tocando não perde a fase".into()));
+            v.push(Row::Info("Play na batida: dar PLAY com o outro deck tocando já entra na batida dele (anda até meia batida)".into()));
             v.push(Row::Info("Trava do LOAD: com o deck tocando e o fader aberto, o LOAD não troca a música (abaixe o fader ou pare)".into()));
             let left = crate::midi::log_left();
             let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
@@ -711,6 +720,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::Keylock => a.settings.keylock = !a.settings.keylock,
         Action::Slip => a.settings.slip = !a.settings.slip,
         Action::Quantize => a.settings.quantize = !a.settings.quantize,
+        Action::PlayBatida => a.settings.play_batida = !a.settings.play_batida,
         Action::TravaLoad => a.settings.trava_load = !a.settings.trava_load,
         Action::FimAviso => a.settings.fim_aviso = next(a.settings.fim_aviso, FIM_AVISOS.len()),
         Action::BrowserNovo => a.settings.browser_novo = !a.settings.browser_novo,
@@ -973,6 +983,7 @@ mod tests {
             quantize: false,
             trava_load: false,
             fim_aviso: 3,
+            play_batida: false,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

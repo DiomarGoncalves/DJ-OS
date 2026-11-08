@@ -1087,3 +1087,27 @@ fn freio_para_devagar_e_play_cancela() {
     render(&mut d, 48000);
     assert!(d.playing && (d.pos - p0 - FS).abs() < 100.0);
 }
+
+#[test]
+fn play_na_batida_entra_na_fase_do_outro_deck() {
+    let fase = |d: &crate::shared::DeckSnap, first: f64| ((d.pos - first * d.sr) / (d.sr * 60.0 / d.bpm_track)).rem_euclid(1.0);
+    for ligado in [true, false] {
+        let mut r = rig();
+        r.send(Cmd::SmartPlay(ligado));
+        r.send(Cmd::Load { deck: 0, track: track(128.0) });
+        r.send(Cmd::Load { deck: 1, track: track(128.0) });
+        r.send(Cmd::PlayToggle(0));
+        // Deck 1 tocando a 0,3 de batida fora da grade do deck 2 (parado no cue, na batida).
+        r.run(48000 + 22500 * 3 / 10);
+        r.send(Cmd::PlayToggle(1));
+        r.run(512);
+        let s = *r.snap.lock();
+        let diff = (fase(&s.decks[0], 0.25) - fase(&s.decks[1], 0.25)).abs();
+        let diff = diff.min(1.0 - diff);
+        if ligado {
+            assert!(diff < 0.02, "entrou na batida: diferença {diff}");
+        } else {
+            assert!(diff > 0.2, "sem o play na batida, começa do cue: {diff}");
+        }
+    }
+}
