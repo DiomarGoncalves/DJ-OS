@@ -65,7 +65,8 @@ fn cue_estilo_cdj() {
     assert_eq!(d.pos, d.cue);
     d.cue_button(false);
 
-    // Parado fora do cue: CUE marca um cue novo ali.
+    // Parado fora do cue: CUE marca um cue novo ali (sem QUANTIZE, exatamente ali).
+    d.quantize = false;
     d.pos = 5.0 * FS;
     d.cue_button(true);
     assert_eq!(d.cue, 5.0 * FS);
@@ -84,6 +85,7 @@ fn play_durante_preview_continua_tocando() {
 #[test]
 fn hotcue_marca_pula_e_preview() {
     let mut d = deck_with(128.0);
+    d.quantize = false; // posição livre (o QUANTIZE tem teste próprio)
     d.pos = 3.0 * FS;
     d.hotcue(0, true);
     d.hotcue(0, false);
@@ -174,6 +176,7 @@ fn loop_metade_dobro_e_reloop() {
 #[test]
 fn loop_in_out_manual() {
     let mut d = deck_with(120.0);
+    d.quantize = false; // posição livre (o QUANTIZE tem teste próprio)
     d.pos = 4.0 * FS;
     d.loop_in_point();
     d.pos = 6.0 * FS;
@@ -986,4 +989,101 @@ fn comparacao_de_som() {
         100.0 * limitando as f64 / blocos.max(1) as f64,
         -20.0 * reducao.log10()
     );
+}
+
+// ------------------------------------------------------------------ funções das CDJs
+
+#[test]
+fn quantize_poe_cue_hotcue_e_loop_na_batida() {
+    // 128 BPM, primeira batida em 0,25 s: batida = 22500 frames.
+    let mut d = deck_with(128.0);
+    let bl = 60.0 / 128.0 * FS;
+    let batida = |k: f64| 0.25 * FS + k * bl;
+    // CUE parado fora da batida: cai na batida mais perto e o deck vai para lá.
+    d.pos = batida(10.0) + 0.3 * bl;
+    d.cue_button(true);
+    d.cue_button(false);
+    assert!((d.cue - batida(10.0)).abs() < 1.0, "cue na batida 10");
+    assert!(d.at_cue());
+    // Hot cue marcado tocando, um pouco depois da batida: fica na batida.
+    d.pos = batida(20.0) + 0.2 * bl;
+    d.hotcue(0, true);
+    d.hotcue(0, false);
+    assert!((d.hotcues[0].unwrap() - batida(20.0)).abs() < 1.0);
+    // Loop in/out manual: fecha em batidas inteiras.
+    d.pos = batida(4.0) + 0.1 * bl;
+    d.loop_in_point();
+    d.pos = batida(7.8);
+    d.loop_out_point();
+    assert!((d.loop_in.unwrap() - batida(4.0)).abs() < 1.0);
+    assert!((d.loop_beats - 4.0).abs() < 1e-9, "3,7 batidas viram 4");
+}
+
+#[test]
+fn quantize_pula_para_o_hot_cue_sem_perder_a_fase() {
+    let mut d = deck_with(128.0);
+    let bl = 60.0 / 128.0 * FS;
+    let batida = |k: f64| 0.25 * FS + k * bl;
+    d.hotcues[1] = Some(batida(32.0));
+    d.play();
+    // Tocando a 30% da batida 8: o pulo cai a 30% da batida 32 (o tempo continua no lugar).
+    d.pos = batida(8.0) + 0.3 * bl;
+    d.hotcue(1, true);
+    d.hotcue(1, false);
+    assert!((d.pos - (batida(32.0) + 0.3 * bl)).abs() < 1.0);
+    assert!(d.playing);
+    // Sem QUANTIZE: cai exatamente no hot cue.
+    d.quantize = false;
+    d.pos = batida(8.0) + 0.3 * bl;
+    d.hotcue(1, true);
+    assert!((d.pos - batida(32.0)).abs() < 1.0);
+}
+
+#[test]
+fn reverse_toca_para_tras_e_slip_volta_onde_estaria() {
+    let mut d = deck_with(128.0);
+    d.pos = 10.0 * FS;
+    d.play();
+    d.set_reverse(true);
+    render(&mut d, 48000);
+    assert!((d.pos - 9.0 * FS).abs() < 200.0, "1 s para trás: {}", d.pos / FS);
+    d.set_reverse(false);
+    render(&mut d, 4800);
+    assert!(d.pos > 9.0 * FS);
+    // Com slip (censor): desligar o REVERSE volta para onde a música estaria.
+    d.set_slip(true);
+    d.pos = 10.0 * FS;
+    d.set_reverse(true);
+    render(&mut d, 24000);
+    d.set_reverse(false);
+    render(&mut d, 64);
+    assert!((d.pos - 10.5 * FS).abs() < 400.0, "volta em 10,5 s: {}", d.pos / FS);
+    // REVERSE chegando no começo: para.
+    d.set_slip(false);
+    d.pos = 0.2 * FS;
+    d.set_reverse(true);
+    render(&mut d, 24000);
+    assert!(!d.playing && d.pos == 0.0);
+}
+
+#[test]
+fn freio_para_devagar_e_play_cancela() {
+    let mut d = deck_with(128.0);
+    d.pos = 5.0 * FS;
+    d.play();
+    d.brake();
+    render(&mut d, (0.5 * FS) as usize);
+    assert!(d.playing, "no meio do freio ainda anda");
+    let andou = d.pos - 5.0 * FS;
+    assert!(andou > 0.2 * FS && andou < 0.45 * FS, "anda menos que tocando normal: {}", andou / FS);
+    render(&mut d, (0.6 * FS) as usize);
+    assert!(!d.playing, "parou em 1 s");
+    // PLAY durante o freio: volta a tocar normal.
+    d.play();
+    d.brake();
+    render(&mut d, 4800);
+    d.play_toggle();
+    let p0 = d.pos;
+    render(&mut d, 48000);
+    assert!(d.playing && (d.pos - p0 - FS).abs() < 100.0);
 }

@@ -20,6 +20,8 @@ const FOLLOW_W: f64 = 2.0 * std::f64::consts::PI * 20.0;
 /// Abaixo desta velocidade o som some aos poucos (prato quase parado não faz barulho nem deixa
 /// tensão contínua na saída).
 const QUIET_SPEED: f64 = 0.04;
+/// Freio (vinil parando ao apertar STOP): tempo até a música parar.
+pub const BRAKE_SECS: f64 = 1.0;
 
 pub const PITCH_RANGES: [f64; 3] = [0.08, 0.16, 0.50];
 
@@ -98,6 +100,12 @@ pub struct Deck {
     live_beat: f64,
     /// Prato solto ainda girando (inércia, ex.: backspin): tempo desde o último movimento dele.
     spin_idle: f64,
+    /// QUANTIZE: cue, hot cue e loop caem na batida; pular para um hot cue tocando mantém a fase.
+    pub quantize: bool,
+    /// REVERSE: a música toca de trás para frente.
+    pub reverse: bool,
+    /// Freio em andamento: fração da velocidade que sobra (1 → 0).
+    brake: Option<f64>,
 }
 
 pub fn trim_gain(v: f32) -> f32 {
@@ -137,6 +145,9 @@ impl Deck {
             fs,
             live_beat: 0.0,
             spin_idle: 0.0,
+            quantize: true,
+            reverse: false,
+            brake: None,
             track: None,
             pos: 0.0,
             playing: false,
@@ -208,6 +219,8 @@ impl Deck {
         self.key_semis = 0.0;
         self.scratching = false;
         self.slip_pos = None;
+        self.reverse = false;
+        self.brake = None;
         self.kl.reset();
         let old = self.track.replace(t);
         self.update_auto_gain();
@@ -270,8 +283,18 @@ impl Deck {
         2f64.powf(self.key_semis / 12.0)
     }
 
-    /// Velocidade nominal (sem scratch nem bend).
+    /// Velocidade nominal (sem scratch nem bend), com o REVERSE e o freio.
     fn nominal(&self) -> f64 {
+        if self.playing {
+            let dir = if self.reverse { -1.0 } else { 1.0 };
+            self.rate * self.key_mult() * dir * self.brake.unwrap_or(1.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Velocidade da música "por baixo" (o slip sempre anda para frente).
+    fn forward_nominal(&self) -> f64 {
         if self.playing {
             self.rate * self.key_mult()
         } else {
@@ -298,6 +321,37 @@ impl Deck {
         }
     }
 
+    /// Batida mais perto de `pos` (sem grade: a própria posição).
+    fn nearest_beat(&self, pos: f64) -> f64 {
+        match &self.track {
+            Some(t) if t.bpm() > 0.0 => t.pos_of_beat(t.beats_at(pos).round()).max(0.0),
+            _ => pos,
+        }
+    }
+
+    /// Com QUANTIZE: a batida mais perto; sem: a própria posição.
+    fn quantized(&self, pos: f64) -> f64 {
+        if self.quantize {
+            self.nearest_beat(pos)
+        } else {
+            pos
+        }
+    }
+
+    /// Para onde pular para chegar em `target` sem perder a fase (QUANTIZE tocando): o mesmo
+    /// pedaço da batida em que a música está agora.
+    fn phase_kept(&self, target: f64) -> f64 {
+        match &self.track {
+            Some(t) if self.quantize && self.playing && t.bpm() > 0.0 => {
+                let frac = |b: f64| b - b.round();
+                let mut d = frac(t.beats_at(self.pos)) - frac(t.beats_at(target));
+                d -= d.round();
+                (target + d * t.beat_len()).max(0.0)
+            }
+            _ => target,
+        }
+    }
+
     // ----- slip -----
 
     /// Começo de um scratch ou loop: com o slip ligado, a música segue "por baixo" daqui.
@@ -320,6 +374,11 @@ impl Deck {
         if self.track.is_none() {
             return;
         }
+        if self.brake.take().is_some() {
+            // Apertou PLAY durante o freio: volta a tocar normal.
+            self.playing = true;
+            return;
+        }
         if self.cue_preview || self.hc_preview.is_some() {
             // Segurando CUE/hotcue e apertando PLAY: continua tocando.
             self.cue_preview = false;
@@ -334,7 +393,31 @@ impl Deck {
         if self.track.is_some() {
             self.playing = true;
             self.cue_preview = false;
+            self.brake = None;
         }
+    }
+
+    /// Freio: a música para devagar, como um toca-discos desligado (de novo: para na hora).
+    pub fn brake(&mut self) {
+        if !self.playing || self.track.is_none() {
+            return;
+        }
+        if self.brake.is_some() {
+            self.brake = None;
+            self.playing = false;
+        } else {
+            self.cue_preview = false;
+            self.hc_preview = None;
+            self.brake = Some(1.0);
+        }
+    }
+
+    /// REVERSE liga/desliga. Com o slip, ao desligar a música volta onde estaria (censor).
+    pub fn set_reverse(&mut self, on: bool) {
+        if on && !self.reverse {
+            self.slip_start();
+        }
+        self.reverse = on;
     }
 
     /// CUE no estilo Pioneer.
@@ -343,6 +426,7 @@ impl Deck {
             return;
         }
         if down {
+            self.brake = None;
             if self.playing && !self.cue_preview {
                 self.playing = false;
                 self.pos = self.cue;
@@ -350,7 +434,9 @@ impl Deck {
                 self.cue_preview = true;
                 self.playing = true;
             } else {
-                self.cue = self.pos;
+                // Marca o cue (com QUANTIZE, na batida mais perto) e fica nele.
+                self.cue = self.quantized(self.pos);
+                self.pos = self.cue;
             }
         } else if self.cue_preview {
             self.cue_preview = false;
@@ -469,13 +555,13 @@ impl Deck {
                 Some(p) => {
                     // Pulo de propósito: o slip não puxa de volta.
                     self.slip_pos = None;
-                    self.pos = p;
+                    self.pos = if self.hc_preview.is_none() { self.phase_kept(p) } else { p };
                     if !self.playing {
                         self.playing = true;
                         self.hc_preview = Some(i);
                     }
                 }
-                None => self.hotcues[i] = Some(self.pos),
+                None => self.hotcues[i] = Some(self.quantized(self.pos)),
             }
         } else if self.hc_preview == Some(i) {
             self.hc_preview = None;
@@ -530,7 +616,7 @@ impl Deck {
     }
 
     pub fn loop_in_point(&mut self) {
-        self.loop_in = Some(self.pos);
+        self.loop_in = Some(self.quantized(self.pos));
         self.loop_on = false;
     }
 
@@ -540,8 +626,20 @@ impl Deck {
                 if !self.loop_on {
                     self.slip_start();
                 }
-                self.loop_out = Some(self.pos);
-                self.loop_beats = (self.pos - a) / self.beat_len();
+                let bl = self.beat_len();
+                let raw = (self.pos - a) / bl;
+                // QUANTIZE: o loop fecha em batidas inteiras (ou 1/4, 1/2, 3/4 se for curto).
+                let beats = if self.quantize && self.has_bpm() {
+                    if raw < 1.0 {
+                        ((raw * 4.0).round() / 4.0).max(0.25)
+                    } else {
+                        raw.round()
+                    }
+                } else {
+                    raw
+                };
+                self.loop_out = Some(a + beats * bl);
+                self.loop_beats = beats;
                 self.loop_on = true;
             }
         }
@@ -670,10 +768,21 @@ impl Deck {
         if let Some(sp) = self.slip_pos {
             if !self.playing {
                 self.slip_pos = None;
-            } else if !self.scratching && !self.loop_on {
+            } else if !self.scratching && !self.loop_on && !self.reverse {
                 self.slip_pos = None;
                 self.pos = sp.min(t.frames as f64);
                 self.last_gain = 0.0; // entra num fade curto, sem estalo
+            }
+        }
+
+        // Freio: a velocidade cai até zero em BRAKE_SECS e o deck para.
+        if let Some(b) = self.brake {
+            let nb = b - block_secs / BRAKE_SECS;
+            if nb <= 0.0 || !self.playing {
+                self.brake = None;
+                self.playing = false;
+            } else {
+                self.brake = Some(nb);
             }
         }
 
@@ -717,7 +826,7 @@ impl Deck {
             speed += self.bend * self.rate;
         }
         let step = speed * ratio;
-        let slip_step = self.nominal() * ratio;
+        let slip_step = self.forward_nominal() * ratio;
         let step0 = if self.scratching { self.last_step } else { step };
         self.last_step = step;
         let gain1 = (speed.abs() / QUIET_SPEED).min(1.0) as f32;
@@ -725,7 +834,7 @@ impl Deck {
         self.last_gain = gain1;
         // Keylock só quando faz diferença: tocando sem scratch, pitch fora do zero e sem o tom
         // dos pads de Tracking (que muda o tom de propósito).
-        let use_kl = self.keylock && self.playing && !self.scratching && self.key_semis == 0.0 && (speed - 1.0).abs() > 0.0005;
+        let use_kl = self.keylock && self.playing && !self.scratching && !self.reverse && self.brake.is_none() && self.key_semis == 0.0 && (speed - 1.0).abs() > 0.0005;
         if use_kl && !self.kl_on {
             self.kl.reset();
         }
@@ -770,6 +879,10 @@ impl Deck {
             self.pos += step;
             if self.pos < 0.0 {
                 self.pos = 0.0;
+                // REVERSE chegou no começo da música: para.
+                if self.reverse && !self.scratching {
+                    self.playing = false;
+                }
             }
             if let Some(sp) = &mut self.slip_pos {
                 *sp += slip_step;
@@ -892,6 +1005,9 @@ impl Deck {
             keylock: self.keylock,
             slip: self.slip,
             slip_pos: self.slip_pos,
+            quantize: self.quantize,
+            reverse: self.reverse,
+            braking: self.brake.is_some(),
             pfl: self.pfl,
             fader: self.fader_v,
             peak: self.peak,

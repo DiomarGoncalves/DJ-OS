@@ -66,6 +66,8 @@ pub enum Acao {
     Vinil,
     Keylock,
     Slip,
+    Reverso,
+    Freio,
     FaixaPitch,
     Volume,
     Tempo,
@@ -98,6 +100,7 @@ pub enum Acao {
     BrowseAperta,
     Browser,
     Config,
+    Quantize,
 }
 
 impl Acao {
@@ -124,6 +127,9 @@ impl Acao {
             "vinil" => Vinil,
             "keylock" => Keylock,
             "slip" => Slip,
+            "reverso" => Reverso,
+            "freio" => Freio,
+            "quantize" => Quantize,
             "faixa_pitch" => FaixaPitch,
             "volume" => Volume,
             "tempo" => Tempo,
@@ -161,7 +167,7 @@ impl Acao {
 
     /// Ação que precisa saber o deck.
     fn de_deck(self) -> bool {
-        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config)
+        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config | Acao::Quantize)
     }
 
     /// Como o valor costuma chegar para esta ação (o arquivo pode trocar com `valor=`).
@@ -227,6 +233,10 @@ pub enum Estado {
     PadModo(PadMode),
     FxLigado,
     Shift,
+    Reverso,
+    Quantize,
+    /// Faltam poucos segundos para a música acabar (aviso de fim, CONFIG → CONTROLADORA).
+    Fim,
 }
 
 #[derive(Clone, Debug)]
@@ -347,9 +357,12 @@ pub fn ler(texto: &str) -> Result<Mapa, String> {
                 "pad_modo" => Estado::PadModo(modo.as_deref().and_then(modo_pelo_nome).ok_or_else(|| erro("pad_modo precisa de modo=hotcue|loop|roll|..."))?),
                 "fx_ligado" => Estado::FxLigado,
                 "shift" => Estado::Shift,
+                "reverso" => Estado::Reverso,
+                "quantize" => Estado::Quantize,
+                "fim" => Estado::Fim,
                 _ => return Err(erro(&format!("estado de LED desconhecido \"{nome}\""))),
             };
-            if estado != Estado::Shift && deck.is_none() {
+            if !matches!(estado, Estado::Shift | Estado::Quantize) && deck.is_none() {
                 return Err(erro("LED de deck precisa de deck="));
             }
             m.leds.push(Led { tipo, canal, num, estado, deck: deck.unwrap_or(0), n, ligado, desligado });
@@ -537,6 +550,12 @@ impl Mapeado {
                 let on = !self.snap().decks[d].slip;
                 send(Cmd::Slip { deck: d, on });
             }
+            Reverso if down => {
+                let on = !self.snap().decks[d].reverse;
+                send(Cmd::Reverse { deck: d, on });
+            }
+            Freio if down => send(Cmd::Brake(d)),
+            Quantize if down => alternar_quantize(&self.app, &self.cmd),
             FaixaPitch if down => send(Cmd::PitchRangeCycle(d)),
             Volume => send(Cmd::Fader { deck: d, v: x }),
             Tempo => send(Cmd::Tempo { deck: d, v: x as f64 }),
@@ -662,6 +681,22 @@ pub fn browse_aperta(app: &SharedApp, cmd: &CmdTx, down: bool) {
     }
 }
 
+/// QUANTIZE liga/desliga (vale para os 4 decks e fica salvo).
+pub fn alternar_quantize(app: &SharedApp, cmd: &CmdTx) {
+    let mut a = app.lock();
+    a.settings.quantize = !a.settings.quantize;
+    let on = a.settings.quantize;
+    a.settings.save();
+    cmd.send(Cmd::Quantize(on));
+    a.toast(if on { "QUANTIZE ligado" } else { "QUANTIZE desligado" });
+}
+
+/// O deck está tocando e faltam menos segundos que o aviso de fim (CONFIG → CONTROLADORA).
+pub fn perto_do_fim(app: &crate::app::AppState, s: &crate::shared::DeckSnap) -> bool {
+    let aviso = crate::settings::FIM_AVISOS[app.settings.fim_aviso.min(crate::settings::FIM_AVISOS.len() - 1)] as f64;
+    aviso > 0.0 && s.loaded && s.playing && !s.live && s.sr > 0.0 && !s.reverse && (s.frames - s.pos) / s.sr / s.rate.max(0.01) < aviso
+}
+
 /// LEDs pelo estado de cada deck.
 pub fn leds(mapa: &Mapa, app: &crate::app::AppState, snap: &Snapshot, out: &mut Vec<(u8, u8, u8)>) {
     for l in &mapa.leds {
@@ -683,6 +718,9 @@ pub fn leds(mapa: &Mapa, app: &crate::app::AppState, snap: &Snapshot, out: &mut 
             Estado::PadModo(m) => app.pad_mode[l.deck] == m,
             Estado::FxLigado => s.fx[0].active,
             Estado::Shift => app.shift,
+            Estado::Reverso => s.reverse,
+            Estado::Quantize => app.settings.quantize,
+            Estado::Fim => perto_do_fim(app, s),
         };
         let status = match l.tipo {
             Tipo::Nota => 0x90,
@@ -738,6 +776,14 @@ led nota 1 0x00 hotcue deck=1 n=1 ligado=0x7F desligado=0x01
         assert_eq!(m.entradas[7].valor, Valor::Relativo, "browse: complemento de dois");
         assert_eq!(m.entradas[8].batidas, 4.0);
         assert_eq!(m.situacao, "em teste");
+    }
+
+    #[test]
+    fn acoes_das_cdjs() {
+        let m = ler("nome = X\nporta = X\nnota 1 0x10 reverso deck=1\nnota 1 0x11 freio deck=2\nnota 7 0x12 quantize\nled nota 1 0x0B fim deck=1\nled nota 7 0x12 quantize\nled nota 1 0x10 reverso deck=1\n").unwrap();
+        let acoes: Vec<Acao> = m.entradas.iter().map(|e| e.acao).collect();
+        assert_eq!(acoes, [Acao::Reverso, Acao::Freio, Acao::Quantize]);
+        assert_eq!(m.leds.iter().map(|l| l.estado).collect::<Vec<_>>(), [Estado::Fim, Estado::Quantize, Estado::Reverso]);
     }
 
     #[test]

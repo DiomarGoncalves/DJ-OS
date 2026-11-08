@@ -139,7 +139,7 @@ fn main() -> eframe::Result<()> {
         cmd.send(shared::Cmd::HeadphoneLevel(0.0));
     }
 
-    let loader = app::Loader::start(app.clone(), cmd.clone());
+    let loader = app::Loader::start(app.clone(), cmd.clone(), snap.clone());
     // Reaberto pela sessão depois de um travamento: as músicas voltam para os decks.
     resume::restore_after_crash(&mut app.lock(), &loader);
     {

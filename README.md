@@ -21,6 +21,9 @@ Sistema de DJ livre, de dois jeitos:
 ## O que tem
 - 4 decks com waveform colorida, cue estilo CDJ, hotcues, loops, roll, beat jump, sync, keylock
   e scratch.
+- O que se usa nas CDJs: QUANTIZE, slip, reverse, medidor de fase, contagem até o próximo cue,
+  aviso de fim da música, trava do LOAD com o deck no ar, instant doubles (clonar o deck) e busca
+  pela agulha na música inteira.
 - Mixer com EQ, filtro e efeitos por canal sincronizados à batida.
 - Browser com pesquisa por teclado virtual; músicas direto do pendrive ou guardadas no aparelho,
   com BPM, tom e volume analisados ao carregar no deck.

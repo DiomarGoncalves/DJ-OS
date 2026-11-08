@@ -18,7 +18,7 @@ fn rig() -> Rig {
     let cmd = CmdTx::new(tx);
     let app = Arc::new(Mutex::new(AppState::new()));
     let snap = Arc::new(Mutex::new(Snapshot::default()));
-    let loader = Loader::start(app.clone(), cmd.clone());
+    let loader = Loader::start(app.clone(), cmd.clone(), snap.clone());
     let rev1 = Rev1::new(app.clone(), cmd, snap.clone(), loader);
     Rig { rev1, rx, app, snap }
 }
@@ -362,7 +362,7 @@ led nota 1 0x02 hotcue deck=1 n=3
     let cmd = CmdTx::new(tx);
     let app = Arc::new(Mutex::new(AppState::new()));
     let snap = Arc::new(Mutex::new(Snapshot::default()));
-    let loader = Loader::start(app.clone(), cmd.clone());
+    let loader = Loader::start(app.clone(), cmd.clone(), snap.clone());
     let mut m = super::mapa::Mapeado::new(mapa.clone(), app.clone(), cmd, snap.clone(), loader);
     let mut send = |msg: [u8; 3]| {
         m.handle(&msg);
@@ -416,7 +416,7 @@ fn midi_learn_ensina_por_cima_do_mapeamento() {
     let cmd = CmdTx::new(tx);
     let app = Arc::new(Mutex::new(AppState::new()));
     let snap = Arc::new(Mutex::new(Snapshot::default()));
-    let loader = Loader::start(app.clone(), cmd.clone());
+    let loader = Loader::start(app.clone(), cmd.clone(), snap.clone());
     let vistos = Arc::new(Mutex::new(Vec::new()));
     let mut c = ComAprendidos::new(Box::new(Base(vistos.clone())), &nome, app.clone(), cmd, snap, loader);
     // Pede para ensinar PLAY do deck 2 e aperta o botão 0x10 do canal 3.
@@ -437,4 +437,33 @@ fn midi_learn_ensina_por_cima_do_mapeamento() {
     apagar(&nome);
     super::Controller::handle(&mut c, &[0x92, 0x10, 0x7F]);
     assert_eq!(*vistos.lock(), [0x0B, 0x10], "apagado: volta ao de base");
+}
+
+#[test]
+fn trava_do_load_com_o_deck_no_ar() {
+    let (tx, _rx) = rtrb::RingBuffer::new(64);
+    let cmd = CmdTx::new(tx);
+    let app = Arc::new(Mutex::new(AppState::new()));
+    let snap = Arc::new(Mutex::new(Snapshot::default()));
+    let loader = Loader::start(app.clone(), cmd, snap.clone());
+    {
+        let mut s = snap.lock();
+        s.decks[0].loaded = true;
+        s.decks[0].playing = true;
+        s.decks[0].fader = 1.0;
+    }
+    let mut a = app.lock();
+    a.settings.trava_load = true;
+    loader.load_deck(&mut a, 0, "/nao/existe.mp3".into());
+    assert!(a.decks[0].loading.is_none(), "deck no ar: não carrega");
+    assert!(a.toast.as_ref().is_some_and(|(m, _)| m.contains("travado")));
+    // Fader abaixado (ou trava desligada): carrega.
+    snap.lock().decks[0].fader = 0.0;
+    loader.load_deck(&mut a, 0, "/nao/existe.mp3".into());
+    assert!(a.decks[0].loading.is_some());
+    a.decks[0].loading = None;
+    snap.lock().decks[0].fader = 1.0;
+    a.settings.trava_load = false;
+    loader.load_deck(&mut a, 0, "/nao/existe.mp3".into());
+    assert!(a.decks[0].loading.is_some());
 }

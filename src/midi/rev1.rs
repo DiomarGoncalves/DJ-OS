@@ -346,6 +346,9 @@ impl Rev1 {
             return; // com o teclado aberto o LOAD não faz nada (confirma-se com ENTER)
         }
         if double {
+            if self.loader.travado(&mut a, d) {
+                return;
+            }
             let from = a.side[1 - d % 2];
             if let Some(t) = a.decks[from].track.clone() {
                 a.decks[d].track = Some(t);

@@ -21,6 +21,22 @@ para diferenciar firmwares de teste da mesma versão.
   1-2 e fone 3-4; senão a placa do computador) ou escolhida na lista.
 - **Skins** (`.djosskin`, [docs/skins.md](docs/skins.md)) em CONFIG → TELA: cores de tudo e o
   layout da tela principal. Vêm Preta, Clara, Neon e Waveform grande; as suas em `~/DJOS/skins/`.
+- **Funções das CDJs** (no aparelho e no PC):
+  - **QUANTIZE** (CONFIG → CONTROLADORA, ligado de fábrica): cue, hot cue e loop in/out caem na
+    batida; pular para um hot cue tocando mantém a fase (a batida não atravessa).
+  - **Trava do LOAD**: com o deck tocando no ar (fader aberto), o LOAD não troca a música por
+    engano. Abaixe o fader ou pare o deck. Dá para desligar.
+  - **Aviso de fim da música**: nos últimos 30 s (ou 45/60 s, ou desligado) o painel do deck e o
+    tempo restante piscam em vermelho.
+  - **Medidor de fase** em cima de cada waveform: as 4 batidas do compasso, a de agora acesa, e
+    onde está o outro deck ("FASE +0.00" em verde = batendo juntos).
+  - **Contagem até o próximo cue** (compassos.batidas até o próximo hot cue ou CUE à frente).
+  - **REVERSE** e **freio** (a música para devagar como toca-discos): pelos mapeamentos, MIDI learn
+    e teclado (C/J reverse, V/H freio, Ctrl+U quantize). Com o slip ligado, o reverse vira
+    "censor": ao desligar, a música volta onde estaria.
+  - **Busca pela agulha:** tocar na música inteira (a mini-onda embaixo) pula para aquele ponto
+    (com o deck no ar não pula, para não estragar o set).
+  - MIDI learn com mais funções: hot cues E–H, loop in/out, reloop, slip, reverse, freio e quantize.
 
 ### Corrigido
 - **Estalos e estática no som depois de um tempo** (fone e master), principalmente ao carregar um

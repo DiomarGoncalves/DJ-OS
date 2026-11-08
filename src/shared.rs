@@ -47,6 +47,12 @@ pub enum Cmd {
     Vinyl { deck: usize, on: bool },
     Slip { deck: usize, on: bool },
     Keylock { deck: usize, on: bool },
+    /// QUANTIZE (todos os decks): cue, hot cue e loop caem na batida.
+    Quantize(bool),
+    /// REVERSE: a música toca de trás para frente.
+    Reverse { deck: usize, on: bool },
+    /// Freio: a música para devagar (vinil desligado).
+    Brake(usize),
     JogTouch { deck: usize, down: bool },
     JogScratch { deck: usize, ticks: f64 },
     JogBend { deck: usize, ticks: f64 },
@@ -160,6 +166,9 @@ pub struct DeckSnap {
     pub slip: bool,
     /// Onde a música estaria (slip ativo durante um scratch ou loop).
     pub slip_pos: Option<f64>,
+    pub quantize: bool,
+    pub reverse: bool,
+    pub braking: bool,
     pub pfl: bool,
     pub fader: f32,
     pub peak: f32,

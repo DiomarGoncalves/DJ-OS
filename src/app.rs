@@ -255,10 +255,11 @@ enum Job {
 #[derive(Clone)]
 pub struct Loader {
     tx: mpsc::Sender<Job>,
+    snap: crate::shared::SharedSnap,
 }
 
 impl Loader {
-    pub fn start(app: SharedApp, cmd: CmdTx) -> Self {
+    pub fn start(app: SharedApp, cmd: CmdTx, snap: crate::shared::SharedSnap) -> Self {
         let (tx, rx) = mpsc::channel::<Job>();
         std::thread::Builder::new()
             .name("carregador".into())
@@ -274,13 +275,27 @@ impl Loader {
                 }
             })
             .expect("thread do carregador");
-        let l = Self { tx };
+        let l = Self { tx, snap };
         let _ = l.tx.send(Job::Banks);
         l
     }
 
+    /// Trava do LOAD (como nas CDJs): o deck está tocando no ar (fader aberto) e a opção está
+    /// ligada. Avisa na tela.
+    pub fn travado(&self, app: &mut AppState, deck: usize) -> bool {
+        if deck >= NUM_DECKS || !app.settings.trava_load {
+            return false;
+        }
+        let s = self.snap.lock().decks[deck];
+        let no_ar = s.loaded && s.playing && s.fader > 0.1;
+        if no_ar {
+            app.toast(format!("Deck {} tocando no ar: LOAD travado (abaixe o fader ou pare o deck)", deck + 1));
+        }
+        no_ar
+    }
+
     pub fn load_deck(&self, app: &mut AppState, deck: usize, path: PathBuf) {
-        if deck >= NUM_DECKS {
+        if deck >= NUM_DECKS || self.travado(app, deck) {
             return;
         }
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();

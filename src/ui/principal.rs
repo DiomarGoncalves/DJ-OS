@@ -143,6 +143,31 @@ fn on_air(s: &DeckSnap) -> bool {
     s.loaded && s.playing && s.fader > 0.1
 }
 
+/// Pisca duas vezes por segundo (aviso de fim da música).
+fn piscando(ui: &egui::Ui) -> bool {
+    ui.ctx().request_repaint();
+    (ui.input(|i| i.time) * 2.0).fract() < 0.5
+}
+
+/// Próximo cue à frente da agulha (hot cue ou o CUE) e quantas batidas faltam: (índice do hot
+/// cue ou `None` = CUE, batidas).
+fn proximo_cue(t: &Track, s: &DeckSnap) -> Option<(Option<usize>, f64)> {
+    if t.bpm() <= 0.0 || s.reverse {
+        return None;
+    }
+    let agora = t.beats_at(s.pos);
+    let mut melhor: Option<(Option<usize>, f64)> = None;
+    let cands = s.hotcues.iter().enumerate().filter_map(|(i, h)| h.map(|p| (Some(i), p))).chain(std::iter::once((None, s.cue)));
+    for (i, p) in cands {
+        let falta = t.beats_at(p) - agora;
+        // Só o que está à frente (mais de meia batida) e até 64 compassos.
+        if falta > 0.5 && falta < 256.0 && melhor.is_none_or(|(_, m)| falta < m) {
+            melhor = Some((i, falta));
+        }
+    }
+    melhor
+}
+
 /// Tempo "mm:ss.c" com sinal de menos para o restante.
 fn remain_text(s: &DeckSnap) -> String {
     if s.sr <= 0.0 || s.frames <= 0.0 {
@@ -194,13 +219,17 @@ impl DjOsApp {
                 self.draw_card(p, card, d, tracks[d].as_deref(), &snap.decks[d], side.contains(&d));
             }
             let wr = Rect::from_min_size(pos2(wave_area.left(), y), vec2(wave_area.width(), row_h));
-            draw_wave_pro(p, wr, d, tracks[d].as_deref(), &snap.decks[d], loading[d].as_deref(), zoom, true);
+            // Medidor de fase: a batida do outro deck da frente (se estiver tocando com grade).
+            let outro = shown.iter().copied().find(|&o| o != d).filter(|&o| snap.decks[o].playing && snap.decks[o].bpm > 0.0);
+            let mestre = outro.and_then(|o| tracks[o].as_deref().filter(|t| t.bpm() > 0.0).map(|t| t.beats_at(snap.decks[o].pos)));
+            draw_wave_pro(p, wr, d, tracks[d].as_deref(), &snap.decks[d], loading[d].as_deref(), zoom, true, mestre);
             if ui.interact(wr, ui.id().with(("onda", d)), egui::Sense::click()).clicked() {
                 let mut a = self.app.lock();
                 a.wave_zoom = (a.wave_zoom + 1) % ZOOMS.len();
             }
         }
-        tr(p, wave_area.right_top() + vec2(-6.0, 2.0), Align2::RIGHT_TOP, format!("ZOOM {zoom:.0}s"), 11.0, k_dim());
+        let q = if snap.decks[side[0]].quantize { "QUANTIZE  ·  " } else { "" };
+        tr(p, pos2(wave_area.center().x + 60.0, wave_area.top() + 2.0), Align2::LEFT_TOP, format!("{q}ZOOM {zoom:.0}s"), 11.0, k_dim());
 
         // Efeitos (dos 2 decks da frente) na coluna da direita.
         for (k, &d) in side.iter().enumerate().filter(|_| fx_w > 0.0) {
@@ -291,11 +320,14 @@ impl DjOsApp {
     /// Painel do deck embaixo: título, tempo restante, pitch, BPM e a música inteira (mini-onda).
     #[allow(clippy::too_many_arguments)]
     fn draw_deck_panel(&mut self, ui: &mut egui::Ui, p: &Painter, r: Rect, d: usize, t: Option<Arc<Track>>, s: &DeckSnap, compact: bool, front: bool) {
+        // Aviso de fim da música (como nas CDJs): o painel pisca em vermelho.
+        let fim = crate::midi::mapa::perto_do_fim(&self.app.lock(), s);
+        let aceso = fim && piscando(ui);
         p.rect_filled(r, 0.0, k_panel());
-        p.rect_stroke(r, 0.0, Stroke::new(1.0_f32, if front { k_line() } else { k_panel2() }));
+        p.rect_stroke(r, 0.0, if fim { Stroke::new(2.0_f32, if aceso { k_red() } else { k_panel2() }) } else { Stroke::new(1.0_f32, if front { k_line() } else { k_panel2() }) });
         // Número do deck.
         let num = Rect::from_min_size(r.min + vec2(6.0, 6.0), vec2(46.0, if compact { 40.0 } else { 52.0 }));
-        p.rect_filled(num, 2.0, if front { deck_tint(d) } else { k_panel2() });
+        p.rect_filled(num, 2.0, if aceso { k_red() } else if front { deck_tint(d) } else { k_panel2() });
         tr(p, num.center_top() + vec2(0.0, 3.0), Align2::CENTER_TOP, "DECK", 10.0, if front { k_bg() } else { k_dim() });
         tb(p, num.center_bottom() - vec2(0.0, 2.0), Align2::CENTER_BOTTOM, d + 1, if compact { 22.0 } else { 28.0 }, if front { k_bg() } else { k_text() });
 
@@ -310,6 +342,12 @@ impl DjOsApp {
         }
         if s.keylock {
             right = tag(p, pos2(right, r.top() + 16.0), "KEYLOCK", k_panel2(), k_text()).left() - 6.0;
+        }
+        if s.reverse {
+            right = tag(p, pos2(right, r.top() + 16.0), "REV", k_orange(), k_bg()).left() - 6.0;
+        }
+        if s.braking {
+            right = tag(p, pos2(right, r.top() + 16.0), "FREIO", k_orange(), k_bg()).left() - 6.0;
         }
         if s.slip {
             // Aceso enquanto a música segue "por baixo" (scratch ou loop com slip).
@@ -351,7 +389,7 @@ impl DjOsApp {
         let ty = r.top() + 34.0;
         tr(p, pos2(x0, ty), Align2::LEFT_TOP, "RESTANTE", 10.0, k_dim());
         let big = if compact { 24.0 } else { 40.0 };
-        let tt = tb(p, pos2(x0, ty + 8.0), Align2::LEFT_TOP, if s.live { "AO VIVO".into() } else { remain_text(s) }, big, k_text());
+        let tt = tb(p, pos2(x0, ty + 8.0), Align2::LEFT_TOP, if s.live { "AO VIVO".into() } else { remain_text(s) }, big, if aceso { k_red() } else { k_text() });
         if !compact && s.sr > 0.0 && !s.live {
             tr(p, pos2(tt.right() + 8.0, tt.bottom() - 8.0), Align2::LEFT_BOTTOM, fmt_time(s.pos / s.sr), 13.0, k_dim());
         }
@@ -405,6 +443,19 @@ impl DjOsApp {
             }
             let nx = x_of(s.pos);
             p.line_segment([pos2(nx, ov.top() - 2.0), pos2(nx, ov.bottom() + 2.0)], Stroke::new(2.0_f32, k_text()));
+            // Tocar na música inteira pula para lá (como a busca pela agulha das CDJs). No ar não
+            // pula, para não estragar o set com um toque sem querer.
+            let resp = ui.interact(ov.expand2(vec2(0.0, 4.0)), ui.id().with(("agulha", d)), egui::Sense::click_and_drag());
+            if resp.clicked() || resp.dragged() {
+                if on_air(s) {
+                    if resp.clicked() {
+                        self.app.lock().toast(format!("Deck {} no ar: pare ou abaixe o fader para pular pela música", d + 1));
+                    }
+                } else if let Some(pt) = resp.interact_pointer_pos() {
+                    let frac = ((pt.x - ov.left()) / ov.width()).clamp(0.0, 1.0) as f64;
+                    self.cmd.send(crate::shared::Cmd::SetPos { deck: d, pos: frac * s.frames });
+                }
+            }
         }
     }
 }
@@ -412,7 +463,7 @@ impl DjOsApp {
 /// Waveform rolante de 3 bandas: cada banda cresce ou some com o EQ e o TRIM do canal (tirou o
 /// grave no knob, o azul diminui na hora). Batidas e compassos em cima e embaixo; hot cues A–H.
 #[allow(clippy::too_many_arguments)]
-fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap, loading: Option<&str>, zoom_secs: f64, ticks: bool) {
+fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap, loading: Option<&str>, zoom_secs: f64, ticks: bool, mestre: Option<f64>) {
     p.rect_filled(r, 0.0, k_bg());
     let tick_h = if ticks { 12.0 } else { 0.0 };
     let wr = Rect::from_min_max(pos2(r.left(), r.top() + tick_h), pos2(r.right(), r.bottom() - tick_h));
@@ -503,6 +554,43 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
         if b >= 0.0 {
             let txt = format!("{}.{}", (b / 4.0).floor() as i64 + 1, (b.rem_euclid(4.0)).floor() as i64 + 1);
             tb(p, pos2(center_x - 6.0, wr.top() + 2.0), Align2::RIGHT_TOP, txt, 13.0, k_orange());
+        }
+        // Medidor de fase (como nas CDJs): as 4 batidas do compasso deste deck, a de agora acesa,
+        // e um risco branco onde o outro deck está no compasso dele. Risco no mesmo lugar da
+        // batida acesa = os dois batendo juntos.
+        let mw = 100.0;
+        let m = Rect::from_min_size(pos2(wr.left() + 10.0, wr.top() + 4.0), vec2(mw, 10.0));
+        let cw = mw / 4.0;
+        let atual = b.rem_euclid(4.0).floor() as usize;
+        for k in 0..4 {
+            let c = Rect::from_min_size(pos2(m.left() + k as f32 * cw, m.top()), vec2(cw - 2.0, m.height()));
+            let cor = if k == atual && s.playing { if k == 0 { k_red() } else { deck_tint(d) } } else { k_panel2() };
+            p.rect_filled(c, 1.0, cor);
+        }
+        if let Some(mb) = mestre {
+            let mx = m.left() + (mb.rem_euclid(4.0) / 4.0) as f32 * mw;
+            p.line_segment([pos2(mx, m.top() - 2.0), pos2(mx, m.bottom() + 2.0)], Stroke::new(2.0_f32, k_text()));
+            // Diferença de fase em batidas (-0,50 a +0,50): perto de zero, em verde.
+            let mut dif = b - mb;
+            dif -= dif.round();
+            let cor = if dif.abs() < 0.04 { k_green() } else { k_dim() };
+            tr(p, pos2(m.right() + 6.0, m.center().y), Align2::LEFT_CENTER, format!("FASE {dif:+.2}"), 12.0, cor);
+        }
+        // Contagem até o próximo cue (compassos.batidas), como o "beat countdown" das CDJs.
+        if let Some((qual, falta)) = proximo_cue(t, s) {
+            let txt = format!("{}.{}", (falta / 4.0).floor() as i64, falta.rem_euclid(4.0).floor() as i64);
+            let x = wr.right() - 8.0;
+            let rt = tb(p, pos2(x, wr.top() + 2.0), Align2::RIGHT_TOP, txt, 13.0, k_text());
+            let lab = Rect::from_min_size(pos2(rt.left() - 20.0, wr.top() + 3.0), vec2(16.0, 14.0));
+            match qual {
+                Some(i) => {
+                    p.rect_filled(lab, 1.0, cue_cor(i));
+                    tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, k_bg());
+                }
+                None => {
+                    p.add(Shape::convex_polygon(vec![pos2(lab.left(), lab.top()), pos2(lab.right(), lab.top()), pos2(lab.center().x, lab.bottom())], k_orange(), Stroke::NONE));
+                }
+            }
         }
     }
 

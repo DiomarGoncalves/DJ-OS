@@ -98,6 +98,8 @@ led nota 1     0x0B    tocando       deck=1
 | `pfl` | CUE do fone liga/desliga |
 | `vinil` | modo vinil (jog faz scratch) liga/desliga |
 | `keylock`, `slip` | liga/desliga |
+| `reverso` | REVERSE liga/desliga (a música toca de trás para frente; com o slip ligado, ao desligar ela volta onde estaria) |
+| `freio` | a música para devagar, como toca-discos desligado (apertar de novo para na hora; PLAY cancela) |
 | `faixa_pitch` | troca a faixa do pitch (8 → 16 → 50%) |
 | `volume` | fader do canal |
 | `tempo` | fader de pitch |
@@ -131,6 +133,7 @@ led nota 1     0x0B    tocando       deck=1
 | `browse_aperta` | BROWSE apertado (pastas/músicas; segurar abre a pesquisa) |
 | `browser` | abre/fecha o browser em tela cheia |
 | `config` | abre/fecha as configurações |
+| `quantize` | QUANTIZE liga/desliga (vale para os 4 decks) |
 
 ## LEDs
 
@@ -153,6 +156,9 @@ a cor ou para meia-luz: veja a documentação dela.
 | `pad_modo` | os pads estão no modo `modo=` |
 | `fx_ligado` | o efeito do deck está ligado |
 | `shift` | o SHIFT está segurado (não precisa de `deck=`) |
+| `reverso` | o REVERSE está ligado |
+| `quantize` | o QUANTIZE está ligado (não precisa de `deck=`) |
+| `fim` | o deck está tocando os últimos segundos da música (o aviso de fim, em CONFIG → CONTROLADORA) |
 
 ## Mandar o seu mapeamento para o DJ OS
 

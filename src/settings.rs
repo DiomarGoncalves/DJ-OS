@@ -14,6 +14,8 @@ pub const SCALES: [f32; 3] = [1.0, 1.15, 1.3];
 pub const AUDIO_BUFFERS: [u32; 3] = [256, 512, 1024];
 /// Girar o BROWSE na tela principal.
 pub const BROWSE_GIRA: [&str; 2] = ["ABRE O BROWSER", "ZOOM DA WAVEFORM"];
+/// Aviso de fim da música (segundos antes do fim; 0 = desligado).
+pub const FIM_AVISOS: [u32; 4] = [0, 30, 45, 60];
 /// Tamanho da letra do browser novo.
 pub const BROWSER_FONTS: [&str; 3] = ["PEQUENA", "MÉDIA", "GRANDE"];
 pub const PITCH_RANGES: [f64; 3] = [0.08, 0.16, 0.50];
@@ -73,6 +75,12 @@ pub struct Settings {
     pub saida_som_nome: String,
     /// Skin da tela (nome; vazio = a de fábrica).
     pub skin: String,
+    /// QUANTIZE: cue, hot cue e loop caem na batida (como nas CDJs).
+    pub quantize: bool,
+    /// Trava do LOAD: não carrega outra música num deck tocando no ar.
+    pub trava_load: bool,
+    /// Aviso de fim da música (índice em FIM_AVISOS).
+    pub fim_aviso: usize,
 }
 
 impl Default for Settings {
@@ -107,6 +115,9 @@ impl Default for Settings {
             saida_som: String::new(),
             saida_som_nome: String::new(),
             skin: String::new(),
+            quantize: true,
+            trava_load: true,
+            fim_aviso: 1,
         }
     }
 }
@@ -164,6 +175,9 @@ impl Settings {
                 "saida_som" => s.saida_som = v.to_string(),
                 "saida_som_nome" => s.saida_som_nome = v.to_string(),
                 "skin" => s.skin = v.to_string(),
+                "quantize" => s.quantize = v != "nao",
+                "trava_load" => s.trava_load = v != "nao",
+                "aviso_fim" => s.fim_aviso = num(FIM_AVISOS.len()).unwrap_or(1),
                 _ => {}
             }
         }
@@ -181,7 +195,8 @@ impl Settings {
             "vinil={}\nfaixa_pitch={}\ncrossfader={}\nkeylock={}\ncores={}\ntamanho={}\nbluetooth={bt}\natraso_bt_ms={}\n\
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
-             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\nsaida_som={}\nsaida_som_nome={}\nskin={}\n",
+             browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\nsaida_som={}\nsaida_som_nome={}\nskin={}\n\
+             quantize={}\ntrava_load={}\naviso_fim={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -209,7 +224,10 @@ impl Settings {
             self.audio_buffer,
             self.saida_som,
             self.saida_som_nome,
-            self.skin
+            self.skin,
+            yn(self.quantize),
+            yn(self.trava_load),
+            self.fim_aviso
         )
     }
 
@@ -237,6 +255,7 @@ impl Settings {
             cmd.send(Cmd::XfAssign { deck, side: self.xf_side[deck] as u8 });
         }
         cmd.send(Cmd::XfCurve(self.xf_curve as u8));
+        cmd.send(Cmd::Quantize(self.quantize));
         cmd.send(Cmd::EqIso(self.eq_iso));
         cmd.send(Cmd::FaderCurve(self.fader_curve as u8));
         cmd.send(Cmd::HpSplit(self.hp_split));
@@ -282,6 +301,9 @@ pub enum Action {
     FaderCurve,
     HpSplit,
     Slip,
+    Quantize,
+    TravaLoad,
+    FimAviso,
     BrowserNovo,
     BrowserBpm,
     BrowserKey,
@@ -479,9 +501,15 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Item { label: "Faixa de pitch".into(), value: format!("±{:.0}%", PITCH_RANGES[s.pitch_range] * 100.0), action: Action::PitchRange });
             v.push(Row::Item { label: "Keylock ao carregar".into(), value: if s.keylock { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Keylock });
             v.push(Row::Item { label: "Slip".into(), value: if s.slip { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Slip });
+            v.push(Row::Item { label: "Quantize".into(), value: if s.quantize { "LIGADO" } else { "DESLIGADO" }.into(), action: Action::Quantize });
+            v.push(Row::Item { label: "Trava do LOAD (deck no ar)".into(), value: if s.trava_load { "LIGADA" } else { "DESLIGADA" }.into(), action: Action::TravaLoad });
+            let fim = FIM_AVISOS[s.fim_aviso.min(FIM_AVISOS.len() - 1)];
+            v.push(Row::Item { label: "Aviso de fim da música".into(), value: if fim == 0 { "DESLIGADO".into() } else { format!("{fim} s ANTES") }, action: Action::FimAviso });
             v.push(Row::Item { label: "Girar o BROWSE na tela principal".into(), value: BROWSE_GIRA[s.browse_gira].into(), action: Action::BrowseGira });
             v.push(Row::Info("Segurar o BROWSE e girar: zoom da waveform. No modo zoom, o browser abre apertando o BROWSE ou SHIFT + BROWSE".into()));
             v.push(Row::Info("Slip: scratch, backspin e loop por cima da música; ao soltar, ela volta onde estaria".into()));
+            v.push(Row::Info("Quantize: cue, hot cue e loop caem na batida; pular para um hot cue tocando não perde a fase".into()));
+            v.push(Row::Info("Trava do LOAD: com o deck tocando e o fader aberto, o LOAD não troca a música (abaixe o fader ou pare)".into()));
             let left = crate::midi::log_left();
             let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
             v.push(Row::Item { label: "Registrar os botões (diagnóstico, 5 min)".into(), value, action: Action::MidiLog });
@@ -682,6 +710,9 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::HpSplit => a.settings.hp_split = !a.settings.hp_split,
         Action::Keylock => a.settings.keylock = !a.settings.keylock,
         Action::Slip => a.settings.slip = !a.settings.slip,
+        Action::Quantize => a.settings.quantize = !a.settings.quantize,
+        Action::TravaLoad => a.settings.trava_load = !a.settings.trava_load,
+        Action::FimAviso => a.settings.fim_aviso = next(a.settings.fim_aviso, FIM_AVISOS.len()),
         Action::BrowserNovo => a.settings.browser_novo = !a.settings.browser_novo,
         Action::BrowserBpm => a.settings.browser_bpm = !a.settings.browser_bpm,
         Action::BrowserKey => a.settings.browser_key = !a.settings.browser_key,
@@ -939,6 +970,9 @@ mod tests {
             saida_som: "alsa_output.usb-Pioneer_DDJ-400".into(),
             saida_som_nome: "DDJ-400".into(),
             skin: "Clara".into(),
+            quantize: false,
+            trava_load: false,
+            fim_aviso: 3,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

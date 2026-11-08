@@ -324,6 +324,18 @@ impl DjOsApp {
                 self.cmd.send(Cmd::Keylock { deck: d, on: !snap.decks[d].keylock });
             }
         }
+        // REVERSE (C / J) e freio (V / H); Ctrl+U liga/desliga o QUANTIZE.
+        for (d, rev, brake) in [(side_l, Key::C, Key::V), (side_r, Key::J, Key::H)] {
+            if pressed(rev) {
+                self.cmd.send(Cmd::Reverse { deck: d, on: !snap.decks[d].reverse });
+            }
+            if pressed(brake) {
+                self.cmd.send(Cmd::Brake(d));
+            }
+        }
+        if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::U)) {
+            crate::midi::mapa::alternar_quantize(&self.app, &self.cmd);
+        }
         for (d, play, cue, sync) in [(side_l, Key::Z, Key::X, Key::S), (side_r, Key::M, Key::N, Key::K)] {
             if pressed(play) {
                 self.cmd.send(Cmd::PlayToggle(d));
@@ -1564,7 +1576,7 @@ impl eframe::App for DjOsApp {
                 if nav_on {
                     "Browser: setas cima/baixo andam · Tab pastas/músicas · Enter abre a pasta · 1-4 ou clicar no deck carrega · dois cliques abre/carrega · Ctrl+F pesquisa · B fecha"
                 } else {
-                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · F10 configurações · +/- zoom · setas esq/dir crossfader"
+                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F10 configurações · +/- zoom · setas esq/dir crossfader"
                 },
                 11.0,
                 DIM,
