@@ -217,6 +217,13 @@ impl DjOsApp {
             if card_w > 0.0 {
                 let card = Rect::from_min_size(pos2(waves.left(), y), vec2(card_w, row_h));
                 self.draw_card(p, card, d, tracks[d].as_deref(), &snap.decks[d], side.contains(&d));
+                // Tocar no TOM: casa o tom com o outro deck (de novo: volta ao tom original).
+                let line_h = ((card.bottom() - card.top() - 28.0) / 4.0).clamp(16.0, 30.0);
+                let tom = Rect::from_min_size(pos2(card.left(), card.top() + 28.0 + line_h), vec2(card.width(), line_h));
+                if tracks[d].is_some() && ui.interact(tom, ui.id().with(("tom", d)), egui::Sense::click()).clicked() {
+                    let qual = if snap.decks[d].key_shift != 0.0 { crate::app::Tom::Zero } else { crate::app::Tom::Casar };
+                    crate::app::comando_tom(&mut self.app.lock(), snap, &self.cmd, d, qual);
+                }
             }
             let wr = Rect::from_min_size(pos2(wave_area.left(), y), vec2(wave_area.width(), row_h));
             // Medidor de fase: a batida do outro deck da frente (se estiver tocando com grade).
@@ -296,8 +303,14 @@ impl DjOsApp {
         row(p, y, "TOM");
         match t.and_then(|t| crate::key::from_raw(t.key)) {
             Some(k) if !s.live => {
+                // Com o tom mudado (KEY), mostra o tom que está soando e quanto mudou.
+                let k = crate::key::transpor(k, s.key_shift as i32);
                 let rb = key_badge(p, pos2(vx + 44.0, y + line_h / 2.0), k, 13.0);
-                tr(p, pos2(rb.right() + 6.0, y + line_h / 2.0), Align2::LEFT_CENTER, crate::key::name(k), 11.0, k_dim());
+                if s.key_shift != 0.0 {
+                    tb(p, pos2(rb.right() + 6.0, y + line_h / 2.0), Align2::LEFT_CENTER, format!("{:+}", s.key_shift as i32), 13.0, k_orange());
+                } else {
+                    tr(p, pos2(rb.right() + 6.0, y + line_h / 2.0), Align2::LEFT_CENTER, crate::key::name(k), 11.0, k_dim());
+                }
             }
             _ => {
                 tb(p, pos2(vx, y + line_h / 2.0), Align2::LEFT_CENTER, "—", 14.0, k_dim());

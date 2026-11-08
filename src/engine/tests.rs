@@ -1111,3 +1111,22 @@ fn play_na_batida_entra_na_fase_do_outro_deck() {
         }
     }
 }
+
+#[test]
+fn tom_muda_sem_mudar_a_velocidade() {
+    // Pitch em 0, tom +12 (uma oitava): 440 Hz, andando na velocidade normal.
+    for (keylock, semis, hz, anda) in [(false, 12.0, 440.0, 1.0), (true, -12.0, 110.0 * 1.08, 1.08), (false, 0.0, 220.0, 1.0)] {
+        let mut d = tone_deck(keylock);
+        if anda == 1.0 {
+            d.set_tempo_fader(0.5);
+        }
+        d.key_shift = semis;
+        let start = d.pos;
+        let out = render(&mut d, 72000);
+        let f = freq(&out[24000..]);
+        let alvo = if keylock { 110.0 } else { hz };
+        assert!((f - alvo).abs() < alvo * 0.02, "tom {semis:+}: {f:.1} Hz, esperado {alvo:.1}");
+        let andou = (d.pos - start) / 72000.0;
+        assert!((andou - anda).abs() < 1e-3, "velocidade não muda com o tom: {andou:.4}");
+    }
+}

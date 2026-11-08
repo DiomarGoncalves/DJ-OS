@@ -68,6 +68,10 @@ pub enum Acao {
     Slip,
     Reverso,
     Freio,
+    TomMais,
+    TomMenos,
+    TomZero,
+    TomCasar,
     FaixaPitch,
     Volume,
     Tempo,
@@ -129,6 +133,10 @@ impl Acao {
             "slip" => Slip,
             "reverso" => Reverso,
             "freio" => Freio,
+            "tom_mais" => TomMais,
+            "tom_menos" => TomMenos,
+            "tom_zero" => TomZero,
+            "tom_casar" => TomCasar,
             "quantize" => Quantize,
             "faixa_pitch" => FaixaPitch,
             "volume" => Volume,
@@ -555,6 +563,16 @@ impl Mapeado {
                 send(Cmd::Reverse { deck: d, on });
             }
             Freio if down => send(Cmd::Brake(d)),
+            TomMais | TomMenos | TomZero | TomCasar if down => {
+                let qual = match e.acao {
+                    TomMais => crate::app::Tom::Mais,
+                    TomMenos => crate::app::Tom::Menos,
+                    TomZero => crate::app::Tom::Zero,
+                    _ => crate::app::Tom::Casar,
+                };
+                let snap = self.snap();
+                crate::app::comando_tom(&mut self.app.lock(), &snap, &self.cmd, d, qual);
+            }
             Quantize if down => alternar_quantize(&self.app, &self.cmd),
             FaixaPitch if down => send(Cmd::PitchRangeCycle(d)),
             Volume => send(Cmd::Fader { deck: d, v: x }),

@@ -218,6 +218,7 @@ impl Engine {
                 self.play_na_batida(d, parado);
             }
             Cmd::SmartPlay(on) => self.smart_play = on,
+            Cmd::KeyShift { deck, semis } if ok(deck) => self.decks[deck].key_shift = semis.clamp(-6.0, 6.0).round(),
             Cmd::Cue { deck, down } if ok(deck) => self.decks[deck].cue_button(down),
             Cmd::GotoCue(d) if ok(d) => self.decks[d].goto_cue(),
             Cmd::CueStop(d) if ok(d) => self.decks[d].cue_stop(),

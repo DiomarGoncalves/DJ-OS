@@ -47,6 +47,8 @@ pub enum Cmd {
     Vinyl { deck: usize, on: bool },
     Slip { deck: usize, on: bool },
     Keylock { deck: usize, on: bool },
+    /// Tom (semitons, -6 a +6) sem mudar a velocidade.
+    KeyShift { deck: usize, semis: f64 },
     /// Play na batida: PLAY com outro deck tocando entra na fase dele.
     SmartPlay(bool),
     /// QUANTIZE (todos os decks): cue, hot cue e loop caem na batida.
@@ -162,6 +164,7 @@ pub struct DeckSnap {
     pub rate: f64,
     pub pitch_range: f64,
     pub key_semis: f64,
+    pub key_shift: f64,
     pub sync_ok: bool,
     pub vinyl: bool,
     pub keylock: bool,

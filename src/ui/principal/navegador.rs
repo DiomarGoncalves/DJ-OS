@@ -42,9 +42,7 @@ fn into_view(first: &mut usize, sel: usize, rows: usize, n: usize) {
 
 /// Tons que combinam na roda Camelot: o mesmo, ±1 com a mesma letra, ou o relativo.
 pub fn keys_match(a: u8, b: u8) -> bool {
-    let ((na, la), (nb, lb)) = (crate::key::camelot(a), crate::key::camelot(b));
-    let step = (na as i32 - nb as i32).rem_euclid(12);
-    (la == lb && matches!(step, 0 | 1 | 11)) || (na == nb)
+    crate::key::combina(a, b)
 }
 
 /// O que o mouse fez neste quadro (aplicado depois de desenhar).

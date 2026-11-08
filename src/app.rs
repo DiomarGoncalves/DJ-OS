@@ -233,6 +233,48 @@ pub type SharedApp = Arc<Mutex<AppState>>;
 /// Pasta do sistema na casa do usuário (samples, scratch bank, configurações).
 pub use dj_os_analise::data_dir;
 
+/// Casar o tom (KEY SYNC): quantos semitons o deck `d` precisa mudar para combinar com o outro
+/// deck tocando (o mais alto no fader). `None`: sem tom analisado ou ninguém tocando.
+pub fn casar_tom(app: &AppState, snap: &crate::shared::Snapshot, d: usize) -> Option<f64> {
+    use crate::key;
+    let minha = app.decks.get(d)?.track.as_ref().and_then(|t| key::from_raw(t.key))?;
+    let outro = (0..NUM_DECKS)
+        .filter(|&o| o != d && snap.decks[o].playing && snap.decks[o].loaded && !snap.decks[o].live)
+        .filter(|&o| app.decks[o].track.as_ref().is_some_and(|t| key::from_raw(t.key).is_some()))
+        .max_by(|&a, &b| snap.decks[a].fader.total_cmp(&snap.decks[b].fader))?;
+    let alvo = key::from_raw(app.decks[outro].track.as_ref()?.key)?;
+    let alvo = key::transpor(alvo, snap.decks[outro].key_shift as i32);
+    Some(key::casar(minha, alvo) as f64)
+}
+
+/// Comandos de tom de um deck: +1, -1, zera ou casa com o outro deck (mensagem para a tela).
+pub fn comando_tom(app: &mut AppState, snap: &crate::shared::Snapshot, cmd: &CmdTx, d: usize, qual: Tom) {
+    let atual = snap.decks[d].key_shift;
+    let novo = match qual {
+        Tom::Mais => (atual + 1.0).min(6.0),
+        Tom::Menos => (atual - 1.0).max(-6.0),
+        Tom::Zero => 0.0,
+        Tom::Casar => match casar_tom(app, snap, d) {
+            Some(s) => s,
+            None => {
+                app.toast("Casar o tom: precisa do tom das duas músicas e do outro deck tocando");
+                return;
+            }
+        },
+    };
+    cmd.send(Cmd::KeyShift { deck: d, semis: novo });
+    let tom = app.decks[d].track.as_ref().and_then(|t| crate::key::from_raw(t.key)).map(|k| crate::key::label(crate::key::transpor(k, novo as i32)));
+    app.toast(format!("Deck {}: tom {:+} {}", d + 1, novo as i32, tom.map_or(String::new(), |t| format!("({t})"))));
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Tom {
+    Mais,
+    Menos,
+    Zero,
+    Casar,
+}
+
 /// O sistema se chamava "Diomar XDJ": a pasta de dados antiga (~/DiomarXDJ) vira ~/DJOS.
 pub fn migrate_old_data_dir() {
     let new = data_dir();

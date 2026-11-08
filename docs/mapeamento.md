@@ -99,6 +99,9 @@ led nota 1     0x0B    tocando       deck=1
 | `vinil` | modo vinil (jog faz scratch) liga/desliga |
 | `keylock`, `slip` | liga/desliga |
 | `reverso` | REVERSE liga/desliga (a música toca de trás para frente; com o slip ligado, ao desligar ela volta onde estaria) |
+| `tom_mais`, `tom_menos` | sobe / desce o tom 1 semitom sem mudar a velocidade (até ±6) |
+| `tom_zero` | volta ao tom original |
+| `tom_casar` | casa o tom com o outro deck tocando (roda Camelot: o mesmo tom ou um vizinho) |
 | `freio` | a música para devagar, como toca-discos desligado (apertar de novo para na hora; PLAY cancela) |
 | `faixa_pitch` | troca a faixa do pitch (8 → 16 → 50%) |
 | `volume` | fader do canal |

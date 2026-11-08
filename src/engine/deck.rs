@@ -42,6 +42,8 @@ pub struct Deck {
     /// Depois de sync/reset o fader de pitch só volta a valer quando passar pelo valor atual.
     takeover: bool,
     pub key_semis: f64,
+    /// Tom mudado (semitons) sem mudar a velocidade: KEY +/- e "casar o tom".
+    pub key_shift: f64,
     pub cue: f64,
     pub cue_preview: bool,
     pub hotcues: [Option<f64>; HOTCUES],
@@ -155,6 +157,7 @@ impl Deck {
             pitch_range: PITCH_RANGES[0],
             takeover: false,
             key_semis: 0.0,
+            key_shift: 0.0,
             cue: 0.0,
             cue_preview: false,
             hotcues: [None; HOTCUES],
@@ -221,6 +224,7 @@ impl Deck {
         self.slip_pos = None;
         self.reverse = false;
         self.brake = None;
+        self.key_shift = 0.0;
         self.kl.reset();
         let old = self.track.replace(t);
         self.update_auto_gain();
@@ -834,7 +838,15 @@ impl Deck {
         self.last_gain = gain1;
         // Keylock só quando faz diferença: tocando sem scratch, pitch fora do zero e sem o tom
         // dos pads de Tracking (que muda o tom de propósito).
-        let use_kl = self.keylock && self.playing && !self.scratching && !self.reverse && self.brake.is_none() && self.key_semis == 0.0 && (speed - 1.0).abs() > 0.0005;
+        // O tom mudado (KEY) também passa por ele, com ou sem o keylock.
+        let use_kl = (self.keylock && (speed - 1.0).abs() > 0.0005 || self.key_shift != 0.0)
+            && self.playing
+            && !self.scratching
+            && !self.reverse
+            && self.brake.is_none()
+            && self.key_semis == 0.0;
+        // Passo da leitura dos grãos: o tom (1 = o da música; sem keylock, o tom segue o pitch).
+        let kl_read = ratio * 2f64.powf(self.key_shift / 12.0) * if self.keylock { 1.0 } else { speed.max(0.05) };
         if use_kl && !self.kl_on {
             self.kl.reset();
         }
@@ -860,7 +872,7 @@ impl Deck {
                 }
             }
             let (l, r) = if use_kl {
-                self.kl.next(&t, self.pos, ratio)
+                self.kl.next(&t, self.pos, kl_read)
             } else if step.abs() > 1.5 {
                 // Scratch rápido: média das amostras do caminho (tira o chiado de "digital").
                 let k = (step.abs().ceil() as usize).min(8);
@@ -1000,6 +1012,7 @@ impl Deck {
             rate: self.rate,
             pitch_range: self.pitch_range,
             key_semis: self.key_semis,
+            key_shift: self.key_shift,
             sync_ok: false,
             vinyl: self.vinyl,
             keylock: self.keylock,

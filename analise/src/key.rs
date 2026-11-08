@@ -116,6 +116,33 @@ pub fn camelot(key: u8) -> (u8, char) {
     (((7 * tonic) % 12 + 7) as u8 % 12 + 1, if minor { 'A' } else { 'B' })
 }
 
+/// Tons que combinam na roda Camelot: o mesmo, ±1 com a mesma letra, ou o relativo.
+pub fn combina(a: u8, b: u8) -> bool {
+    let ((na, la), (nb, lb)) = (camelot(a), camelot(b));
+    let step = (na as i32 - nb as i32).rem_euclid(12);
+    (la == lb && matches!(step, 0 | 1 | 11)) || (na == nb)
+}
+
+/// O tom subido (ou descido) `semis` semitons; maior continua maior, menor continua menor.
+pub fn transpor(key: u8, semis: i32) -> u8 {
+    let base = if key >= 12 { 12 } else { 0 };
+    base + ((key as i32 - base as i32 + semis).rem_euclid(12)) as u8
+}
+
+/// Menor mudança de tom (em semitons, de -6 a +6) para `minha` combinar com `alvo`: primeiro o
+/// mesmo tom (ou o relativo), depois os vizinhos na roda.
+pub fn casar(minha: u8, alvo: u8) -> i32 {
+    let mesmo = |k: u8| camelot(k).0 == camelot(alvo).0;
+    let ordem = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6];
+    ordem
+        .iter()
+        .copied()
+        .find(|&s| mesmo(transpor(minha, s)))
+        .filter(|s| s.abs() <= 2 || !ordem.iter().any(|&t| t.abs() < s.abs() && combina(transpor(minha, t), alvo)))
+        .or_else(|| ordem.iter().copied().find(|&s| combina(transpor(minha, s), alvo)))
+        .unwrap_or(0)
+}
+
 /// Texto curto para a tela, ex.: "8A".
 pub fn label(key: u8) -> String {
     let (n, l) = camelot(key);
@@ -178,6 +205,23 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn casar_o_tom() {
+        // Lá menor (8A) com Lá menor: nada a mudar. Mi menor (9A) para Lá menor (8A): vizinho já
+        // combina, sem mexer.
+        let am = 12 + 9;
+        let em = 12 + 4;
+        assert_eq!(casar(am, am), 0);
+        assert!(combina(em, am));
+        assert_eq!(casar(em, am), 0, "vizinho na roda já combina");
+        // Fá menor (4A) para Lá menor (8A): 4 semitons acima ou abaixo… acha um que combine.
+        let fm = 12 + 5;
+        let s = casar(fm, am);
+        assert!(combina(transpor(fm, s), am) && s.abs() <= 6);
+        assert_eq!(transpor(am, 3), 12, "Lá menor + 3 = Dó menor");
+        assert_eq!(transpor(0, -1), 11, "Dó maior - 1 = Si maior");
     }
 
     #[test]
