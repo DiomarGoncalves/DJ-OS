@@ -55,7 +55,7 @@ esquerda (deck 1 ou 3) e direita (deck 2 ou 4).
 | Knob central LEVEL/DEPTH | B4/B5 02, 04, 06 (+20) | Força do efeito (quanto do som do efeito entra) |
 | BROWSE girado segurando um FX | B4 50-52 / B5 53-55 | Anda pela lista de efeitos nos dois sentidos |
 
-Efeitos: ECHO, PING PONG, REVERB, FLANGER, PHASER, WAHWAH, NOISE, CUT. Echo e reverb continuam
+Efeitos: ECHO, PING PONG, REVERB, FLANGER, PHASER, WAHWAH, NOISE, CUT, ROLL, CRUSH, BRAKE, BACKSPIN. Echo e reverb continuam
 soando ao desligar a alavanca (a cauda some sozinha). O LED do FX 1 fica aceso (pisca com o efeito
 ligado): é o que faz o knob central mandar a força. **Conferir com a REV1 na mão.**
 

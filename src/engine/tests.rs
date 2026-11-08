@@ -348,7 +348,7 @@ fn cauda_continua_e_depois_some() {
 #[test]
 fn efeito_desligado_sem_cauda_passa_direto() {
     let mut seed = 3u32;
-    for kind in [FxKind::Flanger, FxKind::Phaser, FxKind::Wahwah, FxKind::Noise, FxKind::Cut] {
+    for kind in [FxKind::Flanger, FxKind::Phaser, FxKind::Wahwah, FxKind::Noise, FxKind::Cut, FxKind::Roll, FxKind::Crush, FxKind::Brake, FxKind::Backspin] {
         let mut f = FxSlot::new(kind, FS as f32);
         f.set_level(1.0);
         let ctx = FxCtx { beat_len: 22500.0, beat_pos: 0.0 };
@@ -1129,4 +1129,55 @@ fn tom_muda_sem_mudar_a_velocidade() {
         let andou = (d.pos - start) / 72000.0;
         assert!((andou - anda).abs() < 1e-3, "velocidade não muda com o tom: {andou:.4}");
     }
+}
+
+#[test]
+fn roll_brake_e_backspin() {
+    let bl = 22500.0f32; // 128 BPM
+    let ctx = FxCtx { beat_len: bl, beat_pos: 0.0 };
+    // Rampa: cada amostra diz de onde ela veio.
+    let x = |i: usize| [i as f32 / 1e6, i as f32 / 1e6];
+
+    // ROLL de 1/2 batida: depois de gravar a primeira meia batida, repete ela.
+    let mut f = FxSlot::new(FxKind::Roll, FS as f32);
+    f.set_level(1.0);
+    f.set_active(true);
+    let mut out = Vec::new();
+    for i in 0..60000 {
+        out.push(f.process(x(i), &ctx)[0]);
+    }
+    let meia = (bl / 2.0) as usize;
+    let (a, b) = (out[meia + 3000], out[2 * meia + 3000]);
+    assert!((a - b).abs() < 0.002, "repete a cada meia batida: {a} vs {b}");
+    assert!(out[50000] < 0.02, "não anda com a música (fica no começo): {}", out[50000]);
+
+    // BRAKE de 1 batida: anda cada vez mais devagar e para em silêncio.
+    let mut f = FxSlot::new(FxKind::Brake, FS as f32);
+    f.beats = 1.0;
+    f.set_level(1.0);
+    f.set_active(true);
+    let mut out = Vec::new();
+    for i in 0..30000 {
+        out.push(f.process([1.0, 1.0], &ctx)[0]);
+        let _ = i;
+    }
+    assert!(out[(bl * 1.05) as usize..].iter().all(|v| v.abs() < 1e-3), "parado = silêncio");
+
+    // BACKSPIN: volta pelo som de antes de ligar.
+    let mut f = FxSlot::new(FxKind::Backspin, FS as f32);
+    f.set_level(1.0);
+    assert!(f.sounding(), "escuta sempre (precisa do som de antes)");
+    for i in 0..48000 {
+        assert_eq!(f.process(x(i), &ctx), x(i), "desligado: passa direto");
+    }
+    f.set_active(true);
+    let mut ultimo = f32::MAX;
+    for i in 48000..(48000 + 8000) {
+        let y = f.process(x(i), &ctx)[0];
+        if i > 48000 + 400 {
+            assert!(y <= ultimo + 1e-6, "anda para trás");
+        }
+        ultimo = y;
+    }
+    assert!(ultimo < 0.048 - 0.01, "voltou para antes de ligar: {ultimo}");
 }

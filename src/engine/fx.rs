@@ -21,10 +21,14 @@ pub enum FxKind {
     Wahwah,
     Noise,
     Cut,
+    Roll,
+    Crush,
+    Brake,
+    Backspin,
 }
 
 impl FxKind {
-    pub const ALL: [FxKind; 8] = [
+    pub const ALL: [FxKind; 12] = [
         FxKind::Echo,
         FxKind::PingPong,
         FxKind::Reverb,
@@ -33,6 +37,10 @@ impl FxKind {
         FxKind::Wahwah,
         FxKind::Noise,
         FxKind::Cut,
+        FxKind::Roll,
+        FxKind::Crush,
+        FxKind::Brake,
+        FxKind::Backspin,
     ];
 
     pub fn name(self) -> &'static str {
@@ -45,6 +53,10 @@ impl FxKind {
             FxKind::Wahwah => "WAHWAH",
             FxKind::Noise => "NOISE",
             FxKind::Cut => "CUT",
+            FxKind::Roll => "ROLL",
+            FxKind::Crush => "CRUSH",
+            FxKind::Brake => "BRAKE",
+            FxKind::Backspin => "BACKSPIN",
         }
     }
 
@@ -55,11 +67,15 @@ impl FxKind {
             FxKind::Wahwah => 1.0,
             FxKind::Cut => 0.25,
             FxKind::Reverb | FxKind::Noise => 1.0,
+            FxKind::Roll => 0.5,
+            FxKind::Crush => 1.0,
+            FxKind::Brake => 2.0,
+            FxKind::Backspin => 1.0,
         }
     }
 
     pub fn uses_beats(self) -> bool {
-        !matches!(self, FxKind::Reverb | FxKind::Noise)
+        !matches!(self, FxKind::Reverb | FxKind::Noise | FxKind::Crush)
     }
 
     fn has_tail(self) -> bool {
@@ -145,6 +161,16 @@ pub struct FxSlot {
     noise_hp: StereoBiquad,
     // cut
     gate: f32,
+    // roll, brake, backspin: acabou de ligar, amostras desde que ligou, tamanho do roll,
+    // velocidade e distância da leitura (no `delay`)
+    fresh: bool,
+    prog: f32,
+    roll_len: f32,
+    speed: f32,
+    dist: f32,
+    // crush: amostra segurada e quantas faltam
+    held: [f32; 2],
+    hold_n: u32,
 }
 
 impl FxSlot {
@@ -174,6 +200,13 @@ impl FxSlot {
             seed: 0x1234_5678,
             noise_hp: StereoBiquad::default(),
             gate: 1.0,
+            fresh: false,
+            prog: 0.0,
+            roll_len: 0.0,
+            speed: 1.0,
+            dist: 1.0,
+            held: [0.0; 2],
+            hold_n: 0,
         }
     }
 
@@ -199,13 +232,17 @@ impl FxSlot {
             // Efeito parado de vez: começa limpo, sem eco velho guardado.
             self.reset_state();
         }
+        if on && !self.active {
+            self.fresh = true;
+        }
         self.active = on;
         self.input.set(if on { 1.0 } else { 0.0 });
     }
 
     /// Indica se ainda sai som do efeito (ligado ou com cauda).
     pub fn sounding(&self) -> bool {
-        self.active || self.input.cur > 1e-4 || self.tail > 1e-5
+        // O BACKSPIN precisa do som de antes de ligar: escuta sempre que está escolhido.
+        self.active || self.input.cur > 1e-4 || self.tail > 1e-5 || self.kind == FxKind::Backspin
     }
 
     fn reset_state(&mut self) {
@@ -223,6 +260,13 @@ impl FxSlot {
         self.noise_hp.reset();
         self.gate = 1.0;
         self.tail = 0.0;
+        self.fresh = false;
+        self.prog = 0.0;
+        self.roll_len = 0.0;
+        self.speed = 1.0;
+        self.dist = 1.0;
+        self.held = [0.0; 2];
+        self.hold_n = 0;
     }
 
     #[inline]
@@ -241,6 +285,11 @@ impl FxSlot {
     pub fn process(&mut self, x: [f32; 2], ctx: &FxCtx) -> [f32; 2] {
         let lvl = self.level.next();
         let inp = self.input.next();
+        if self.kind == FxKind::Backspin && !self.active && inp < 1e-4 {
+            // Guarda o som de agora para o backspin poder voltar por ele.
+            self.delay.write(x);
+            return x;
+        }
         if inp < 1e-4 && (!self.kind.has_tail() || self.tail < 1e-5) {
             return x;
         }
@@ -367,6 +416,71 @@ impl FxSlot {
                 let amp = 0.35 * lvl * lvl * inp;
                 [x[0] + nn[0] * amp, x[1] + nn[1] * amp]
             }
+            // Roll (beat roll): grava a divisão de batida a partir de quando ligou e repete enquanto
+            // a alavanca estiver empurrada. Diminuir a divisão com ele soando encurta a repetição.
+            FxKind::Roll => {
+                let max = self.delay.len() as f32 - 4.0;
+                let alvo = (self.beats * ctx.beat_len).clamp(64.0, max);
+                if self.fresh {
+                    self.fresh = false;
+                    self.prog = 0.0;
+                    self.roll_len = alvo;
+                }
+                let y = if self.prog < self.roll_len {
+                    // Gravando a primeira volta: passa o som e guarda.
+                    self.delay.write(x);
+                    x
+                } else {
+                    if alvo < self.roll_len {
+                        self.roll_len = alvo;
+                    }
+                    // Repete: lê a volta anterior e grava ela de novo (fica em loop).
+                    let r = self.delay.read(self.roll_len);
+                    self.delay.write(r);
+                    r
+                };
+                self.prog += 1.0;
+                let m = lvl * inp;
+                [x[0] * (1.0 - m) + y[0] * m, x[1] * (1.0 - m) + y[1] * m]
+            }
+            // Crush: menos bits e menos amostras (som de videogame / rádio velho). A força deixa
+            // mais sujo.
+            FxKind::Crush => {
+                let passo = 1 + (lvl * 14.0) as u32;
+                if self.hold_n == 0 {
+                    let bits = 16.0 - 11.0 * lvl;
+                    let q = 2f32.powf(1.0 - bits);
+                    self.held = [(x[0] / q).round() * q, (x[1] / q).round() * q];
+                    self.hold_n = passo;
+                }
+                self.hold_n -= 1;
+                let m = (lvl * 4.0).min(1.0) * inp;
+                [x[0] * (1.0 - m) + self.held[0] * m, x[1] * (1.0 - m) + self.held[1] * m]
+            }
+            // Brake: o som vai freando até parar (vinil desligado) na divisão de batida escolhida;
+            // parado, fica em silêncio até soltar a alavanca.
+            // Backspin: o som volta para trás rápido e vai parando (o disco puxado para trás).
+            FxKind::Brake | FxKind::Backspin => {
+                let max = self.delay.len() as f32 - 8.0;
+                let back = self.kind == FxKind::Backspin;
+                // O backspin anda ~2,5× o tempo para trás: não pode passar do som guardado.
+                let dur = (self.beats * ctx.beat_len).max(256.0).min(if back { max / 2.6 } else { max * 0.9 });
+                if self.fresh {
+                    self.fresh = false;
+                    self.prog = 0.0;
+                    self.dist = 1.0;
+                }
+                let t = (self.prog / dur).min(1.0);
+                self.speed = if back { -3.0 * (1.0 - t) } else { 1.0 - t };
+                self.prog += 1.0;
+                self.delay.write(x);
+                self.dist = (self.dist + 1.0 - self.speed).min(max);
+                let r = self.delay.read(self.dist);
+                // Some aos poucos no fim (prato parando não faz barulho).
+                let g = (self.speed.abs() * 4.0).min(1.0);
+                let m = lvl * inp;
+                [x[0] * (1.0 - m) + r[0] * g * m, x[1] * (1.0 - m) + r[1] * g * m]
+            }
             FxKind::Cut => {
                 let ph = (ctx.beat_pos / self.beats.max(1e-3) as f64).rem_euclid(1.0);
                 let open = if ph < 0.5 { 1.0 } else { 0.0 };
@@ -389,7 +503,7 @@ pub fn demo(track: &crate::track::Track, dir: &std::path::Path) -> std::io::Resu
     let secs = |s: f32| (s * fs) as usize;
     let start = (track.frames / 3).min(track.frames.saturating_sub(secs(30.0)));
     let n = secs(30.0).min(track.frames - start);
-    for kind in [None, Some(FxKind::Echo), Some(FxKind::PingPong), Some(FxKind::Reverb), Some(FxKind::Flanger)] {
+    for kind in [None, Some(FxKind::Echo), Some(FxKind::PingPong), Some(FxKind::Reverb), Some(FxKind::Flanger), Some(FxKind::Roll), Some(FxKind::Crush), Some(FxKind::Brake), Some(FxKind::Backspin)] {
         let mut fx = FxSlot::new(kind.unwrap_or_default(), fs);
         fx.set_level(0.7);
         let (mut peak, mut over) = (0.0f32, 0usize);
