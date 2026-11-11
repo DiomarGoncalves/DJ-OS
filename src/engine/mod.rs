@@ -354,11 +354,16 @@ impl Engine {
     /// Play na batida: o deck acabou de começar a tocar e outro deck está tocando: a música
     /// entra na fase dele (anda no máximo meia batida). O andamento continua com o DJ (ou SYNC).
     fn play_na_batida(&mut self, d: usize, estava_parado: bool) {
-        if !self.smart_play || !estava_parado || !self.decks[d].playing || !self.decks[d].has_bpm() {
+        if !self.smart_play || !estava_parado || !self.decks[d].playing || !self.decks[d].has_bpm() || self.decks[d].na_mao() {
             return;
         }
         if let Some(m) = self.sync_master(d).filter(|&m| self.decks[m].playing) {
-            self.align_phase(d, m);
+            // Só quando os dois andam no mesmo tempo (até 8%, ou metade/dobro): com BPMs
+            // diferentes não existe "a batida do outro" para entrar.
+            let (a, b) = (self.decks[d].bpm_eff(), self.decks[m].bpm_eff());
+            if b > 0.0 && [1.0, 2.0, 0.5].iter().any(|k| (a * k / b - 1.0).abs() < 0.08) {
+                self.align_phase(d, m);
+            }
         }
     }
 

@@ -346,7 +346,8 @@ impl Deck {
     /// pedaço da batida em que a música está agora.
     fn phase_kept(&self, target: f64) -> f64 {
         match &self.track {
-            Some(t) if self.quantize && self.playing && t.bpm() > 0.0 => {
+            // Com a mão no prato (scratch) o pulo é exato: o DJ é quem põe no tempo.
+            Some(t) if self.quantize && self.playing && !self.scratching && !self.touched && t.bpm() > 0.0 => {
                 let frac = |b: f64| b - b.round();
                 let mut d = frac(t.beats_at(self.pos)) - frac(t.beats_at(target));
                 d -= d.round();
@@ -414,6 +415,11 @@ impl Deck {
             self.hc_preview = None;
             self.brake = Some(1.0);
         }
+    }
+
+    /// A mão está no prato (ou ele ainda gira solto depois do scratch).
+    pub fn na_mao(&self) -> bool {
+        self.scratching || self.touched
     }
 
     /// REVERSE liga/desliga. Com o slip, ao desligar a música volta onde estaria (censor).
@@ -891,9 +897,11 @@ impl Deck {
             self.pos += step;
             if self.pos < 0.0 {
                 self.pos = 0.0;
-                // REVERSE chegou no começo da música: para.
+                // REVERSE chegou no começo da música: para e desliga o reverse (o PLAY volta a
+                // tocar para frente).
                 if self.reverse && !self.scratching {
                     self.playing = false;
+                    self.reverse = false;
                 }
             }
             if let Some(sp) = &mut self.slip_pos {

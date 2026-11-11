@@ -15,12 +15,17 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 /// DXJ1: formato antigo (sem o tom). DXJ2: com 1 byte de tom logo depois do BPM. DXJ3: DXJ2 +
-/// volume (LUFS, f32) no fim. DXJ4: DXJ3 + 1 byte no fim com a versão do detector de BPM (as
-/// análises antigas medem o BPM de novo, mantendo os cues).
+/// volume (LUFS, f32) no fim e, desde 2026-11, mais 1 byte depois dele com a versão do detector
+/// de BPM (sem o byte = detector antigo). O byte fica no fim de propósito: um firmware anterior
+/// lê o arquivo normalmente e ignora o que sobra, então voltar de firmware não perde os cues.
+/// DXJ4: só o firmware de teste de 2026-11-07 gravou (igual ao DXJ3 com o byte); é lido e
+/// regravado como DXJ3.
 const MAGIC_V1: &[u8; 4] = b"DXJ1";
 const MAGIC_V2: &[u8; 4] = b"DXJ2";
-const MAGIC_V3: &[u8; 4] = b"DXJ3";
-const MAGIC: &[u8; 4] = b"DXJ4";
+const MAGIC: &[u8; 4] = b"DXJ3";
+const MAGIC_V4: &[u8; 4] = b"DXJ4";
+/// Onde começam as três waveforms (cada uma: tamanho em 4 bytes + os bytes).
+const WAVES_AT: u64 = 4 + 8 + 1 + 8 + 9 + 9 * HOTCUES as u64 + 25;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Saved {
@@ -63,6 +68,18 @@ impl Saved {
     /// O BPM foi medido pelo detector atual (ou acertado à mão).
     pub fn bpm_atual(&self) -> bool {
         self.bpm_v >= crate::track::BPM_V
+    }
+
+    /// A música `t` foi medida de novo pelo detector atual. A grade guardada só é trocada quando
+    /// a nova conserta o erro que o detector novo veio consertar (o BPM guardado era 2/3 ou 1,5×
+    /// o certo, como o funk em 86,66): qualquer outra diferença fica como estava, porque a grade
+    /// guardada pode ter sido acertada à mão ou vindo do rekordbox. Devolve o que gravar.
+    pub fn com_bpm_remedido(&self, t: &crate::track::Track) -> Saved {
+        let conserto = self.bpm <= 0.0 || [1.5, 2.0 / 3.0].iter().any(|x| (t.bpm() / self.bpm / x - 1.0).abs() < 0.02);
+        if !conserto {
+            t.set_grid(self.bpm, self.first_beat);
+        }
+        Saved { key: t.key, loudness: t.loudness, bpm: t.bpm(), first_beat: t.first_beat(), bpm_v: crate::track::BPM_V, ..self.clone() }
     }
 }
 
@@ -141,8 +158,7 @@ impl Reader<'_> {
 fn decode(b: &[u8]) -> Option<Saved> {
     let mut r = Reader { b, i: 0 };
     let version = match r.take(4)? {
-        m if m == MAGIC => 4,
-        m if m == MAGIC_V3 => 3,
+        m if m == MAGIC || m == MAGIC_V4 => 3,
         m if m == MAGIC_V2 => 2,
         m if m == MAGIC_V1 => 1,
         _ => return None,
@@ -165,7 +181,8 @@ fn decode(b: &[u8]) -> Option<Saved> {
         return None;
     }
     let loudness = if version >= 3 { f32::from_le_bytes(r.take(4)?.try_into().ok()?) } else { f32::NAN };
-    let bpm_v = if version >= 4 { r.take(1)?[0] } else { 1 };
+    // Byte da versão do detector de BPM, se o arquivo tiver.
+    let bpm_v = r.take(1).map_or(1, |b| b[0]);
     Some(Saved { bpm, key, loudness, first_beat, low, mid, high, cue, hotcues, loop_: has_loop.then_some((a, z, n)), bpm_v })
 }
 
@@ -253,17 +270,29 @@ fn peek_file(path: &Path) -> Option<Peek> {
     let mut b = [0u8; 13];
     let n = f.read(&mut b).ok()?;
     let m = b.get(..4)?;
-    if n < 12 || (m != MAGIC && m != MAGIC_V3 && m != MAGIC_V2 && m != MAGIC_V1) {
+    let v3 = m == MAGIC || m == MAGIC_V4;
+    if n < 12 || (!v3 && m != MAGIC_V2 && m != MAGIC_V1) {
         return None;
     }
     let bpm = f64::from_le_bytes(b[4..12].try_into().ok()?);
     let key = if m != MAGIC_V1 && n == 13 { b[12] } else { crate::key::RAW_UNKNOWN };
-    // A versão do detector de BPM é o último byte do DXJ4.
-    let bpm_atual = m == MAGIC && {
+    // O byte da versão do detector vem depois do volume: pelo tamanho das waveforms dá para
+    // saber se o arquivo tem ele (1 byte a mais que o DXJ3 antigo) e ler só esse byte.
+    let bpm_atual = v3 && (|| {
+        let mut w = [0u8; 4];
+        f.seek(SeekFrom::Start(WAVES_AT)).ok()?;
+        f.read_exact(&mut w).ok()?;
+        let sem_byte = WAVES_AT + 3 * (4 + u32::from_le_bytes(w) as u64) + 4;
+        if f.metadata().ok()?.len() <= sem_byte {
+            return None;
+        }
         let mut v = [0u8; 1];
-        f.seek(SeekFrom::End(-1)).ok().and_then(|_| f.read_exact(&mut v).ok()).is_some() && v[0] >= crate::track::BPM_V
-    };
-    bpm.is_finite().then_some(Peek { bpm, key, has_loudness: m == MAGIC || m == MAGIC_V3, bpm_atual })
+        f.seek(SeekFrom::Start(sem_byte)).ok()?;
+        f.read_exact(&mut v).ok()?;
+        Some(v[0] >= crate::track::BPM_V)
+    })()
+    .unwrap_or(false);
+    bpm.is_finite().then_some(Peek { bpm, key, has_loudness: v3, bpm_atual })
 }
 
 /// O que o aparelho guardou da música ou a análise do pendrive preparado. Se tem os dois, vale o
@@ -279,6 +308,14 @@ fn newest(files: impl Iterator<Item = PathBuf>) -> Option<Saved> {
     let mut v: Vec<(std::time::SystemTime, PathBuf)> = files.filter_map(|f| Some((std::fs::metadata(&f).ok()?.modified().ok()?, f))).collect();
     v.sort_by(|a, b| b.0.cmp(&a.0));
     v.iter().find_map(|(_, f)| decode(&std::fs::read(f).ok()?))
+}
+
+/// A memória da música no aparelho está no formato do firmware de teste (DXJ4), que os firmwares
+/// anteriores não leem: regravar (como DXJ3) para poder voltar de firmware sem perder os cues.
+pub fn formato_de_teste(track: &Path) -> bool {
+    use std::io::Read;
+    let mut m = [0u8; 4];
+    key(track).and_then(|k| std::fs::File::open(dir().join(format!("{k}.dxj"))).ok()).is_some_and(|mut f| f.read_exact(&mut m).is_ok() && &m == MAGIC_V4)
 }
 
 /// Só a análise gravada no pendrive preparado em `root` (o Preparar edita os cues nela).
@@ -317,10 +354,15 @@ mod tests {
     #[test]
     fn analise_antiga_mede_o_bpm_de_novo_e_mantem_os_cues() {
         let s = sample();
-        // A mesma análise no formato antigo (DXJ3, sem a versão do detector de BPM).
+        // A mesma análise como os firmwares anteriores gravavam (sem o byte do detector de BPM).
         let mut antigo = encode(&s);
-        antigo[..4].copy_from_slice(MAGIC_V3);
         antigo.pop();
+        // O arquivo novo continua sendo DXJ3: um firmware anterior lê e não perde os cues.
+        assert_eq!(&encode(&s)[..4], b"DXJ3");
+        // O formato do firmware de teste (DXJ4) continua sendo lido.
+        let mut v4 = encode(&s);
+        v4[..4].copy_from_slice(MAGIC_V4);
+        assert_eq!(decode(&v4), Some(s.clone()));
         let d = decode(&antigo).unwrap();
         assert!(!d.bpm_atual(), "DXJ3: BPM do detector antigo");
         assert_eq!((d.cue, d.hotcues, d.loop_), (s.cue, s.hotcues, s.loop_), "cues continuam");
@@ -333,6 +375,21 @@ mod tests {
         std::fs::write(&f, encode(&s)).unwrap();
         assert!(peek_file(&f).unwrap().completa());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn remedir_so_conserta_o_dois_tercos() {
+        let antigo = |bpm: f64| Saved { bpm, first_beat: 777.0, bpm_v: 1, ..sample() };
+        let medida = |bpm: f64| crate::track::synthetic(1.0, 48000.0, bpm, 0.5);
+        // Funk guardado em 86,66 e medido agora em 130: troca a grade, mantém os cues.
+        let n = antigo(86.66).com_bpm_remedido(&medida(130.0));
+        assert_eq!((n.bpm, n.first_beat, n.cue, n.bpm_v), (130.0, 24000.0, Some(1234.0), crate::track::BPM_V));
+        // Grade acertada à mão (126,5) e o detector novo acha 128: fica a guardada, na música também.
+        let t = medida(128.0);
+        let n = antigo(126.5).com_bpm_remedido(&t);
+        assert_eq!((n.bpm, n.first_beat), (126.5, 777.0));
+        assert_eq!((t.bpm(), t.first_beat()), (126.5, 777.0));
+        assert!(n.bpm_atual(), "não mede de novo no próximo LOAD");
     }
 
     fn sample() -> Saved {

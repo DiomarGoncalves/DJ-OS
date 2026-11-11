@@ -101,7 +101,7 @@ fn prepare_one(root: &Path, f: &Path) -> Outcome {
         // Análise com o BPM do detector antigo: mede só o BPM de novo e mantém os cues.
         Some(s) if s.key != crate::key::RAW_UNKNOWN && !s.loudness.is_nan() => {
             let cached = (crate::track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, f64::NAN, s.first_beat, s.key, s.loudness);
-            crate::track::load_cached(f, true, Some(cached)).map(|t| crate::store::Saved { bpm: t.bpm(), first_beat: t.first_beat(), bpm_v: crate::track::BPM_V, ..s })
+            crate::track::load_cached(f, true, Some(cached)).map(|t| s.com_bpm_remedido(&t))
         }
         _ => crate::rekordbox::first_analysis(f).map(|(_, s)| s),
     };

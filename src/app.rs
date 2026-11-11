@@ -398,11 +398,13 @@ fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path, 
                 None => crate::store::save(path, &crate::store::Saved::from_track(&t)),
                 // Análise de antes do tom/volume existirem ou com o BPM do detector antigo: guarda o
                 // que foi calculado agora (mantém os cues).
-                Some(s) if s.key != t.key || s.loudness.is_nan() != t.loudness.is_nan() || !s.bpm_atual() => {
-                    if !s.bpm_atual() && (s.bpm - t.bpm()).abs() > 0.05 {
-                        eprintln!("[djos] BPM medido de novo: {:.2} → {:.2} ({})", s.bpm, t.bpm(), t.display_name());
+                Some(s) if s.key != t.key || s.loudness.is_nan() != t.loudness.is_nan() || !s.bpm_atual() || crate::store::formato_de_teste(path) => {
+                    // Só troca a grade guardada se for o conserto do 2/3 (funk em 86,66).
+                    let novo = if s.bpm_atual() { crate::store::Saved { key: t.key, loudness: t.loudness, ..s.clone() } } else { s.com_bpm_remedido(&t) };
+                    if (s.bpm - novo.bpm).abs() > 0.05 {
+                        eprintln!("[djos] BPM consertado: {:.2} → {:.2} ({})", s.bpm, novo.bpm, t.display_name());
                     }
-                    crate::store::save(path, &crate::store::Saved { key: t.key, loudness: t.loudness, bpm: t.bpm(), first_beat: t.first_beat(), bpm_v: track::BPM_V, ..s.clone() })
+                    crate::store::save(path, &novo)
                 }
                 _ => {}
             }

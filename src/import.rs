@@ -233,8 +233,8 @@ pub fn start_analyzer(index: Arc<Mutex<Index>>, counter: Arc<AtomicU64>, snap: S
                                 let bpm = if s.bpm_atual() { s.bpm } else { f64::NAN };
                                 let cached = (crate::track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, bpm, s.first_beat, s.key, s.loudness);
                                 if let Ok(t) = crate::track::load_cached(&p, true, Some(cached)) {
-                                    let (bpm, first_beat) = (t.bpm(), t.first_beat());
-                                    crate::store::save(&p, &crate::store::Saved { key: t.key, loudness: t.loudness, bpm, first_beat, bpm_v: crate::track::BPM_V, ..s });
+                                    let novo = if s.bpm_atual() { crate::store::Saved { key: t.key, loudness: t.loudness, ..s } } else { s.com_bpm_remedido(&t) };
+                                    crate::store::save(&p, &novo);
                                     counter.fetch_add(1, Ordering::Relaxed);
                                     did += 1;
                                 }

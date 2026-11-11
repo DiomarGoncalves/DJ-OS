@@ -225,11 +225,14 @@ impl FxSlot {
         self.kind = k;
         self.beats = k.default_beats();
         self.reset_state();
+        // Trocado com a alavanca já empurrada: o efeito novo começa como se ligasse agora.
+        self.fresh = self.active;
     }
 
     pub fn set_active(&mut self, on: bool) {
-        if on && !self.active && self.input.cur < 1e-4 && self.tail < 1e-5 {
-            // Efeito parado de vez: começa limpo, sem eco velho guardado.
+        if on && !self.active && self.input.cur < 1e-4 && self.tail < 1e-5 && self.kind != FxKind::Backspin {
+            // Efeito parado de vez: começa limpo, sem eco velho guardado. (O BACKSPIN não: ele
+            // volta justamente pelo som guardado de antes de ligar.)
             self.reset_state();
         }
         if on && !self.active {

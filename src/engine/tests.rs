@@ -1181,7 +1181,7 @@ fn roll_brake_e_backspin() {
         }
         ultimo = y;
     }
-    assert!(ultimo < 0.048 - 0.01, "voltou para antes de ligar: {ultimo}");
+    assert!(ultimo < 0.048 - 0.01 && ultimo > 0.005, "voltou pelo som de antes de ligar (e não para o silêncio): {ultimo}");
 }
 
 #[test]
@@ -1201,4 +1201,23 @@ fn no_ar_considera_o_crossfader() {
     r.run(48000);
     let s = *r.snap.lock();
     assert!(!s.decks[0].no_ar && s.decks[1].no_ar, "fader do canal fechado também tira do ar");
+}
+
+#[test]
+fn roll_escolhido_com_a_alavanca_empurrada_nao_cala_o_deck() {
+    let ctx = FxCtx { beat_len: 22500.0, beat_pos: 0.0 };
+    let mut f = FxSlot::new(FxKind::Echo, FS as f32);
+    f.set_level(1.0);
+    f.set_active(true);
+    for _ in 0..4800 {
+        f.process([0.5, 0.5], &ctx);
+    }
+    f.set_kind(FxKind::Roll);
+    let mut pico = 0.0f32;
+    for _ in 0..48000 {
+        pico = pico.max(f.process([0.5, 0.5], &ctx)[0].abs());
+    }
+    assert!(pico > 0.4, "o som continua saindo: {pico}");
+    let fim = f.process([0.5, 0.5], &ctx)[0];
+    assert!(fim.abs() > 0.4, "repetindo o que gravou, não um vazio: {fim}");
 }
