@@ -32,6 +32,17 @@ iso/teste/qmp.py serial 'dj-os-diagnostico'    # comando no terminal (usuário d
 iso/teste/qmp.py pendrive pd.img p1            # liga um pendrive com a VM rodando
 ```
 
+## Medir o processador (`ferramentas/medir-cpu.sh`)
+Toda mudança que roda o tempo todo (tela, motor de áudio, controladora) é medida antes e depois:
+o DJ OS tem que rodar no notebook de 2011 sem esquentar.
+```bash
+ferramentas/medir-cpu.sh                         # o binário de agora, tocando 2 decks com efeito
+ferramentas/medir-cpu.sh /caminho/dj-os-antigo   # a versão anterior, para comparar
+```
+Mostra quanto de um núcleo cada thread gastou em 30 s (`pw-data-loop` é o som, `dj-os` é a tela).
+Referência num i5 de 12ª geração, janela Full HD a 60 quadros: som ~5%, tela ~10%, total ~17%
+(2026-11-11). Rode 2 vezes cada versão: diferença de até 1 ponto é variação da medida.
+
 ## No aparelho
 `Ctrl+Alt+F2` abre um terminal de manutenção (`Ctrl+Alt+F1` volta). `dj-os-diagnostico` mostra
 pendrives, som, vídeo e USB.

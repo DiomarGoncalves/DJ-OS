@@ -722,7 +722,7 @@ pub fn browse_aperta(app: &SharedApp, cmd: &CmdTx, down: bool) {
 /// Salva a fila (SHIFT + LOAD) como playlist e avisa na tela.
 pub fn salvar_fila(a: &mut crate::app::AppState) {
     let msg = match a.lib.salvar_fila() {
-        Ok(nome) => format!("Fila salva: ☰ Playlists → {nome}"),
+        Ok(nome) => format!("Fila salva em Playlists: {nome}"),
         Err(e) => e,
     };
     a.toast(msg);

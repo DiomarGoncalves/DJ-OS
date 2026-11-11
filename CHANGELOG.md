@@ -37,6 +37,13 @@ para diferenciar firmwares de teste da mesma versão.
   - **Busca pela agulha:** tocar na música inteira (a mini-onda embaixo) pula para aquele ponto
     (com o deck no ar não pula, para não estragar o set).
   - MIDI learn com mais funções: hot cues E–H, loop in/out, reloop, slip, reverse, freio e quantize.
+- **Aba FUNÇÕES** (a primeira de CONFIG: SHIFT + MASTER CUE e o BROWSE): tudo que antes só dava
+  para fazer com toque ou mouse agora se faz pela controladora. Automix, gravar o set, filtro da
+  lista, salvar a fila como playlist e, para cada deck da frente: casar o tom, tom +1/-1, consertar
+  o BPM da grade (× 1,5, × 2/3, × 2, ÷ 2), "batida aqui" e reverse.
+- **Música longa mostra o andamento ao carregar** ("Carregando Set (45%)…", depois
+  "(analisando)"): um set de uma hora leva mais de um minuto num computador antigo e parecia
+  travado. Com outra música tocando no deck, aparece uma faixa laranja na waveform.
 - **Inspirado no VirtualDJ** (no jeito de usar; nada do programa deles):
   - **Automix** (botão AUTOMIX em cima, Ctrl+A ou botão ensinado): toca a fila (SHIFT + LOAD) ou
     a lista aberta a partir da música selecionada; a próxima entra no BPM e na batida da que está
@@ -55,14 +62,18 @@ para diferenciar firmwares de teste da mesma versão.
   - **Efeitos novos**: ROLL, CRUSH, BRAKE e BACKSPIN (WAVs para ouvir com `dj-os --demo-efeitos`).
 
 ### Corrigido
+- **"NO AR" e a trava do LOAD consideram o crossfader:** com o crossfader fechado para o outro
+  lado o deck não está no ar (mesmo com o fader do canal em cima) e o LOAD funciona.
+- **Voltar para um firmware anterior não perde mais os cues:** a memória de cada música continua
+  no formato que os firmwares antigos leem.
 - **BPM errado no funk:** o tamborzão (3+3+2) enganava o detector, que pegava 1,5 batida como se
   fosse uma e dava 2/3 do BPM (130 → 86,66), deixando a grade apertada numa música e espaçada na
   outra. O detector agora confere se a batida se repete a cada 2 e 4 batidas. Medido em 85
   eletrofunks: de 40 para 65 em 130 BPM e nenhum mais em 86,66; em 103 músicas de house nada
   mudou (fora 2 mixagens com vários BPMs).
-  - As músicas já analisadas medem o BPM de novo sozinhas no LOAD (só o BPM e a grade: cues, hot
-    cues e loops ficam). No Preparar, "preparar o pendrive" refaz só o BPM das antigas. Grade
-    acertada à mão não é mexida.
+  - As músicas já analisadas medem o BPM de novo sozinhas no LOAD, e a grade guardada só é
+    trocada quando é esse conserto (o BPM guardado era 2/3 ou 1,5× o novo). Qualquer outra grade
+    (acertada à mão, do rekordbox) fica como estava; cues, hot cues e loops ficam sempre.
   - No ajuste da grade (tocar no BPM): botões **×1,5** (86,66 vira 130) e **×2/3**, além do ÷2 e ×2.
 - **Estalos e estática no som depois de um tempo** (fone e master), principalmente ao carregar um
   set longo (50 min ocupam ~1 GB e levam ~30 s para analisar num notebook antigo) ou com o HD

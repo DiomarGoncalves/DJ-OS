@@ -91,8 +91,12 @@ Os pads da tela fazem exatamente o mesmo (mesma função no código).
 
 ## Configurações (SHIFT + MASTER CUE abre e fecha)
 
-Abas à esquerda (Áudio, Caixa Bluetooth, Celular, Wi-Fi, Controladora, Tela, Sistema), itens à
-direita.
+Abas à esquerda (Funções, Áudio, Mixer, Caixa Bluetooth, Celular, Wi-Fi, Controladora, Tela,
+Sistema), itens à direita.
+
+A aba **FUNÇÕES** é a primeira e junta o que se usa no meio do set, sem precisar de toque:
+automix, gravar o set, filtro da lista, salvar a fila como playlist e, para cada deck da frente,
+casar o tom, tom +1/-1, consertar o BPM da grade (× 1,5, × 2/3, × 2, ÷ 2), "batida aqui" e reverse.
 
 | Ação | Função |
 |---|---|

@@ -486,7 +486,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
                 v.push(Row::Item { label: "Tom -1".into(), value: tom, action: Action::TomDeck(d, crate::app::Tom::Menos) });
                 let bpm = t.map_or(0.0, |t| t.bpm());
                 for (i, (nome, r)) in GRADE_RAZOES.iter().enumerate() {
-                    let value = if bpm > 0.0 { format!("{bpm:.2} → {:.2}", bpm * r) } else { "—".into() };
+                    let value = if bpm > 0.0 { format!("{bpm:.2} > {:.2}", bpm * r) } else { "—".into() };
                     v.push(Row::Item { label: format!("BPM {nome}"), value, action: Action::Grade(d, i) });
                 }
                 v.push(Row::Item { label: "Batida aqui (acerta a grade na posição de agora)".into(), value: String::new(), action: Action::Grade(d, GRADE_RAZOES.len()) });
