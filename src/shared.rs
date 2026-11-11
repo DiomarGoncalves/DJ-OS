@@ -175,6 +175,9 @@ pub struct DeckSnap {
     pub reverse: bool,
     pub braking: bool,
     pub pfl: bool,
+    /// Tocando e saindo no master: fader do canal aberto e crossfader não fechado para o outro
+    /// lado (quem mixa no crossfader deixa os faders em cima).
+    pub no_ar: bool,
     pub fader: f32,
     pub peak: f32,
     /// Correção do ganho automático aplicada à música carregada (dB).

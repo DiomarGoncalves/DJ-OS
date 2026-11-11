@@ -87,7 +87,7 @@ impl DjOsApp {
         // Quem está tocando (para o ▶ e para o tom que combina).
         let loaded: Vec<PathBuf> = tracks.iter().flatten().map(|t| t.path.clone()).collect();
         let master_key = (0..tracks.len())
-            .filter(|&d| snap.decks[d].playing && snap.decks[d].fader > 0.1)
+            .filter(|&d| snap.decks[d].no_ar)
             .find_map(|d| tracks[d].as_ref().and_then(|t| crate::key::from_raw(t.key)));
 
         let a = self.app.lock();

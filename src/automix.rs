@@ -178,7 +178,7 @@ mod tests {
             s.decks[d].bpm = 128.0;
         }
         s.decks[0].playing = true;
-        let mut cmds = |rx: &mut rtrb::Consumer<Cmd>| {
+        let cmds = |rx: &mut rtrb::Consumer<Cmd>| {
             let mut v = Vec::new();
             while let Ok(c) = rx.pop() {
                 v.push(format!("{c:?}"));

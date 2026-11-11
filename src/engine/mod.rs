@@ -151,7 +151,7 @@ impl Engine {
             xf_curve: 0,
             xf_side: std::array::from_fn(|d| if d % 2 == 0 { 0 } else { 2 }),
             hp_split: false,
-            smart_play: true,
+            smart_play: false,
             line_in: None,
             line_route: Some(3),
             ambient_vol: 0.7,
@@ -521,7 +521,15 @@ impl Engine {
                 sampler_playing: std::array::from_fn(|i| self.voices[i].playing),
                 sample_rate: self.fs,
             };
+            let (ga, gb) = xf_gains(self.xf.cur, self.xf_curve);
             for d in 0..NUM_DECKS {
+                let xf = match self.xf_side[d] {
+                    0 => ga,
+                    2 => gb,
+                    _ => 1.0,
+                };
+                let s = &mut snap.decks[d];
+                s.no_ar = s.loaded && s.playing && s.fader > 0.1 && xf > 0.05;
                 snap.decks[d].sync_ok = self.sync_ok(d);
                 snap.decks[d].live = self.line_in.is_some() && self.line_route == Some(d);
             }

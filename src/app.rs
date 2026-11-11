@@ -255,6 +255,8 @@ pub fn casar_tom(app: &AppState, snap: &crate::shared::Snapshot, d: usize) -> Op
     let minha = app.decks.get(d)?.track.as_ref().and_then(|t| key::from_raw(t.key))?;
     let outro = (0..NUM_DECKS)
         .filter(|&o| o != d && snap.decks[o].playing && snap.decks[o].loaded && !snap.decks[o].live)
+        // Quem está no ar (crossfader) vale mais que quem só está tocando no fone.
+        .filter(|&o| snap.decks[o].no_ar || !snap.decks.iter().enumerate().any(|(x, s)| x != d && s.no_ar))
         .filter(|&o| app.decks[o].track.as_ref().is_some_and(|t| key::from_raw(t.key).is_some()))
         .max_by(|&a, &b| snap.decks[a].fader.total_cmp(&snap.decks[b].fader))?;
     let alvo = key::from_raw(app.decks[outro].track.as_ref()?.key)?;
@@ -344,9 +346,9 @@ impl Loader {
             return false;
         }
         let s = self.snap.lock().decks[deck];
-        let no_ar = s.loaded && s.playing && s.fader > 0.1;
+        let no_ar = s.no_ar;
         if no_ar {
-            app.toast(format!("Deck {} tocando no ar: LOAD travado (abaixe o fader ou pare o deck)", deck + 1));
+            app.toast(format!("Deck {} tocando no ar: LOAD travado (pare o deck, ou feche o fader ou o crossfader dele)", deck + 1));
         }
         no_ar
     }

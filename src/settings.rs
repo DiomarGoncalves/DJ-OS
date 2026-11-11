@@ -119,10 +119,11 @@ impl Default for Settings {
             saida_som: String::new(),
             saida_som_nome: String::new(),
             skin: String::new(),
-            quantize: true,
+            // O que muda o jeito de tocar vem desligado (como no VirtualDJ): liga quem quiser.
+            quantize: false,
             trava_load: true,
             fim_aviso: 1,
-            play_batida: true,
+            play_batida: false,
         }
     }
 }
@@ -180,10 +181,10 @@ impl Settings {
                 "saida_som" => s.saida_som = v.to_string(),
                 "saida_som_nome" => s.saida_som_nome = v.to_string(),
                 "skin" => s.skin = v.to_string(),
-                "quantize" => s.quantize = v != "nao",
+                "quantize" => s.quantize = v == "sim",
                 "trava_load" => s.trava_load = v != "nao",
                 "aviso_fim" => s.fim_aviso = num(FIM_AVISOS.len()).unwrap_or(1),
-                "play_na_batida" => s.play_batida = v != "nao",
+                "play_na_batida" => s.play_batida = v == "sim",
                 _ => {}
             }
         }
@@ -576,7 +577,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Info("Slip: scratch, backspin e loop por cima da música; ao soltar, ela volta onde estaria".into()));
             v.push(Row::Info("Quantize: cue, hot cue e loop caem na batida; pular para um hot cue tocando não perde a fase".into()));
             v.push(Row::Info("Play na batida: dar PLAY com o outro deck tocando já entra na batida dele (anda até meia batida)".into()));
-            v.push(Row::Info("Trava do LOAD: com o deck tocando e o fader aberto, o LOAD não troca a música (abaixe o fader ou pare)".into()));
+            v.push(Row::Info("Trava do LOAD: com o deck tocando no ar, o LOAD não troca a música (pare o deck, ou feche o fader ou o crossfader dele)".into()));
             let left = crate::midi::log_left();
             let value = if left > 0 { format!("GRAVANDO ({}:{:02})", left / 60, left % 60) } else { "DESLIGADO".into() };
             v.push(Row::Item { label: "Registrar os botões (diagnóstico, 5 min)".into(), value, action: Action::MidiLog });
@@ -1085,10 +1086,10 @@ mod tests {
             saida_som: "alsa_output.usb-Pioneer_DDJ-400".into(),
             saida_som_nome: "DDJ-400".into(),
             skin: "Clara".into(),
-            quantize: false,
+            quantize: true,
             trava_load: false,
             fim_aviso: 3,
-            play_batida: false,
+            play_batida: true,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");

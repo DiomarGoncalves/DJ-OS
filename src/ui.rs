@@ -1433,7 +1433,7 @@ impl eframe::App for DjOsApp {
                 // "Combina com o deck N": o deck tocando no ar mais alto no fader.
                 let no_ar = (0..crate::shared::NUM_DECKS)
                     .filter(|&d| snap.decks[d].playing && snap.decks[d].loaded && !snap.decks[d].live && snap.decks[d].bpm > 0.0)
-                    .max_by(|&x, &y| snap.decks[x].fader.total_cmp(&snap.decks[y].fader));
+                    .max_by(|&x, &y| (snap.decks[x].no_ar, snap.decks[x].fader).partial_cmp(&(snap.decks[y].no_ar, snap.decks[y].fader)).unwrap_or(std::cmp::Ordering::Equal));
                 let referencia = no_ar.and_then(|d| {
                     let t = a.decks[d].track.as_ref()?;
                     let key = crate::key::from_raw(t.key).map(|k| crate::key::transpor(k, snap.decks[d].key_shift as i32));

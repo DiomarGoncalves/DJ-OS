@@ -450,19 +450,19 @@ fn trava_do_load_com_o_deck_no_ar() {
         let mut s = snap.lock();
         s.decks[0].loaded = true;
         s.decks[0].playing = true;
-        s.decks[0].fader = 1.0;
+        s.decks[0].no_ar = true;
     }
     let mut a = app.lock();
     a.settings.trava_load = true;
     loader.load_deck(&mut a, 0, "/nao/existe.mp3".into());
     assert!(a.decks[0].loading.is_none(), "deck no ar: não carrega");
     assert!(a.toast.as_ref().is_some_and(|(m, _)| m.contains("travado")));
-    // Fader abaixado (ou trava desligada): carrega.
-    snap.lock().decks[0].fader = 0.0;
+    // Fora do ar (fader abaixado ou crossfader no outro lado) ou trava desligada: carrega.
+    snap.lock().decks[0].no_ar = false;
     loader.load_deck(&mut a, 0, "/nao/existe.mp3".into());
     assert!(a.decks[0].loading.is_some());
     a.decks[0].loading = None;
-    snap.lock().decks[0].fader = 1.0;
+    snap.lock().decks[0].no_ar = true;
     a.settings.trava_load = false;
     loader.load_deck(&mut a, 0, "/nao/existe.mp3".into());
     assert!(a.decks[0].loading.is_some());

@@ -22,7 +22,7 @@ para diferenciar firmwares de teste da mesma versão.
 - **Skins** (`.djosskin`, [docs/skins.md](docs/skins.md)) em CONFIG → TELA: cores de tudo e o
   layout da tela principal. Vêm Preta, Clara, Neon e Waveform grande; as suas em `~/DJOS/skins/`.
 - **Funções das CDJs** (no aparelho e no PC):
-  - **QUANTIZE** (CONFIG → CONTROLADORA, ligado de fábrica): cue, hot cue e loop in/out caem na
+  - **QUANTIZE** (CONFIG → CONTROLADORA, desligado de fábrica): cue, hot cue e loop in/out caem na
     batida; pular para um hot cue tocando mantém a fase (a batida não atravessa).
   - **Trava do LOAD**: com o deck tocando no ar (fader aberto), o LOAD não troca a música por
     engano. Abaixe o fader ou pare o deck. Dá para desligar.
@@ -41,7 +41,7 @@ para diferenciar firmwares de teste da mesma versão.
   - **Automix** (botão AUTOMIX em cima, Ctrl+A ou botão ensinado): toca a fila (SHIFT + LOAD) ou
     a lista aberta a partir da música selecionada; a próxima entra no BPM e na batida da que está
     tocando e os faders cruzam em 16 batidas; a anterior para sozinha.
-  - **Play na batida** (como o Smart Play; CONFIG → CONTROLADORA, ligado de fábrica): dar PLAY com
+  - **Play na batida** (como o Smart Play; CONFIG → CONTROLADORA, desligado de fábrica): dar PLAY com
     o outro deck tocando já entra na batida dele.
   - **Tom (key)**: subir/descer até ±6 semitons sem mudar a velocidade e **casar o tom** com o
     outro deck (tocar no TOM do cartão do deck, ou botões pelo MIDI learn).

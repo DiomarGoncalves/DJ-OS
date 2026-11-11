@@ -140,7 +140,7 @@ fn source_label(t: &Track) -> String {
 }
 
 fn on_air(s: &DeckSnap) -> bool {
-    s.loaded && s.playing && s.fader > 0.1
+    s.no_ar
 }
 
 /// Pisca duas vezes por segundo (aviso de fim da música).

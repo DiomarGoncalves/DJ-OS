@@ -147,7 +147,7 @@ impl Deck {
             fs,
             live_beat: 0.0,
             spin_idle: 0.0,
-            quantize: true,
+            quantize: false,
             reverse: false,
             brake: None,
             track: None,
@@ -1022,6 +1022,7 @@ impl Deck {
             reverse: self.reverse,
             braking: self.brake.is_some(),
             pfl: self.pfl,
+            no_ar: false, // o motor preenche (depende do crossfader)
             fader: self.fader_v,
             peak: self.peak,
             auto_gain_db: self.auto_gain_db(),

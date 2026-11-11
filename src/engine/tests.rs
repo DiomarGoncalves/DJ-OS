@@ -997,6 +997,7 @@ fn comparacao_de_som() {
 fn quantize_poe_cue_hotcue_e_loop_na_batida() {
     // 128 BPM, primeira batida em 0,25 s: batida = 22500 frames.
     let mut d = deck_with(128.0);
+    d.quantize = true;
     let bl = 60.0 / 128.0 * FS;
     let batida = |k: f64| 0.25 * FS + k * bl;
     // CUE parado fora da batida: cai na batida mais perto e o deck vai para lá.
@@ -1022,6 +1023,7 @@ fn quantize_poe_cue_hotcue_e_loop_na_batida() {
 #[test]
 fn quantize_pula_para_o_hot_cue_sem_perder_a_fase() {
     let mut d = deck_with(128.0);
+    d.quantize = true;
     let bl = 60.0 / 128.0 * FS;
     let batida = |k: f64| 0.25 * FS + k * bl;
     d.hotcues[1] = Some(batida(32.0));
@@ -1180,4 +1182,23 @@ fn roll_brake_e_backspin() {
         ultimo = y;
     }
     assert!(ultimo < 0.048 - 0.01, "voltou para antes de ligar: {ultimo}");
+}
+
+#[test]
+fn no_ar_considera_o_crossfader() {
+    let mut r = rig();
+    r.send(Cmd::Load { deck: 0, track: track(128.0) });
+    r.send(Cmd::Load { deck: 1, track: track(128.0) });
+    r.send(Cmd::PlayToggle(0));
+    r.send(Cmd::PlayToggle(1));
+    r.send(Cmd::Crossfader(0.0)); // todo no lado A (deck 1)
+    r.run(48000);
+    let s = *r.snap.lock();
+    assert!(s.decks[0].no_ar, "deck 1 no lado aberto do crossfader");
+    assert!(!s.decks[1].no_ar, "deck 2 tocando com o fader em cima, mas o crossfader fechou ele");
+    r.send(Cmd::Crossfader(0.5));
+    r.send(Cmd::Fader { deck: 0, v: 0.0 });
+    r.run(48000);
+    let s = *r.snap.lock();
+    assert!(!s.decks[0].no_ar && s.decks[1].no_ar, "fader do canal fechado também tira do ar");
 }
