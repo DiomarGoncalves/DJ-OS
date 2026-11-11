@@ -25,8 +25,11 @@ Feito: automix, play na batida, tom (±6 e casar), "combina com o que toca", pla
 fila salva, filtro do browser, efeitos ROLL/CRUSH/BRAKE/BACKSPIN. Falta:
 - **Fila: tirar música e fechar** (pedido em 2026-11-11). Hoje a coluna "Fila" do browser aparece
   enquanto tem música nela e não tem como tirar pela controladora: só some quando o automix toca
-  tudo ou ao reiniciar (a fila não é guardada). Fazer: SHIFT + LOAD numa música da fila tira ela;
-  "Limpar a fila" na aba FUNÇÕES; e um jeito de esconder a coluna sem apagar a fila.
+  tudo ou ao reiniciar (a fila não é guardada). Ele quer as três opções, pela controladora:
+  - **tirar uma música**: SHIFT + LOAD numa música da fila (com a fila em foco) tira ela;
+  - **limpar a fila**: item na aba FUNÇÕES (pede um segundo toque, como Reiniciar);
+  - **ocultar e mostrar a fila**: item na aba FUNÇÕES ("Mostrar a fila: SIM/NÃO"); oculta, a
+    fila continua guardando as músicas e o automix continua usando ela.
 - **Autoplay com corte de intro e final** (pedido em 2026-11-11, como o automix do VirtualDJ).
   O automix atual já toca a fila e mistura em 16 batidas, mas começa cada música do início e só
   mistura no fim de verdade. Fazer uma opção na aba FUNÇÕES, desligada de fábrica, com modos:
