@@ -414,6 +414,51 @@ static LENTOS: AtomicU32 = AtomicU32::new(0);
 static PIOR_US: AtomicU32 = AtomicU32::new(0);
 static BLOCO_US: AtomicU32 = AtomicU32::new(0);
 
+/// Pede prioridade de tempo real para a thread do som. No PipeWire até a versão 1.0 (a do
+/// aparelho e do Ubuntu 24.04) um programa comum abre com `client.conf`, que não pede essa
+/// prioridade; quem pede é o `client-rt.conf`. Sem ela o som disputa o processador de igual para
+/// igual com a tela e com a análise das músicas, e estala. Nas versões novas o `client.conf` já
+/// pede (e este arquivo pode nem existir: aí não mexe em nada).
+/// Chamado no começo do programa, antes de existir outra thread.
+pub fn pedir_tempo_real() {
+    if std::env::var_os("PIPEWIRE_CONFIG_NAME").is_some() {
+        return;
+    }
+    let casa = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")));
+    let pastas = casa.into_iter().chain(["/etc", "/usr/share"].map(std::path::PathBuf::from));
+    if pastas.into_iter().any(|p| p.join("pipewire/client-rt.conf").is_file()) {
+        std::env::set_var("PIPEWIRE_CONFIG_NAME", "client-rt.conf");
+    }
+}
+
+/// Thread que faz o som (para o registro dizer se ela tem prioridade de tempo real).
+static TID_SOM: AtomicI32 = AtomicI32::new(0);
+
+/// O som tem prioridade de tempo real (passa na frente da tela, da análise e do pendrive)?
+/// Sem ela o som estala quando o computador está ocupado ou quente. No aparelho quem dá a
+/// permissão é `/etc/security/limits.d/30-dj-os.conf`; no PC, o serviço rtkit.
+#[cfg(target_os = "linux")]
+fn prioridade_do_som(tid: i32) -> String {
+    let politica = unsafe { libc::sched_getscheduler(tid) } & !libc::SCHED_RESET_ON_FORK;
+    if politica == libc::SCHED_FIFO || politica == libc::SCHED_RR {
+        let mut p: libc::sched_param = unsafe { std::mem::zeroed() };
+        unsafe { libc::sched_getparam(tid, &mut p) };
+        format!("prioridade de tempo real ligada (nível {})", p.sched_priority)
+    } else {
+        "SEM prioridade de tempo real (pode estalar com o computador ocupado)".into()
+    }
+}
+
+/// Anota a prioridade do som quando a saída abre (a thread do som é outra a cada abertura).
+fn registrar_prioridade(vista: &mut i32) {
+    let tid = TID_SOM.load(Ordering::Relaxed);
+    if tid != 0 && tid != *vista {
+        *vista = tid;
+        #[cfg(target_os = "linux")]
+        eprintln!("[djos] som: {}", prioridade_do_som(tid));
+    }
+}
+
 /// Temperatura mais alta dos sensores (°C) e a velocidade do processador agora (MHz).
 fn temperatura_e_mhz() -> (Option<i64>, Option<i64>) {
     let mut t = None;
@@ -663,6 +708,10 @@ fn open_main(slot: &EngineSlot, sink: Option<&Sink>) -> Result<(Stream, String),
                 ATRASOS.fetch_add(1, Ordering::Relaxed);
             }
         }
+        if ultimo.is_none() {
+            #[cfg(target_os = "linux")]
+            TID_SOM.store(unsafe { libc::gettid() }, Ordering::Relaxed);
+        }
         ultimo = Some(agora);
         match s2.try_lock().as_mut().and_then(|g| g.as_mut()) {
             Some(e) => e.process(out, ch),
@@ -776,11 +825,13 @@ pub fn start(parts: Parts, snap: SharedSnap) -> Result<PwOutput, (String, Parts)
             // Troca vista nas últimas consultas (nome da saída nova) e quantas vezes seguidas.
             let mut pending: (Option<String>, u32) = (None, 0);
             let mut voltas = 0u32;
+            let mut tid_visto = 0;
             let mut aberto_com = BUFFER.load(Ordering::Relaxed);
             let mut saida_pedida = PREFERIDA.lock().clone();
             loop {
                 std::thread::sleep(Duration::from_secs(3));
                 voltas += 1;
+                registrar_prioridade(&mut tid_visto);
                 if voltas % 20 == 0 {
                     registrar_atrasos();
                 }

@@ -62,6 +62,17 @@ para diferenciar firmwares de teste da mesma versão.
   - **Efeitos novos**: ROLL, CRUSH, BRAKE e BACKSPIN (WAVs para ouvir com `dj-os --demo-efeitos`).
 
 ### Corrigido
+- **Som sem prioridade (chiado e estalos, principalmente com música longa):** o som disputava o
+  processador de igual para igual com a tela, a análise e o pendrive. Quanto mais longa a
+  música, mais tempo abrindo e analisando, e mais estalo. Eram dois defeitos:
+  - no aparelho, o PipeWire pedia prioridade de tempo real e o sistema negava (faltava a
+    permissão; o registro mostrava "RTKit error"). Agora o usuário do aparelho tem a permissão
+    (`/etc/security/limits.d/30-dj-os.conf`);
+  - o DJ OS abria o PipeWire com a configuração comum, que no PipeWire 1.0 não pede prioridade
+    para a thread do som (no aparelho e no PC). Agora abre com a de tempo real
+    (`client-rt.conf`, quando existe).
+  - O registro anota ao abrir a saída: "som: prioridade de tempo real ligada (nível N)" ou
+    "SEM prioridade de tempo real".
 - **"NO AR" e a trava do LOAD consideram o crossfader:** com o crossfader fechado para o outro
   lado o deck não está no ar (mesmo com o fader do canal em cima) e o LOAD funciona.
 - **Voltar para um firmware anterior não perde mais os cues:** a memória de cada música continua

@@ -38,6 +38,7 @@ use shared::{CmdTx, Snapshot};
 use std::sync::Arc;
 
 fn main() -> eframe::Result<()> {
+    pw_out::pedir_tempo_real();
     app::migrate_old_data_dir();
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--listar-audio") {
