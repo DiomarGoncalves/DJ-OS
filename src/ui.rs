@@ -5,12 +5,12 @@ mod principal;
 pub mod skin;
 
 use crate::app::{Loader, SharedApp};
-use crate::engine::fx::{beats_label, step_beats, FxKind};
+use crate::engine::fx::step_beats;
 use crate::library::Focus;
 use crate::search;
 use crate::shared::{Cmd, CmdTx, DeckSnap, SharedSnap, Snapshot};
-use crate::track::{Track, BINS_PER_SEC};
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Key, Mesh, Painter, Rect, Shape, Stroke};
+use crate::track::Track;
+use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Key, Painter, Rect, Stroke};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -41,32 +41,6 @@ pub fn weak_gpu(renderer: &str) -> bool {
 /// Paleta da waveform escolhida nas configurações (graves, médios, agudos).
 pub(crate) static PALETTE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-fn wave_colors() -> [Color32; 3] {
-    match PALETTE.load(std::sync::atomic::Ordering::Relaxed) {
-        1 => [Color32::from_rgb(230, 45, 45), Color32::from_rgb(45, 210, 90), Color32::from_rgb(70, 150, 255)],
-        2 => [Color32::from_rgb(25, 75, 210), Color32::from_rgb(70, 155, 255), Color32::from_rgb(195, 230, 255)],
-        _ => [Color32::from_rgb(40, 110, 255), Color32::from_rgb(255, 165, 50), Color32::from_rgb(245, 245, 255)],
-    }
-}
-const HOTCUE_COLORS: [Color32; 8] = [
-    Color32::from_rgb(255, 60, 60),
-    Color32::from_rgb(255, 150, 30),
-    Color32::from_rgb(255, 230, 40),
-    Color32::from_rgb(60, 220, 90),
-    Color32::from_rgb(40, 200, 230),
-    Color32::from_rgb(60, 110, 255),
-    Color32::from_rgb(180, 80, 255),
-    Color32::from_rgb(255, 80, 200),
-];
-
-fn deck_color(d: usize) -> Color32 {
-    if d % 2 == 0 {
-        Color32::from_rgb(50, 195, 255)
-    } else {
-        Color32::from_rgb(255, 120, 50)
-    }
-}
-
 /// Zoom da waveform: segundos visíveis (5 níveis, como na XDJ). Tocar na waveform troca.
 pub const ZOOMS: [f64; 5] = [2.0, 4.0, 6.0, 10.0, 16.0];
 
@@ -87,8 +61,6 @@ pub struct DjOsApp {
     frame: u64,
     /// Contagem ao vivo da pesquisa: (texto, quantas músicas).
     search_count: (String, usize),
-    /// Pads da tela apertados (por deck), para mandar o "soltar".
-    pad_touch: [[bool; 8]; 4],
     last_frame: std::time::Instant,
     /// Estado dos decks guardado por último (para retomar depois de um travamento).
     resume_saved: String,
@@ -138,19 +110,6 @@ fn key_badge(p: &Painter, right_center: egui::Pos2, key: u8, size: f32) -> Rect 
     rect
 }
 
-fn badge(p: &Painter, x: f32, cy: f32, label: &str, on: bool, color: Color32) -> f32 {
-    let font = FontId::proportional(12.0);
-    let g = p.layout_no_wrap(label.to_string(), font, if on { BG } else { DIM });
-    let r = Rect::from_min_size(pos2(x, cy - 10.0), vec2(g.size().x + 14.0, 20.0));
-    if on {
-        p.rect_filled(r, 4.0, color);
-    } else {
-        p.rect_stroke(r, 4.0, Stroke::new(1.0_f32, LINE));
-    }
-    p.galley(pos2(r.left() + 7.0, cy - g.size().y / 2.0), g, TEXT);
-    r.right() + 6.0
-}
-
 impl DjOsApp {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
@@ -168,7 +127,7 @@ impl DjOsApp {
             eprintln!("[djos] placa de vídeo: {renderer}{}", if weak_gpu(&renderer) { " (modo leve automático)" } else { "" });
             app.lock().gpu = renderer;
         }
-        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), pad_touch: [[false; 8]; 4], last_frame: std::time::Instant::now(), lim_until: std::time::Instant::now(), history_at: std::time::Instant::now(), resume_saved: String::new(), resume_at: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
+        Self { app, cmd, snap, loader, trash, overview: Default::default(), xf: 0.5, frame: 0, search_count: (String::new(), 0), last_frame: std::time::Instant::now(), lim_until: std::time::Instant::now(), history_at: std::time::Instant::now(), resume_saved: String::new(), resume_at: std::time::Instant::now(), wheel: Default::default(), persist: Default::default() }
     }
 
     /// Atalhos para testar sem a controladora.
@@ -558,232 +517,7 @@ impl DjOsApp {
     }
 }
 
-/// Waveform rolante de 3 bandas com grade de batidas, loop, cues e agulha no centro.
-fn draw_wave(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap, loading: Option<&str>, zoom_secs: f64) {
-    let pal = wave_colors();
-    p.rect_filled(r, 0.0, BG);
-    let tag = Rect::from_min_size(r.min, vec2(26.0, r.height()));
-    p.rect_filled(tag, 0.0, deck_color(d).gamma_multiply(0.85));
-    text(p, tag.center(), Align2::CENTER_CENTER, d + 1, 20.0, BG);
-    let r = Rect::from_min_max(pos2(r.left() + 26.0, r.top()), r.max);
-    let mid = r.center().y;
-    p.line_segment([pos2(r.left(), mid), pos2(r.right(), mid)], Stroke::new(1.0_f32, PANEL2));
-
-    let Some(t) = t else {
-        let msg = loading.map_or("Sem música".to_string(), |n| format!("Carregando {n}…"));
-        text(p, r.center(), Align2::CENTER_CENTER, msg, 16.0, DIM);
-        return;
-    };
-    let pos_s = s.pos / t.sr;
-    let w = r.width();
-    let px_per_s = w as f64 / zoom_secs;
-    let hh = r.height() * 0.47;
-    let nb = t.wave.low.len();
-    let center_x = r.left() + w / 2.0;
-    let t_of = |x: f32| pos_s + (x - center_x) as f64 / px_per_s;
-    let x_of = |sec: f64| center_x + ((sec - pos_s) * px_per_s) as f32;
-
-    // Região do loop.
-    if let (true, Some(a), Some(b)) = (s.loop_on, s.loop_in, s.loop_out) {
-        let (xa, xb) = (x_of(a / t.sr).max(r.left()), x_of(b / t.sr).min(r.right()));
-        if xb > xa {
-            p.rect_filled(Rect::from_x_y_ranges(xa..=xb, r.y_range()), 0.0, ACCENT.gamma_multiply(0.15));
-        }
-    }
-
-    let mut mesh = Mesh::default();
-    // Modo leve: colunas de 2 px e só graves + médios (4x menos retângulos).
-    let (step, layers) = if light() { (2.0f32, 2) } else { (1.0f32, 3) };
-    let mut x = r.left();
-    while x < r.right() {
-        let ts = t_of(x);
-        if ts >= 0.0 {
-            let b0 = (ts * BINS_PER_SEC) as usize;
-            if b0 >= nb {
-                break;
-            }
-            let b1 = ((t_of(x + step) * BINS_PER_SEC) as usize).clamp(b0 + 1, nb);
-            let (mut l, mut m, mut h) = (0u8, 0u8, 0u8);
-            for i in b0..b1 {
-                l = l.max(t.wave.low[i]);
-                m = m.max(t.wave.mid[i]);
-                h = h.max(t.wave.high[i]);
-            }
-            let dim = if ts < pos_s { 0.45 } else { 1.0 };
-            for (v, scale, col) in [(l, 1.0, pal[0]), (m, 0.85, pal[1]), (h, 0.6, pal[2])].into_iter().take(layers) {
-                let a = v as f32 / 255.0 * hh * scale;
-                if a > 0.5 {
-                    mesh.add_colored_rect(Rect::from_min_max(pos2(x, mid - a), pos2(x + step, mid + a)), col.gamma_multiply(dim));
-                }
-            }
-        }
-        x += step;
-    }
-    p.add(Shape::mesh(mesh));
-
-    // Grade de batidas (a cada 4, mais forte).
-    if t.bpm() > 0.0 {
-        let bl = t.beat_len() / t.sr;
-        let fb = t.first_beat() / t.sr;
-        let k0 = ((t_of(r.left()) - fb) / bl).ceil() as i64;
-        let k1 = ((t_of(r.right()) - fb) / bl).floor() as i64;
-        for k in k0..=k1 {
-            let bx = x_of(fb + k as f64 * bl);
-            let down = k.rem_euclid(4) == 0;
-            let c = if down { Color32::from_rgba_unmultiplied(255, 255, 255, 110) } else { Color32::from_rgba_unmultiplied(255, 255, 255, 40) };
-            p.line_segment([pos2(bx, r.top()), pos2(bx, r.bottom())], Stroke::new(1.0_f32, c));
-            if down {
-                p.rect_filled(Rect::from_min_size(pos2(bx - 3.0, r.top()), vec2(6.0, 4.0)), 0.0, RED);
-            }
-        }
-    }
-
-    // Cue e hotcues.
-    let cx = x_of(s.cue / t.sr);
-    if r.x_range().contains(cx) {
-        p.add(Shape::convex_polygon(
-            vec![pos2(cx - 6.0, r.bottom()), pos2(cx + 6.0, r.bottom()), pos2(cx, r.bottom() - 8.0)],
-            ORANGE,
-            Stroke::NONE,
-        ));
-    }
-    for (i, h) in s.hotcues.iter().enumerate() {
-        if let Some(hp) = h {
-            let hx = x_of(hp / t.sr);
-            if r.x_range().contains(hx) {
-                p.line_segment([pos2(hx, r.top()), pos2(hx, r.bottom())], Stroke::new(1.5_f32, HOTCUE_COLORS[i]));
-                let lab = Rect::from_min_size(pos2(hx, r.top()), vec2(14.0, 14.0));
-                p.rect_filled(lab, 2.0, HOTCUE_COLORS[i]);
-                text(p, lab.center(), Align2::CENTER_CENTER, i + 1, 11.0, BG);
-            }
-        }
-    }
-
-    p.line_segment([pos2(center_x, r.top()), pos2(center_x, r.bottom())], Stroke::new(2.0_f32, Color32::WHITE));
-}
-
 impl DjOsApp {
-    fn draw_deck_info(&mut self, ui: &mut egui::Ui, p: &Painter, r: Rect, d: usize, t: Option<Arc<Track>>, s: &DeckSnap) {
-        p.rect_filled(r, 6.0, PANEL);
-        let col = deck_color(d);
-        let r = r.shrink(10.0);
-        let p = p.with_clip_rect(r.expand(2.0));
-
-        let num = Rect::from_min_size(r.min, vec2(34.0, 34.0));
-        p.rect_filled(num, 6.0, col);
-        text(&p, num.center(), Align2::CENTER_CENTER, d + 1, 22.0, BG);
-
-        let bpm_text = if s.loaded && s.bpm > 0.0 { format!("{:.2}", s.bpm) } else { "--.--".into() };
-        let bpm_rect = mono(&p, pos2(r.right(), r.top() - 2.0), Align2::RIGHT_TOP, bpm_text, 30.0, TEXT);
-        // Tom da música ao lado do BPM (mostra "--" enquanto não foi analisado).
-        // Tocar no BPM abre o ajuste da grade de batidas.
-        if t.is_some() && !s.live && ui.interact(bpm_rect.expand(4.0), ui.id().with(("bpm", d)), egui::Sense::click()).clicked() {
-            let mut a = self.app.lock();
-            let open = a.grid_edit.as_ref().is_some_and(|g| g.deck == d);
-            a.grid_edit = if open { None } else { Some(crate::grid::GridEdit::new(d)) };
-        }
-        let bpm_rect = match t.as_ref().and_then(|t| crate::key::from_raw(t.key)).filter(|_| !s.live) {
-            Some(k) => key_badge(&p, pos2(bpm_rect.left() - 8.0, bpm_rect.center().y), k, 15.0).union(bpm_rect),
-            None => bpm_rect,
-        };
-        let pitch = (s.rate - 1.0) * 100.0;
-        // Sem estado do motor (áudio parado) mostra traços em vez de números sem sentido.
-        // Ganho automático aplicado (quando corrige mais de 0,1 dB) antes do pitch.
-        let ag = if s.loaded && !s.live && s.auto_gain_db.abs() >= 0.1 { format!("AG {:+.1} dB   ", s.auto_gain_db) } else { String::new() };
-        let pitch_text = if s.rate > 0.0 { format!("{ag}{:+.2}%  ±{:.0}", pitch, s.pitch_range * 100.0) } else { "--".into() };
-        mono(
-            &p,
-            pos2(r.right(), bpm_rect.bottom() + 1.0),
-            Align2::RIGHT_TOP,
-            pitch_text,
-            13.0,
-            if pitch.abs() < 0.005 { DIM } else { ACCENT },
-        );
-
-        let title_clip = Rect::from_min_max(pos2(num.right() + 10.0, r.top()), pos2(bpm_rect.left() - 10.0, r.top() + 44.0));
-        let tp = p.with_clip_rect(title_clip);
-        match &t {
-            _ if s.live => {
-                let phone = self.app.lock().phone_status.clone();
-                text(&tp, title_clip.left_top(), Align2::LEFT_TOP, "📱 CELULAR (Bluetooth)", 19.0, ACCENT);
-                text(&tp, title_clip.left_top() + vec2(0.0, 23.0), Align2::LEFT_TOP, &phone, 14.0, DIM);
-            }
-            Some(t) => {
-                text(&tp, title_clip.left_top(), Align2::LEFT_TOP, &t.title, 19.0, TEXT);
-                text(&tp, title_clip.left_top() + vec2(0.0, 23.0), Align2::LEFT_TOP, &t.artist, 14.0, DIM);
-            }
-            None => {
-                text(&tp, title_clip.left_top(), Align2::LEFT_TOP, "Deck vazio", 19.0, DIM);
-            }
-        }
-
-        // Linha de tempo e estados.
-        let y = r.top() + 58.0;
-        if let Some(t) = &t {
-            let rem = (s.frames - s.pos) / t.sr;
-            let warn = rem < 30.0 && s.playing;
-            let blink = warn && (s.pos / t.sr * 2.0) as i64 % 2 == 0;
-            let rr = mono(&p, pos2(r.left(), y), Align2::LEFT_CENTER, format!("-{}", fmt_time(rem)), 24.0, if blink { RED } else { TEXT });
-            mono(&p, pos2(rr.right() + 10.0, y + 3.0), Align2::LEFT_CENTER, fmt_time(s.pos / t.sr), 13.0, DIM);
-        }
-        let mut bx = r.left() + 250.0;
-        bx = badge(&p, bx, y, "SYNC", s.sync_ok, ACCENT);
-        bx = badge(&p, bx, y, if s.vinyl { "VINIL" } else { "CDJ" }, s.vinyl, col);
-        // KEYLOCK: tocar liga/desliga.
-        let kx = bx;
-        bx = badge(&p, bx, y, "KEYLOCK", s.keylock, ACCENT);
-        let kr = Rect::from_min_max(pos2(kx, y - 10.0), pos2(bx - 6.0, y + 10.0));
-        if ui.interact(kr, ui.id().with(("keylock", d)), egui::Sense::click()).clicked() {
-            self.cmd.send(Cmd::Keylock { deck: d, on: !s.keylock });
-        }
-        if s.loop_on {
-            bx = badge(&p, bx, y, &format!("LOOP {}", beats_label(s.loop_beats as f32)), true, ACCENT);
-        }
-        if s.roll_beats > 0.0 {
-            bx = badge(&p, bx, y, &format!("ROLL {}", beats_label(s.roll_beats as f32)), true, ORANGE);
-        }
-        if s.key_semis != 0.0 {
-            bx = badge(&p, bx, y, &format!("TOM {:+}", s.key_semis), true, ORANGE);
-        }
-        let _ = bx;
-
-        // Visão geral da música inteira.
-        let ov = Rect::from_min_max(pos2(r.left(), y + 18.0), pos2(r.right(), r.bottom().max(y + 40.0)));
-        p.rect_filled(ov, 3.0, BG);
-        if let Some(t) = &t {
-            let w = ov.width() as usize;
-            let pal = wave_colors();
-            let o = self.overview_for(d, t, w);
-            let progress = (s.pos / s.frames.max(1.0)) as f32;
-            let mut mesh = Mesh::default();
-            let h2 = ov.height() / 2.0;
-            // Modo leve: 1 coluna a cada 2 px e só uma camada.
-            let (every, layers) = if light() { (2usize, 1) } else { (1usize, 3) };
-            for (i, c) in o.cols.iter().enumerate().step_by(every) {
-                let x = ov.left() + i as f32;
-                let dim = if (i as f32) < progress * w as f32 { 0.4 } else { 1.0 };
-                for (v, sc, colr) in [(c[0], 1.0, pal[0]), (c[1], 0.8, pal[1]), (c[2], 0.55, pal[2])].into_iter().take(layers) {
-                    let a = v as f32 / 255.0 * h2 * sc;
-                    if a > 0.3 {
-                        mesh.add_colored_rect(
-                            Rect::from_min_max(pos2(x, ov.center().y - a), pos2(x + every as f32, ov.center().y + a)),
-                            colr.gamma_multiply(dim),
-                        );
-                    }
-                }
-            }
-            p.add(Shape::mesh(mesh));
-            for (i, h) in s.hotcues.iter().enumerate() {
-                if let Some(hp) = h {
-                    let hx = ov.left() + (hp / s.frames.max(1.0)) as f32 * ov.width();
-                    p.line_segment([pos2(hx, ov.top()), pos2(hx, ov.bottom())], Stroke::new(1.0_f32, HOTCUE_COLORS[i]));
-                }
-            }
-            let px = ov.left() + progress * ov.width();
-            p.line_segment([pos2(px, ov.top() - 2.0), pos2(px, ov.bottom() + 2.0)], Stroke::new(2.0_f32, Color32::WHITE));
-        }
-
-    }
 
     /// Coluna do efeito ao lado da waveform: alavanca, nome, batida e força. Durante a escolha
     /// (FX 1) mostra a lista inteira. Ao toque: alavanca liga/desliga, nome troca, −/+ mudam a batida.
@@ -871,135 +605,6 @@ impl DjOsApp {
         }
         if done {
             self.app.lock().grid_edit = None;
-        }
-    }
-
-    fn draw_fx(&self, ui: &mut egui::Ui, p: &Painter, r: Rect, side: usize, d: usize, s: &DeckSnap, pick: Option<FxKind>) {
-        let f = s.fx[0];
-        let col = deck_color(d);
-        p.rect_filled(r, 6.0, if f.active { col.gamma_multiply(0.25) } else { PANEL });
-        let r = r.shrink(10.0);
-        let p = p.with_clip_rect(r.expand(2.0));
-        let id = ui.id().with(("fx", side));
-        text(&p, r.left_top(), Align2::LEFT_TOP, format!("EFEITO · DECK {}", d + 1), 12.0, DIM);
-
-        if let Some(k) = pick {
-            let n = FxKind::ALL.len() as f32;
-            let h = ((r.height() - 20.0) / n).min(26.0);
-            for (i, kind) in FxKind::ALL.iter().enumerate() {
-                let cell = Rect::from_min_size(pos2(r.left(), r.top() + 20.0 + i as f32 * h), vec2(r.width(), h - 3.0));
-                let on = *kind == k;
-                p.rect_filled(cell, 4.0, if on { ACCENT } else { PANEL2 });
-                text(&p, cell.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, kind.name(), 14.0, if on { BG } else { DIM });
-            }
-            return;
-        }
-
-        let lever = Rect::from_min_size(pos2(r.right() - 64.0, r.top()), vec2(64.0, 30.0));
-        p.rect_filled(lever, 5.0, if f.active { col } else { PANEL2 });
-        text(&p, lever.center(), Align2::CENTER_CENTER, if f.active { "ON" } else { "OFF" }, 15.0, if f.active { BG } else { DIM });
-        if ui.interact(lever, id.with("alavanca"), egui::Sense::click()).clicked() {
-            if f.level < 0.01 {
-                self.cmd.send(Cmd::FxLevel { deck: d, slot: 0, v: 0.6 });
-            }
-            self.cmd.send(Cmd::FxActive { deck: d, slot: 0, on: !f.active });
-        }
-
-        let name = Rect::from_min_size(pos2(r.left(), r.top() + 36.0), vec2(r.width(), 34.0));
-        p.rect_filled(name, 5.0, PANEL2);
-        text(&p, name.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, f.kind.name(), 22.0, if f.active || f.sounding { TEXT } else { DIM });
-        text(&p, name.right_center() - vec2(10.0, 0.0), Align2::RIGHT_CENTER, "FX 1", 11.0, DIM);
-        if ui.interact(name, id.with("nome"), egui::Sense::click()).clicked() {
-            let mut a = self.app.lock();
-            let shown = a.fx_pick[side].map_or(f.kind, |(k, _)| k);
-            a.fx_pick[side] = Some((shown.next(1), std::time::Instant::now()));
-        }
-
-        let row = Rect::from_min_size(pos2(r.left(), name.bottom() + 8.0), vec2(r.width(), 44.0));
-        let minus = Rect::from_min_size(row.min, vec2(44.0, row.height()));
-        let plus = Rect::from_min_size(pos2(row.right() - 44.0, row.top()), vec2(44.0, row.height()));
-        for (b, label, dir) in [(minus, "-", -1), (plus, "+", 1)] {
-            p.rect_filled(b, 5.0, PANEL2);
-            mono(&p, b.center(), Align2::CENTER_CENTER, label, 22.0, TEXT);
-            if f.kind.uses_beats() && ui.interact(b, id.with(label), egui::Sense::click()).clicked() {
-                self.cmd.send(Cmd::FxBeats { deck: d, slot: 0, beats: step_beats(f.beats, dir) });
-            }
-        }
-        let beats = if f.kind.uses_beats() { beats_label(f.beats) } else { "--".into() };
-        mono(&p, row.center(), Align2::CENTER_CENTER, beats, 28.0, ACCENT);
-
-        let bar_y = row.bottom() + 14.0;
-        if bar_y + 20.0 < r.bottom() {
-            text(&p, pos2(r.left(), bar_y), Align2::LEFT_TOP, "FORÇA", 11.0, DIM);
-            mono(&p, pos2(r.right(), bar_y), Align2::RIGHT_TOP, format!("{:.0}%", f.level * 100.0), 13.0, TEXT);
-            let bar = Rect::from_min_size(pos2(r.left(), bar_y + 18.0), vec2(r.width(), 10.0));
-            p.rect_filled(bar, 4.0, BG);
-            p.rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * f.level, 10.0)), 4.0, col);
-        }
-    }
-
-    /// Pads de um deck: modo atual e o estado de cada pad. Tocar no nome do modo troca o modo;
-    /// tocar num pad faz o mesmo que o pad da REV1 (segurar vale para hotcue, roll e trans).
-    #[allow(clippy::too_many_arguments)]
-    fn draw_pads(&mut self, ui: &mut egui::Ui, p: &Painter, r: Rect, d: usize, s: &DeckSnap, snap: &Snapshot, sampler_names: &[Option<String>], scratch_names: &[Option<String>]) {
-        use crate::app::PadMode;
-        use crate::midi::rev1::{pad_action, AUTOLOOP_PADS, BEATJUMP_PADS, ROLL_PADS, TRACKING_SEMIS};
-        let mode = self.app.lock().pad_mode[d];
-        let col = deck_color(d);
-        p.rect_filled(r, 6.0, PANEL);
-        let r = r.shrink(8.0);
-        let head = Rect::from_min_size(r.min, vec2(r.width(), 22.0));
-        let hp = p.with_clip_rect(head);
-        text(&hp, head.left_center(), Align2::LEFT_CENTER, format!("PADS · DECK {}", d + 1), 11.0, DIM);
-        text(&hp, head.right_center(), Align2::RIGHT_CENTER, mode.name(), 14.0, col);
-        if ui.interact(head, ui.id().with(("modo", d)), egui::Sense::click()).clicked() {
-            let next = PadMode::ALL[(PadMode::ALL.iter().position(|m| *m == mode).unwrap_or(0) + 1) % 8];
-            self.app.lock().pad_mode[d] = next;
-        }
-        let blink = (self.frame / 24) % 2 == 0;
-        let gw = (r.width() - 3.0 * 6.0) / 4.0;
-        let gh = ((r.bottom() - head.bottom() - 6.0 - 6.0) / 2.0).max(20.0);
-        const TRANS: [&str; 8] = ["1", "1/2", "1/4", "1/8", "1/16", "2/3", "1/3", "1/6"];
-        for i in 0..8 {
-            let cell = Rect::from_min_size(
-                pos2(r.left() + (i % 4) as f32 * (gw + 6.0), head.bottom() + 6.0 + (i / 4) as f32 * (gh + 6.0)),
-                vec2(gw, gh),
-            );
-            let short = |n: &Option<String>| n.clone().unwrap_or_else(|| "vazio".into());
-            let (label, fill): (String, Option<Color32>) = match mode {
-                PadMode::HotCue => ((i + 1).to_string(), s.hotcues[i].map(|_| HOTCUE_COLORS[i])),
-                PadMode::AutoLoop => (
-                    beats_label(AUTOLOOP_PADS[i] as f32),
-                    (s.loop_on && (s.loop_beats - AUTOLOOP_PADS[i]).abs() < 1e-9).then_some(ACCENT),
-                ),
-                PadMode::Tracking => (format!("{:+}", TRACKING_SEMIS[i]), (s.key_semis == TRACKING_SEMIS[i] && s.key_semis != 0.0).then_some(ORANGE)),
-                PadMode::Sampler => (
-                    short(&sampler_names[i]),
-                    sampler_names[i].as_ref().map(|_| if snap.sampler_playing[i] && blink { ACCENT } else { col.gamma_multiply(0.6) }),
-                ),
-                PadMode::BeatJump => (format!("{:+}", BEATJUMP_PADS[i]), None),
-                PadMode::Roll => (beats_label(ROLL_PADS[i] as f32), ((s.roll_beats - ROLL_PADS[i]).abs() < 1e-9).then_some(ORANGE)),
-                PadMode::Trans => (TRANS[i].to_string(), None),
-                PadMode::ScratchBank => (short(&scratch_names[i]), scratch_names[i].as_ref().map(|_| col.gamma_multiply(0.6))),
-            };
-            match fill {
-                Some(c) => {
-                    p.rect_filled(cell, 5.0, c);
-                }
-                None => {
-                    p.rect_filled(cell, 5.0, PANEL2);
-                    p.rect_stroke(cell, 5.0, Stroke::new(1.0_f32, LINE));
-                }
-            }
-            let cp = p.with_clip_rect(cell.shrink(2.0));
-            text(&cp, cell.center(), Align2::CENTER_CENTER, label, 13.0, if fill.is_some() { BG } else { TEXT });
-
-            let resp = ui.interact(cell, ui.id().with(("pad", d, i)), egui::Sense::click_and_drag());
-            let down = resp.is_pointer_button_down_on();
-            if down != self.pad_touch[d][i] {
-                self.pad_touch[d][i] = down;
-                pad_action(&self.app, &self.cmd, snap, d, mode, i, false, down);
-            }
         }
     }
 

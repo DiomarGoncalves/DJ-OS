@@ -136,7 +136,6 @@ impl CmdTx {
 pub struct FxSnap {
     pub kind: FxKind,
     pub active: bool,
-    pub sounding: bool,
     pub level: f32,
     pub beats: f32,
 }

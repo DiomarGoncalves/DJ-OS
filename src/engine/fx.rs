@@ -74,10 +74,6 @@ impl FxKind {
         }
     }
 
-    pub fn uses_beats(self) -> bool {
-        !matches!(self, FxKind::Reverb | FxKind::Noise | FxKind::Crush)
-    }
-
     fn has_tail(self) -> bool {
         matches!(self, FxKind::Echo | FxKind::PingPong | FxKind::Reverb)
     }

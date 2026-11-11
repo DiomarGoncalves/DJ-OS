@@ -1039,7 +1039,7 @@ impl Deck {
             live: false,
             fx: std::array::from_fn(|i| {
                 let f = &self.fx[i];
-                FxSnap { kind: f.kind, active: f.active, sounding: f.sounding(), level: f.level(), beats: f.beats }
+                FxSnap { kind: f.kind, active: f.active, level: f.level(), beats: f.beats }
             }),
         }
     }
