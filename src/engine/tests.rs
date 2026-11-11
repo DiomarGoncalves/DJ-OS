@@ -1221,3 +1221,108 @@ fn roll_escolhido_com_a_alavanca_empurrada_nao_cala_o_deck() {
     let fim = f.process([0.5, 0.5], &ctx)[0];
     assert!(fim.abs() > 0.4, "repetindo o que gravou, não um vazio: {fim}");
 }
+
+/// Senoide pura de `f` Hz (sem cliques), para medir quanto de cada frequência passa.
+fn senoide(f: f64, secs: f64) -> Arc<Track> {
+    let mut t = synthetic(secs, FS, 120.0, 1000.0);
+    for (i, s) in t.data.chunks_exact_mut(2).enumerate() {
+        let v = (0.3 * (2.0 * std::f64::consts::PI * f * i as f64 / FS).sin()) as f32;
+        s[0] = v;
+        s[1] = v;
+    }
+    Arc::new(t)
+}
+
+/// Quanto (em dB) uma senoide de `f` Hz sai do deck em relação ao que entrou.
+fn resposta_db(f: f64, prepara: impl Fn(&mut Deck)) -> f64 {
+    let mut d = Deck::new(FS);
+    d.load(senoide(f, 20.0));
+    d.set_fader(1.0);
+    d.pos = FS;
+    prepara(&mut d);
+    d.play_toggle();
+    render(&mut d, 48000);
+    let out = render(&mut d, 48000 * 4);
+    let rms = (out.iter().map(|s| (s[0] as f64).powi(2)).sum::<f64>() / out.len() as f64).sqrt();
+    20.0 * (rms / (0.3 / 2f64.sqrt())).log10()
+}
+
+#[test]
+fn grave_passa_inteiro() {
+    // O deck não pode tirar grave: de 30 Hz para cima a senoide sai no mesmo nível em que
+    // entrou, tocando normal, com o pitch mexido, com keylock e com o tom mudado.
+    for f in [30.0, 40.0, 50.0, 60.0, 80.0, 100.0, 150.0, 250.0, 1000.0] {
+        let normal = resposta_db(f, |_| {});
+        let pitch = resposta_db(f, |d| d.set_tempo_fader(0.5));
+        assert!(normal.abs() < 0.1 && pitch.abs() < 0.1, "{f} Hz: normal {normal:+.2} dB, com pitch {pitch:+.2} dB");
+        let keylock = [0.5, 1.0, -1.0].map(|v| resposta_db(f, |d| { d.keylock = true; d.set_tempo_fader(v); }));
+        let tom = resposta_db(f, |d| d.key_shift = 1.0);
+        assert!(keylock.iter().all(|k| k.abs() < 1.0) && tom.abs() < 1.0, "{f} Hz: keylock {keylock:+.2?} dB, tom {tom:+.2} dB");
+    }
+}
+
+/// Energia (RMS) abaixo de `fc` Hz: passa-baixas de 4 polos, só para comparar entrada e saída.
+fn rms_abaixo(x: &[f32], fs: f64, fc: f64) -> f64 {
+    let k = (std::f64::consts::PI * fc / fs).tan();
+    let q = std::f64::consts::FRAC_1_SQRT_2;
+    let a0 = 1.0 + k / q + k * k;
+    let (b0, b1, a1, a2) = (k * k / a0, 2.0 * k * k / a0, 2.0 * (k * k - 1.0) / a0, (1.0 - k / q + k * k) / a0);
+    let mut z = [[0.0f64; 2]; 2];
+    let mut soma = 0.0;
+    for &v in x {
+        let mut y = v as f64;
+        for s in z.iter_mut() {
+            let o = b0 * y + s[0];
+            s[0] = b1 * y - a1 * o + s[1];
+            s[1] = b0 * y - a2 * o;
+            y = o;
+        }
+        soma += y * y;
+    }
+    (soma / x.len().max(1) as f64).sqrt()
+}
+
+/// Ferramenta: `DJOS_MEDIR=<música> cargo test medir_grave_musica -- --ignored --nocapture`
+/// mostra quanto grave a música tem e quanto sai pelo master (com e sem ganho automático) e
+/// quanto o limitador trabalhou.
+#[test]
+#[ignore]
+fn medir_grave_musica() {
+    let Ok(arq) = std::env::var("DJOS_MEDIR") else { return };
+    let t = Arc::new(crate::track::load(std::path::Path::new(&arq), true).unwrap());
+    for auto in [true, false] {
+        let mut r = rig();
+        r.send(Cmd::AutoGain(auto));
+        r.send(Cmd::Load { deck: 0, track: t.clone() });
+        r.send(Cmd::Fader { deck: 0, v: 1.0 });
+        r.send(Cmd::Crossfader(0.5));
+        r.run(512);
+        r.engine.decks[0].pos = 40.0 * t.sr;
+        let p0 = r.engine.decks[0].pos as usize;
+        r.send(Cmd::PlayToggle(0));
+        let secs = 60;
+        let mut buf = vec![0.0f32; 512 * 4];
+        let mut out = Vec::new();
+        let (mut lim_n, mut lim_min, mut blocos) = (0, 1.0f32, 0);
+        for _ in 0..(secs * FS as usize) / 512 {
+            r.engine.process(&mut buf, 4);
+            out.extend(buf.chunks_exact(4).map(|f| f[0]));
+            let g = r.engine.lim_master.min_gain;
+            r.engine.lim_master.min_gain = 1.0;
+            blocos += 1;
+            if g < 0.944 { lim_n += 1; }
+            lim_min = lim_min.min(g);
+        }
+        let n_in = ((secs as f64 * t.sr) as usize).min(t.frames - p0);
+        let ent: Vec<f32> = t.data[p0 * 2..(p0 + n_in) * 2].chunks_exact(2).map(|s| s[0]).collect();
+        let total = |x: &[f32]| (x.iter().map(|v| (*v as f64).powi(2)).sum::<f64>() / x.len() as f64).sqrt();
+        let db = |a: f64, b: f64| 20.0 * (a / b).log10();
+        let (te, ts) = (total(&ent), total(&out));
+        println!("auto {auto}: volume {:.1} LUFS, ganho automático {:+.1} dB, saída/entrada total {:+.2} dB", t.loudness, r.engine.decks[0].auto_gain_db(), db(ts, te));
+        for fc in [45.0, 70.0, 120.0, 250.0] {
+            let (e, s) = (rms_abaixo(&ent, t.sr, fc), rms_abaixo(&out, FS, fc));
+            println!("   abaixo de {fc:3.0} Hz: na música {:+.1} dB do total · na saída {:+.1} dB do total · mudou {:+.2} dB", db(e, te), db(s, ts), db(s, ts) - db(e, te));
+        }
+        println!("   limitador: abaixou mais de 0,5 dB em {:.0}% dos blocos; pior {:.1} dB; pico da saída {:.3}", 100.0 * lim_n as f64 / blocos as f64, 20.0 * lim_min.log10(), out.iter().fold(0.0f32, |a, v| a.max(v.abs())));
+    }
+}
