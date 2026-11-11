@@ -257,3 +257,20 @@ fn connect(model: &Model, mapping: Arc<Mutex<Option<Box<dyn Controller>>>>) -> R
     let conn_out = out_port.and_then(|p| output.connect(&p, "controladora-out").ok());
     Ok((conn_in, conn_out))
 }
+
+/// Onde os faders de canal estão de verdade na controladora (último valor que ela mandou; sem
+/// valor = ainda não foram mexidos). O automix mexe nos faders "por dentro" e usa isto para
+/// devolver cada um ao lugar ao desligar.
+static FADER_FISICO: [std::sync::atomic::AtomicU32; crate::shared::NUM_DECKS] = [const { std::sync::atomic::AtomicU32::new(SEM_VALOR) }; crate::shared::NUM_DECKS];
+const SEM_VALOR: u32 = u32::MAX;
+
+pub fn fader_mexido(deck: usize, v: f32) {
+    if let Some(f) = FADER_FISICO.get(deck) {
+        f.store(v.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+pub fn fader_fisico(deck: usize) -> Option<f32> {
+    let b = FADER_FISICO.get(deck)?.load(std::sync::atomic::Ordering::Relaxed);
+    (b != SEM_VALOR).then(|| f32::from_bits(b))
+}

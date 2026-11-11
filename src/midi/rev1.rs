@@ -231,6 +231,7 @@ impl Rev1 {
             }
             0x13 => {
                 let x = self.v14(d, base, is_lsb, v);
+                super::fader_mexido(d, x);
                 self.send(Cmd::Fader { deck: d, v: x });
             }
             // Prato do jog (vinil ligado): scratch. Lógica do Tracking igual ao mapeamento original.

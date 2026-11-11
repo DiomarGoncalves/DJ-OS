@@ -592,7 +592,10 @@ impl Mapeado {
                 a.toast(msg);
             }
             FaixaPitch if down => send(Cmd::PitchRangeCycle(d)),
-            Volume => send(Cmd::Fader { deck: d, v: x }),
+            Volume => {
+                super::fader_mexido(d, x);
+                send(Cmd::Fader { deck: d, v: x });
+            }
             Tempo => send(Cmd::Tempo { deck: d, v: x as f64 }),
             Trim => send(Cmd::Trim { deck: d, v: x }),
             Grave => send(Cmd::Eq { deck: d, band: 0, v: x }),

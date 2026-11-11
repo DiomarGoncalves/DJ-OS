@@ -28,12 +28,15 @@ pub struct Automix {
 
 /// Liga/desliga; devolve a mensagem para a tela.
 pub fn alternar(a: &mut AppState, cmd: &CmdTx) -> String {
-    if a.automix.take().is_some() {
-        // Devolve os faders para o DJ (os de verdade valem de novo quando forem mexidos).
+    if let Some(m) = a.automix.take() {
+        // Quem está tocando continua no volume cheio (a música não some); o deck parado volta
+        // para onde o fader dele está de verdade na controladora (não entra estourando depois).
         for d in a.side {
-            cmd.send(Cmd::Fader { deck: d, v: 1.0 });
+            let tocando = m.no_ar == Some(d) || m.transicao.is_some();
+            let v = if tocando { 1.0 } else { crate::midi::fader_fisico(d).unwrap_or(1.0) };
+            cmd.send(Cmd::Fader { deck: d, v });
         }
-        return "Automix desligado".into();
+        return "Automix desligado: confira os faders e o crossfader antes de mixar".into();
     }
     a.automix = Some(Automix::default());
     cmd.send(Cmd::Crossfader(0.5));
@@ -77,42 +80,68 @@ pub fn tick(a: &mut AppState, s: &Snapshot, cmd: &CmdTx, loader: &Loader, dt: f6
     let [l, r] = a.side;
     let tocando = |d: usize| s.decks[d].playing && s.decks[d].loaded;
     let caminho = |a: &AppState, d: usize| a.decks[d].track.as_ref().map(|t| t.path.clone());
-    // A música pedida não carregou (arquivo com erro): esquece e pede outra.
-    let falhou = |a: &AppState, m: &Automix, d: usize| m.pedida.is_some() && a.decks[d].loading.is_none() && caminho(a, d) != m.pedida;
+    let carregando = |a: &AppState, d: usize| a.decks[d].loading.is_some();
+    // A música pedida já está no deck `d`.
+    let pronta = |a: &AppState, m: &Automix, d: usize| m.pedida.is_some() && caminho(a, d) == m.pedida && !carregando(a, d) && s.decks[d].loaded;
     let no_ar = m.no_ar.filter(|&d| tocando(d)).or_else(|| [l, r].into_iter().find(|&d| tocando(d)));
     match no_ar {
         None => {
-            // Nada tocando: toca a da esquerda (se ainda não tocou) ou carrega a próxima nela.
             m.transicao = None;
-            if a.decks[l].loading.is_some() || !s.decks[l].loaded && m.pedida.is_some() && !falhou(a, &m, l) {
+            // A música do deck chegou ao fim (ou ele está vazio)?
+            let acabou = |d: usize| {
+                let x = &s.decks[d];
+                !x.loaded || x.sr <= 0.0 || x.frames - x.pos < x.sr * 0.5
+            };
+            if m.no_ar.is_some_and(|p| !acabou(p)) {
+                // O DJ pausou (ou deu CUE) no deck que estava no ar: espera ele, sem trocar nada.
+            } else if let Some(d) = [l, r].into_iter().find(|&d| pronta(a, &m, d)) {
+                // A anterior acabou antes da mixagem (ou é a primeira): toca a que está pronta.
+                cmd.send(Cmd::Fader { deck: d, v: 1.0 });
+                cmd.send(Cmd::Play(d));
+                m.no_ar = Some(d);
+                m.pedida = None;
+            } else if carregando(a, l) || carregando(a, r) {
                 // Esperando carregar.
-            } else if caminho(a, l).is_some_and(|p| m.pedida.as_ref() == Some(&p) || m.pedida.is_none() && !a.lib.played.contains(&p)) && s.decks[l].loaded {
+            } else if m.no_ar.is_none() && m.pedida.is_none() && s.decks[l].loaded && caminho(a, l).is_some_and(|p| !a.lib.played.contains(&p)) {
+                // Começo: já tem uma música no deck da esquerda que ainda não tocou.
                 cmd.send(Cmd::Fader { deck: l, v: 1.0 });
                 cmd.send(Cmd::Play(l));
                 m.no_ar = Some(l);
+            } else {
+                // Carrega a próxima no deck que não era o do ar (a pedida que falhou é esquecida).
+                let d = if m.no_ar == Some(l) { r } else { l };
                 m.pedida = None;
-            } else if !carregar_proxima(a, &mut m, loader, l) {
-                a.toast("Automix desligado: acabaram as músicas (ponha na fila com SHIFT + LOAD)");
-                return;
+                if !carregar_proxima(a, &mut m, loader, d) {
+                    a.toast("Automix desligado: acabaram as músicas (ponha na fila com SHIFT + LOAD)");
+                    return;
+                }
             }
         }
         Some(p) => {
             let o = if p == l { r } else { l };
             m.no_ar = Some(p);
-            if m.transicao.is_none() && !tocando(o) && a.decks[o].loading.is_none() && (m.pedida.is_none() || falhou(a, &m, o)) {
+            // O outro deck recebe a próxima (se a pedida falhou ao carregar, pede outra). Um deck
+            // que o DJ deixou tocando no ar não é mexido.
+            if m.transicao.is_none() && !tocando(o) && !carregando(a, o) && !pronta(a, &m, o) && !s.decks[o].no_ar {
                 m.pedida = None;
                 carregar_proxima(a, &mut m, loader, o);
             }
-            let pronta = m.pedida.is_some() && caminho(a, o) == m.pedida && a.decks[o].loading.is_none() && s.decks[o].loaded;
             let sp = &s.decks[p];
             let bpm = if sp.bpm > 0.0 { sp.bpm } else { 120.0 };
             let dur = BATIDAS * 60.0 / bpm;
             let resta = if sp.sr > 0.0 { (sp.frames - sp.pos) / sp.sr / sp.rate.max(0.01) } else { f64::MAX };
             match m.transicao {
-                None if pronta && resta <= dur + 0.5 => {
-                    // Começa a próxima: no BPM e na batida da que está tocando, fader fechado.
+                None if pronta(a, &m, o) && resta <= dur + 0.5 => {
+                    // Começa a próxima com o fader fechado. BPM parecido (até 8%): no tempo e na
+                    // batida da que está tocando. BPM bem diferente: no tempo dela mesma (forçar
+                    // deixaria a música irreconhecível), só cruzando os volumes.
                     cmd.send(Cmd::Fader { deck: o, v: 0.0 });
-                    cmd.send(Cmd::Sync(o));
+                    let bo = a.decks[o].track.as_ref().map_or(0.0, |t| t.bpm());
+                    if bo > 0.0 && sp.bpm > 0.0 && (sp.bpm / bo - 1.0).abs() <= 0.08 {
+                        cmd.send(Cmd::Sync(o));
+                    } else {
+                        cmd.send(Cmd::PitchReset(o));
+                    }
                     cmd.send(Cmd::Play(o));
                     m.transicao = Some(0.0);
                     eprintln!("[djos] automix: mixando o deck {} no deck {} ({dur:.1} s)", o + 1, p + 1);
@@ -203,6 +232,22 @@ mod tests {
         let v = cmds(&mut rx);
         assert!(v.contains(&"CueStop(0)".to_string()), "{v:?}");
         assert_eq!(a.automix.as_ref().unwrap().no_ar, Some(1));
+        // O DJ pausa o deck do ar no meio da música: o automix espera, não carrega nem toca nada.
+        s.decks[0].playing = false;
+        s.decks[1].playing = false;
+        s.decks[1].pos = 20.0 * sr;
+        tick(&mut a, &s, &cmd, &loader, 0.02);
+        assert!(cmds(&mut rx).is_empty(), "pausado pelo DJ: espera");
+        assert!(a.decks.iter().all(|d| d.loading.is_none()));
+        // Próxima com BPM bem diferente (95 depois de 128): entra no tempo dela, sem SYNC.
+        s.decks[1].playing = true;
+        s.decks[1].pos = 53.0 * sr;
+        let mut t3 = synthetic(60.0, sr, 95.0, 0.25);
+        t3.path = PathBuf::from("c.wav");
+        a.decks[0].track = Some(Arc::new(t3));
+        a.automix.as_mut().unwrap().pedida = Some(PathBuf::from("c.wav"));
+        tick(&mut a, &s, &cmd, &loader, 0.02);
+        assert_eq!(cmds(&mut rx), ["Fader { deck: 0, v: 0.0 }", "PitchReset(0)", "Play(0)"]);
         // Desligar devolve os faders.
         let msg = alternar(&mut a, &cmd);
         assert!(msg.contains("desligado") && a.automix.is_none());
