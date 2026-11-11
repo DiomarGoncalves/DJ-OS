@@ -1443,8 +1443,9 @@ impl eframe::App for DjOsApp {
                 let dt = self.history_at.elapsed().as_secs_f32();
                 self.history_at = std::time::Instant::now();
                 crate::history::tick(&mut a, &snap, dt);
+                a.snap_tela = snap;
                 crate::automix::tick(&mut a, &snap, &self.cmd, &self.loader, dt as f64);
-                if a.automix.is_some() {
+                if a.automix.is_some() || a.decks.iter().any(|m| m.loading.is_some()) {
                     // Ligado e esperando (carregando, nada tocando): a tela continua chamando.
                     ctx.request_repaint_after(Duration::from_millis(100));
                 }
@@ -1463,7 +1464,7 @@ impl eframe::App for DjOsApp {
                     a.wave_zoom,
                     a.big_browser,
                     a.decks.iter().map(|m| m.track.clone()).collect::<Vec<_>>(),
-                    a.decks.iter().map(|m| m.loading.clone()).collect::<Vec<_>>(),
+                    a.decks.iter().map(|m| m.loading.as_deref().map(crate::app::carregando)).collect::<Vec<_>>(),
                     a.midi_status.clone(),
                     a.audio_status.clone(),
                     a.toast.as_ref().map(|(m, _)| m.clone()),

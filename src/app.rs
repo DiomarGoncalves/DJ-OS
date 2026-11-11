@@ -91,6 +91,8 @@ pub struct AppState {
     pub phone_status: String,
     pub fw: crate::firmware::FwState,
     pub rec: crate::record::RecState,
+    /// Retrato do motor no último quadro da tela (para as FUNÇÕES das configurações).
+    pub snap_tela: crate::shared::Snapshot,
     /// Automix ligado (toca e mistura sozinho).
     pub automix: Option<crate::automix::Automix>,
     pub history: crate::history::Tracker,
@@ -139,6 +141,7 @@ impl AppState {
             phone_status: "desligado".into(),
             fw: Default::default(),
             rec: Default::default(),
+            snap_tela: Default::default(),
             automix: None,
             history: Default::default(),
             grid_edit: None,
@@ -235,6 +238,15 @@ pub type SharedApp = Arc<Mutex<AppState>>;
 
 /// Pasta do sistema na casa do usuário (samples, scratch bank, configurações).
 pub use dj_os_analise::data_dir;
+
+/// Nome da música que está carregando, com o andamento ("Set longo (45%)", "… (analisando)").
+pub fn carregando(nome: &str) -> String {
+    match track::ABRINDO_PCT.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => nome.to_string(),
+        100 => format!("{nome} (analisando)"),
+        p => format!("{nome} ({p}%)"),
+    }
+}
 
 /// Casar o tom (KEY SYNC): quantos semitons o deck `d` precisa mudar para combinar com o outro
 /// deck tocando (o mais alto no fader). `None`: sem tom analisado ou ninguém tocando.

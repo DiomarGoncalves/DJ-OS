@@ -71,6 +71,16 @@ fn wrap(t: &Track, fb: f64) -> f64 {
     fb.rem_euclid(t.beat_len())
 }
 
+/// A grade mudou: grava em segundo plano e mostra o BPM novo nas listas do browser.
+pub fn mudou(app: &mut crate::app::AppState, t: &std::sync::Arc<Track>) {
+    let (bpm, path) = (t.bpm(), t.path.clone());
+    for e in app.lib.tracks.iter_mut().filter(|e| e.path == path) {
+        e.bpm = Some(bpm);
+    }
+    let t = t.clone();
+    std::thread::spawn(move || save(&t));
+}
+
 /// Grava a grade na memória da música (mantém cues, hotcues e loop).
 pub fn save(t: &Track) {
     if cfg!(test) {

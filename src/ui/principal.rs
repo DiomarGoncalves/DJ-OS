@@ -379,7 +379,7 @@ impl DjOsApp {
                 }
             }
             (None, _) => {
-                let msg = self.app.lock().decks[d].loading.clone().map_or("Sem música".to_string(), |n| format!("Carregando {n}…"));
+                let msg = self.app.lock().decks[d].loading.as_deref().map_or("Sem música".to_string(), |n| format!("Carregando {}…", crate::app::carregando(n)));
                 tr(&title_clip, pos2(x0, r.top() + 16.0), Align2::LEFT_CENTER, msg, 16.0, k_dim());
             }
         }
@@ -630,6 +630,12 @@ fn draw_wave_pro(p: &Painter, r: Rect, d: usize, t: Option<&Track>, s: &DeckSnap
                 tb(p, lab.center(), Align2::CENTER_CENTER, CUE_LETTERS[i], 11.0, k_bg());
             }
         }
+    }
+    // Outra música carregando neste deck (a de agora continua tocando até ela chegar).
+    if let Some(n) = loading {
+        let faixa = Rect::from_center_size(pos2(center_x, wr.bottom() - 16.0), vec2((w * 0.6).min(620.0), 24.0));
+        p.rect_filled(faixa, 3.0, k_orange());
+        tb(&p.with_clip_rect(faixa.shrink(4.0)), faixa.center(), Align2::CENTER_CENTER, format!("CARREGANDO {n}…"), 13.0, k_bg());
     }
     // Agulha e a cor do deck à esquerda.
     p.line_segment([pos2(center_x, r.top()), pos2(center_x, r.bottom())], Stroke::new(2.0_f32, k_text()));

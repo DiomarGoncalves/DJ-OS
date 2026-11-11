@@ -16,6 +16,8 @@ pub const AUDIO_BUFFERS: [u32; 3] = [256, 512, 1024];
 pub const BROWSE_GIRA: [&str; 2] = ["ABRE O BROWSER", "ZOOM DA WAVEFORM"];
 /// Aviso de fim da música (segundos antes do fim; 0 = desligado).
 pub const FIM_AVISOS: [u32; 4] = [0, 30, 45, 60];
+/// Consertos do BPM da grade (aba FUNÇÕES).
+pub const GRADE_RAZOES: [(&str, f64); 4] = [("× 1,5", 1.5), ("× 2/3", 2.0 / 3.0), ("× 2", 2.0), ("÷ 2", 0.5)];
 /// Tamanho da letra do browser novo.
 pub const BROWSER_FONTS: [&str; 3] = ["PEQUENA", "MÉDIA", "GRANDE"];
 pub const PITCH_RANGES: [f64; 3] = [0.08, 0.16, 0.50];
@@ -307,6 +309,12 @@ pub enum Action {
     FaderCurve,
     HpSplit,
     Slip,
+    Automix,
+    Gravar,
+    TomDeck(usize, crate::app::Tom),
+    /// Conserto da grade do deck: índice em GRADE_RAZOES, ou (o seguinte) "batida aqui".
+    Grade(usize, usize),
+    Reverso(usize),
     Quantize,
     PlayBatida,
     TravaLoad,
@@ -364,6 +372,8 @@ pub struct SettingsUi {
 /// Abas da tela de configurações (estilo XDJ: abas à esquerda, itens à direita).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tab {
+    /// O que se usa no meio do set, tudo pelo BROWSE (o aparelho não tem tela de toque).
+    Funcoes,
     Audio,
     Mixer,
     Bluetooth,
@@ -377,8 +387,8 @@ pub enum Tab {
 impl Tab {
     /// Abas que aparecem: no PC ficam de fora as do sistema do aparelho (Bluetooth, celular, Wi-Fi).
     pub fn all() -> &'static [Tab] {
-        const APARELHO: [Tab; 8] = [Tab::Audio, Tab::Mixer, Tab::Bluetooth, Tab::Phone, Tab::Wifi, Tab::Controller, Tab::Screen, Tab::System];
-        const PC: [Tab; 5] = [Tab::Audio, Tab::Mixer, Tab::Controller, Tab::Screen, Tab::System];
+        const APARELHO: [Tab; 9] = [Tab::Funcoes, Tab::Audio, Tab::Mixer, Tab::Bluetooth, Tab::Phone, Tab::Wifi, Tab::Controller, Tab::Screen, Tab::System];
+        const PC: [Tab; 6] = [Tab::Funcoes, Tab::Audio, Tab::Mixer, Tab::Controller, Tab::Screen, Tab::System];
         if crate::app::aparelho() {
             &APARELHO
         } else {
@@ -388,6 +398,7 @@ impl Tab {
 
     pub fn name(self) -> &'static str {
         match self {
+            Tab::Funcoes => "FUNÇÕES",
             Tab::Audio => "ÁUDIO",
             Tab::Mixer => "MIXER",
             Tab::Bluetooth => "CAIXA BLUETOOTH",
@@ -404,6 +415,12 @@ impl Tab {
 pub fn tab_summary(app: &AppState, tab: Tab) -> String {
     let s = &app.settings;
     match tab {
+        Tab::Funcoes => match (app.automix.is_some(), app.rec.active.is_some()) {
+            (true, true) => "automix · gravando".into(),
+            (true, false) => "automix ligado".into(),
+            (false, true) => "gravando".into(),
+            _ => "automix · gravar · tom · bpm".into(),
+        },
         Tab::Audio => if app.audio_status.contains("DDJ-REV1") { "DDJ-REV1".into() } else if app.audio_status.starts_with(crate::pw_out::NO_OUTPUT) { "sem saída".into() } else { "sem a REV1".into() },
         Tab::Mixer => format!("{} · fone {}", if s.eq_iso { "isolador" } else { "eq" }, if s.hp_split { "dividido" } else { "estéreo" }),
         Tab::Bluetooth => app.bt_mode.name().to_lowercase(),
@@ -436,6 +453,45 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
     let confirm = |a: &Action, normal: String| if armed(a) { "toque de novo para confirmar".to_string() } else { normal };
     let mut v = Vec::new();
     match tab {
+        Tab::Funcoes => {
+            let liga = |b: bool| if b { "LIGADO" } else { "DESLIGADO" }.to_string();
+            let mixando = crate::automix::estado(app).flatten().is_some();
+            v.push(Row::Item { label: "Automix (toca e mistura sozinho)".into(), value: if mixando { "MIXANDO…".into() } else { liga(app.automix.is_some()) }, action: Action::Automix });
+            let rec = app.rec.active.as_ref().map(|(_, t, _)| t.elapsed().as_secs());
+            v.push(Row::Item {
+                label: "Gravar o set".into(),
+                value: rec.map_or("PARADO".into(), |s| format!("GRAVANDO {:02}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)),
+                action: Action::Gravar,
+            });
+            v.push(Row::Item { label: "Filtro da lista de músicas".into(), value: crate::library::FILTROS[app.lib.filtro].into(), action: Action::FiltroBrowser });
+            v.push(Row::Item { label: "Salvar a fila como playlist".into(), value: format!("{} MÚSICA(S) NA FILA", app.lib.prepare.len()), action: Action::SalvarFila });
+            v.push(Row::Info("Automix: toca a fila (SHIFT + LOAD) ou a lista aberta a partir da música selecionada".into()));
+            const NOMES: [&str; NUM_DECKS] = ["DECK 1", "DECK 2", "DECK 3", "DECK 4"];
+            for &d in app.side.iter().filter(|d| **d < NUM_DECKS) {
+                v.push(Row::Header(NOMES[d]));
+                let Some(t) = app.decks[d].track.as_ref() else {
+                    v.push(Row::Info("Sem música neste deck".into()));
+                    continue;
+                };
+                let ds = &app.snap_tela.decks[d];
+                let shift = ds.key_shift as i32;
+                let tom = crate::key::from_raw(t.key).map_or("sem tom".to_string(), |k| crate::key::label(crate::key::transpor(k, shift)));
+                let tom = if shift != 0 { format!("{tom} ({shift:+})") } else { tom };
+                let casar = if shift != 0 { ("Voltar ao tom original", crate::app::Tom::Zero) } else { ("Casar o tom com o outro deck", crate::app::Tom::Casar) };
+                v.push(Row::Item { label: casar.0.into(), value: tom.clone(), action: Action::TomDeck(d, casar.1) });
+                v.push(Row::Item { label: "Tom +1".into(), value: tom.clone(), action: Action::TomDeck(d, crate::app::Tom::Mais) });
+                v.push(Row::Item { label: "Tom -1".into(), value: tom, action: Action::TomDeck(d, crate::app::Tom::Menos) });
+                let bpm = t.bpm();
+                if bpm > 0.0 {
+                    for (i, (nome, r)) in GRADE_RAZOES.iter().enumerate() {
+                        v.push(Row::Item { label: format!("BPM {nome}"), value: format!("{bpm:.2} → {:.2}", bpm * r), action: Action::Grade(d, i) });
+                    }
+                    v.push(Row::Item { label: "Batida aqui (acerta a grade na posição de agora)".into(), value: String::new(), action: Action::Grade(d, GRADE_RAZOES.len()) });
+                }
+                v.push(Row::Item { label: "Reverse (toca de trás para frente)".into(), value: liga(ds.reverse), action: Action::Reverso(d) });
+            }
+            v.push(Row::Info("BPM errado (ex.: 86,66 num funk de 130): use ×1,5. Batida fora do lugar: pare em cima do bumbo e use \"Batida aqui\"".into()));
+        }
         Tab::Audio => {
             v.push(Row::Info(format!("Saída: {}", app.audio_status)));
             v.push(Row::Info("Com a DDJ-REV1 ligada: master nas saídas 1-2, fone nas 3-4.".into()));
@@ -567,9 +623,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Header("BROWSER (SHIFT + BROWSE)"));
             let show = |b: bool| if b { "MOSTRAR" } else { "ESCONDER" }.to_string();
             v.push(Row::Item { label: "Browser em tela cheia".into(), value: if s.browser_novo { "NOVO (PRETO)" } else { "CLÁSSICO" }.into(), action: Action::BrowserNovo });
-            v.push(Row::Item { label: "Filtro da lista de músicas".into(), value: crate::library::FILTROS[app.lib.filtro].into(), action: Action::FiltroBrowser });
-            v.push(Row::Item { label: "Salvar a fila como playlist".into(), value: format!("{} MÚSICA(S) NA FILA", app.lib.prepare.len()), action: Action::SalvarFila });
-            v.push(Row::Info("Fila: SHIFT + LOAD. Playlists salvas e as .m3u do pendrive (VirtualDJ, rekordbox) aparecem nas pastas".into()));
+            v.push(Row::Info("Playlists salvas e as .m3u do pendrive (VirtualDJ, rekordbox) aparecem nas pastas. Filtro e salvar a fila: aba FUNÇÕES".into()));
             v.push(Row::Item { label: "Coluna do BPM".into(), value: show(s.browser_bpm), action: Action::BrowserBpm });
             v.push(Row::Item { label: "Coluna do tom".into(), value: show(s.browser_key), action: Action::BrowserKey });
             v.push(Row::Item { label: "Tamanho da letra".into(), value: BROWSER_FONTS[s.browser_font].into(), action: Action::BrowserFont });
@@ -679,6 +733,43 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         })
     };
     let Some(action) = action else { return };
+    // Funções do set (aba FUNÇÕES): agem na hora, sem mexer nas configurações salvas.
+    match action {
+        Action::Gravar => {
+            let rate = shared.lock().snap_tela.sample_rate;
+            crate::record::toggle(shared, cmd, rate);
+            return;
+        }
+        Action::Automix => {
+            let mut a = shared.lock();
+            let msg = crate::automix::alternar(&mut a, cmd);
+            a.toast(msg);
+            return;
+        }
+        Action::TomDeck(d, qual) => {
+            let mut a = shared.lock();
+            let snap = a.snap_tela;
+            crate::app::comando_tom(&mut a, &snap, cmd, d, qual);
+            return;
+        }
+        Action::Reverso(d) => {
+            let on = !shared.lock().snap_tela.decks[d].reverse;
+            cmd.send(Cmd::Reverse { deck: d, on });
+            return;
+        }
+        Action::Grade(d, i) => {
+            let mut a = shared.lock();
+            let Some(t) = a.decks.get(d).and_then(|x| x.track.clone()) else { return };
+            match GRADE_RAZOES.get(i) {
+                Some((_, r)) => crate::grid::set_bpm_ratio(&t, *r),
+                None => crate::grid::beat_here(&t, a.snap_tela.decks[d].pos),
+            }
+            crate::grid::mudou(&mut a, &t);
+            a.toast(format!("Deck {}: grade em {:.2} BPM", d + 1, t.bpm()));
+            return;
+        }
+        _ => {}
+    }
     let mut a = shared.lock();
     // Ações perigosas: só no segundo toque (em até 4 s).
     if matches!(action, Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar) {
@@ -820,6 +911,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
             return;
         }
         Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar => return,
+        Action::Gravar | Action::Automix | Action::TomDeck(..) | Action::Grade(..) | Action::Reverso(_) => return,
         Action::BtScan => {
             drop(a);
             bt_scan(shared);
@@ -1038,6 +1130,51 @@ mod tests {
     }
 
     #[test]
+    fn funcoes_pela_controladora() {
+        let (tx, mut rx) = rtrb::RingBuffer::new(256);
+        let cmd = CmdTx::new(tx);
+        let app = std::sync::Arc::new(parking_lot::Mutex::new(AppState::new()));
+        {
+            let mut a = app.lock();
+            a.side = [0, 1];
+            a.decks[0].track = Some(std::sync::Arc::new(crate::track::synthetic(10.0, 48000.0, 86.66, 0.1)));
+            open(&mut a);
+            assert_eq!(current_tab(&a), Tab::Funcoes, "a primeira aba é a das funções do set");
+            focus_tabs(&mut a, false);
+        }
+        // Acha um item pela ação, anda até ele com o BROWSE e aperta.
+        let aciona = |quer: Action| {
+            let idx = {
+                let a = app.lock();
+                let r = rows(&a);
+                selectable(&r).iter().position(|&i| matches!(&r[i], Row::Item { action, .. } if *action == quer)).unwrap_or_else(|| panic!("sem o item {quer:?}"))
+            };
+            {
+                let mut a = app.lock();
+                a.settings_ui.as_mut().unwrap().sel = 0;
+                scroll(&mut a, idx as i32);
+            }
+            activate(&app, &cmd);
+        };
+        // Funk analisado em 86,66: × 1,5 = 130, pelo BROWSE.
+        aciona(Action::Grade(0, 0));
+        assert_eq!(app.lock().decks[0].track.as_ref().unwrap().bpm(), 130.0);
+        aciona(Action::TomDeck(0, crate::app::Tom::Mais));
+        aciona(Action::Reverso(0));
+        aciona(Action::Automix);
+        assert!(app.lock().automix.is_some());
+        let mut cmds = Vec::new();
+        while let Ok(c) = rx.pop() {
+            cmds.push(format!("{c:?}"));
+        }
+        assert!(cmds.contains(&"KeyShift { deck: 0, semis: 1.0 }".to_string()), "{cmds:?}");
+        assert!(cmds.contains(&"Reverse { deck: 0, on: true }".to_string()));
+        assert!(!cmds.iter().any(|c| c.starts_with("Vinyl")), "as funções não reaplicam as configurações");
+        // Deck sem música: só o aviso.
+        assert!(rows(&app.lock()).iter().any(|r| matches!(r, Row::Info(t) if t.starts_with("Sem música"))));
+    }
+
+    #[test]
     fn no_pc_nao_tem_as_abas_do_sistema() {
         if crate::app::aparelho() {
             return;
@@ -1070,7 +1207,7 @@ mod tests {
         open(&mut app);
         assert_eq!(current_tab(&app), quarta);
         // Aba ÁUDIO: apertar entra no item do ganho automático.
-        select_tab(&mut app, 0);
+        select_tab(&mut app, Tab::all().iter().position(|t| *t == Tab::Audio).unwrap());
         let r = rows(&app);
         assert!(matches!(&r[selectable(&r)[0]], Row::Item { action: Action::AutoGain, .. }));
     }

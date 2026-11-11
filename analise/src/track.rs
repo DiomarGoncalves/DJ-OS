@@ -208,7 +208,12 @@ fn read_tags(rev: &MetadataRevision, title: &mut String, artist: &mut String) {
 }
 
 /// Decodifica o arquivo inteiro para estéreo f32. Retorna (amostras, taxa, título, artista).
+/// Quanto da música que está sendo aberta já foi lido (0 a 100; 100 = lendo pronto, analisando).
+/// Um set de uma hora leva mais de um minuto num computador antigo: a tela mostra o andamento.
+pub static ABRINDO_PCT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
 fn decode(path: &Path) -> Result<(Vec<f32>, f64, String, String), String> {
+    ABRINDO_PCT.store(0, Ordering::Relaxed);
     let file = std::fs::File::open(path).map_err(|e| format!("não abriu o arquivo: {e}"))?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
     let mut hint = Hint::new();
@@ -241,7 +246,8 @@ fn decode(path: &Path) -> Result<(Vec<f32>, f64, String, String), String> {
         .make(&track.codec_params, &DecoderOptions::default())
         .map_err(|e| format!("codec não suportado: {e}"))?;
     let mut data: Vec<f32> = Vec::new();
-    if let Some(n) = track.codec_params.n_frames {
+    let total = track.codec_params.n_frames.filter(|n| *n > 0);
+    if let Some(n) = total {
         data.reserve(n as usize * 2);
     }
 
@@ -259,6 +265,9 @@ fn decode(path: &Path) -> Result<(Vec<f32>, f64, String, String), String> {
         };
         if packet.track_id() != track_id {
             continue;
+        }
+        if let Some(n) = total {
+            ABRINDO_PCT.store(((data.len() as u64 / 2 * 100) / n).min(99) as u8, Ordering::Relaxed);
         }
         match decoder.decode(&packet) {
             Ok(decoded) => {
@@ -286,6 +295,7 @@ fn decode(path: &Path) -> Result<(Vec<f32>, f64, String, String), String> {
     if data.is_empty() {
         return Err("o arquivo está vazio".into());
     }
+    ABRINDO_PCT.store(100, Ordering::Relaxed);
     Ok((data, sr, title, artist))
 }
 
