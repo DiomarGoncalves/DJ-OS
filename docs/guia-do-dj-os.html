@@ -1,0 +1,278 @@
+<meta charset="utf-8">
+<title>Guia do DJ OS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+/* Layout: manual de cabine. Índice fixo no topo, uma seção por assunto, cada função numa linha
+   "o que você aperta" → "o que acontece". Mesmas cores e teclas do Guia DDJ-REV1. */
+:root {
+  --bg: #f6f7f8;
+  --paper: #ffffff;
+  --ink: #16191d;
+  --muted: #5b636c;
+  --line: #dde1e5;
+  --accent: #0b7a75;
+  --shift: #c2571a;
+  --key: #eef1f3;
+  --warn-bg: #fdf1e7;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111416; --paper: #181c1f; --ink: #e7eaec; --muted: #9aa3ab; --line: #2b3136;
+    --accent: #3cc2b9; --shift: #f08a4b; --key: #232a2f; --warn-bg: #2a211a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111416; --paper: #181c1f; --ink: #e7eaec; --muted: #9aa3ab; --line: #2b3136;
+  --accent: #3cc2b9; --shift: #f08a4b; --key: #232a2f; --warn-bg: #2a211a; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--ink); font: 16px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 22px; }
+header h1 { font: 700 2.6rem/1 var(--display); letter-spacing: .01em; margin: 0 0 6px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 65ch; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; }
+nav a {
+  font: 600 .95rem/1 var(--display); letter-spacing: .06em; text-transform: uppercase; text-decoration: none;
+  color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px;
+}
+nav a:hover, nav a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+section { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px 20px; min-width: 0; }
+h2 { font: 700 1.7rem/1.1 var(--display); letter-spacing: .02em; text-transform: uppercase; margin: 0 0 4px; color: var(--accent); }
+h3 { font: 600 1.15rem/1.2 var(--display); letter-spacing: .06em; text-transform: uppercase; margin: 20px 0 6px; color: var(--muted); }
+section > p { margin: 6px 0 10px; max-width: 70ch; }
+.t { width: 100%; border-collapse: collapse; }
+.t td { padding: 7px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.t td:first-child { width: 38%; padding-right: 14px; font-weight: 600; }
+.t tr:first-child td { border-top: 0; }
+.scroll { overflow-x: auto; }
+kbd {
+  font: 600 .86rem/1 var(--display); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
+  background: var(--key); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 3px 6px; color: var(--ink);
+}
+kbd.s { color: var(--shift); border-color: var(--shift); }
+.off { font: 600 .8rem/1 var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; white-space: nowrap; }
+.note { background: var(--warn-bg); border-left: 3px solid var(--shift); padding: 10px 12px; margin: 12px 0 0; max-width: 72ch; }
+ol.check { margin: 6px 0 0; padding-left: 22px; display: grid; gap: 6px; max-width: 72ch; }
+small { color: var(--muted); }
+@media (max-width: 620px) {
+  .t td, .t td:first-child { display: block; width: auto; padding: 0; border-top: 0; }
+  .t tr { display: block; padding: 8px 0; border-top: 1px solid var(--line); }
+  .t tr:first-child { border-top: 0; }
+  header h1 { font-size: 2.1rem; }
+}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Guia do DJ OS</h1>
+  <p>O que cada função faz e como chamar pela DDJ-REV1, sem tocar na tela. Vale para o firmware 0.1.5 de 11/11/2026 (final 0733). O mapa botão por botão da controladora está no Guia DDJ-REV1.</p>
+</header>
+
+<nav aria-label="Seções">
+  <a href="#festa">Antes da festa</a><a href="#tela">A tela</a><a href="#deck">Deck</a><a href="#mixer">Mixer</a>
+  <a href="#pads">Pads</a><a href="#efeitos">Efeitos</a><a href="#musicas">Achar música</a><a href="#funcoes">Aba Funções</a>
+  <a href="#config">Configurações</a><a href="#firmware">Firmware</a><a href="#problemas">Se der problema</a>
+</nav>
+
+<section id="festa">
+  <h2>Antes da festa</h2>
+  <ol class="check">
+    <li>Ligue a DDJ-REV1 no aparelho antes de ligar o aparelho. A tela mostra "master 1-2, fone 3-4" em CONFIG → ÁUDIO quando ela foi reconhecida.</li>
+    <li>Caixa de som na tomada. Caixa portátil na bateria costuma entregar menos grave.</li>
+    <li>Os botões FILTER dos canais no centro e os de EQ no centro. FILTER fora do centro para a direita tira o grave de baixo.</li>
+    <li>Em CONFIG → CONTROLADORA, confira Quantize e Play na batida. Os dois vêm desligados; ligue só se quiser tocar com eles.</li>
+    <li>Carregue uma música em cada deck e ouça no fone e no master antes de abrir a pista.</li>
+    <li>Leve o pendrive com o firmware anterior. Se algo estranhar, volte para ele em CONFIG → SISTEMA.</li>
+  </ol>
+  <p class="note">Tudo neste guia funciona pela controladora. Para abrir as configurações: <kbd class="s">SHIFT</kbd> + <kbd>MASTER CUE</kbd>. Girar o <kbd>BROWSE</kbd> anda, apertar o <kbd>BROWSE</kbd> escolhe.</p>
+</section>
+
+<section id="tela">
+  <h2>A tela</h2>
+  <p>Cada deck tem a onda da música, o BPM, o tom e avisos. Estes são os que aparecem enquanto você toca.</p>
+  <div class="scroll"><table class="t">
+    <tr><td>NO AR (vermelho)</td><td>O deck está saindo no master: tocando, com o fader do canal aberto e o crossfader do lado dele. Com o crossfader fechado para o outro lado o aviso some.</td></tr>
+    <tr><td>FASE e os 4 quadrinhos</td><td>Mostra se a batida deste deck está junto com a do outro deck que toca. FASE 0,00 é em cima; positivo ou negativo é adiantado ou atrasado, em fração de batida.</td></tr>
+    <tr><td>Contagem até o cue</td><td>Quanto falta para o próximo cue ou hot cue à frente, em compassos e batidas, como nas CDJs. 3.2 quer dizer 3 compassos e 2 batidas.</td></tr>
+    <tr><td>Deck piscando perto do fim</td><td>Aviso de fim da música. De fábrica, 30 s antes de acabar.</td></tr>
+    <tr><td>CARREGANDO … (27%)</td><td>A música está abrindo. Set de uma hora pode levar mais de um minuto no notebook antigo; o deck que toca continua tocando.</td></tr>
+    <tr><td>TOM</td><td>Tom da música no sistema Camelot (8A, 9B…). Se você mudou o tom, aparece o tom novo.</td></tr>
+    <tr><td>REV / FREIO</td><td>O deck está tocando de trás para frente, ou freando até parar.</td></tr>
+    <tr><td>Onda com 3 cores</td><td>Grave, médio e agudo da música. Cortar uma banda no EQ diminui aquela cor.</td></tr>
+  </table></div>
+</section>
+
+<section id="deck">
+  <h2>Deck</h2>
+  <div class="scroll"><table class="t">
+    <tr><td><kbd>PLAY</kbd></td><td>Toca e pausa.</td></tr>
+    <tr><td><kbd>CUE</kbd></td><td>Como nas CDJs. Tocando: volta ao cue e para. Parado no cue: toca enquanto segura. Parado fora do cue: marca o cue ali.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>PLAY</kbd> / <kbd>CUE</kbd></td><td>Volta ao cue e toca / volta ao início da música.</td></tr>
+    <tr><td>Prato (jog)</td><td>Modo vinil: scratch tocando em cima do prato, bend na lateral. Modo CDJ: bend. Parado, anda devagar pela música. Com <kbd class="s">SHIFT</kbd>: busca rápida.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>DECK SELECT</kbd></td><td>Troca entre vinil (scratch) e CDJ (bend).</td></tr>
+    <tr><td><kbd>DECK SELECT</kbd></td><td>Toque: troca deck 1/3 ou 2/4. Segurado: faixa do pitch (8, 16, 50%).</td></tr>
+    <tr><td><kbd>SYNC</kbd></td><td>Iguala o BPM e a batida com o outro deck que toca. <kbd class="s">SHIFT</kbd> + <kbd>SYNC</kbd>: pitch volta a zero.</td></tr>
+    <tr><td>Fader de pitch</td><td>Velocidade. Depois de um SYNC ele só volta a mandar quando passa pela posição atual, para não dar pulo.</td></tr>
+    <tr><td><kbd>AUTO LOOP</kbd></td><td>Liga e desliga o loop. <kbd>1/2X</kbd> e <kbd>2X</kbd>: metade e dobro. Com <kbd class="s">SHIFT</kbd>: reloop, loop in e loop out.</td></tr>
+    <tr><td><kbd>LOAD</kbd></td><td>Carrega a música escolhida. Dois toques rápidos: copia o deck do outro lado. Com o deck no ar o LOAD fica travado (pare o deck, ou feche o fader ou o crossfader dele).</td></tr>
+  </table></div>
+</section>
+
+<section id="mixer">
+  <h2>Mixer</h2>
+  <div class="scroll"><table class="t">
+    <tr><td>TRIM (GAIN)</td><td>Ganho do canal, até +9 dB. O ganho automático já nivela as músicas; o TRIM ajusta por cima. Música gravada muito baixa pede TRIM.</td></tr>
+    <tr><td>EQ HI / MID / LOW</td><td>Centro não muda nada, máximo +6 dB. No mínimo corta até -26 dB, ou corta tudo no modo isolador (CONFIG → MIXER). O LOW pega tudo abaixo de 250 Hz.</td></tr>
+    <tr><td>FILTER</td><td>Centro: desligado. Esquerda abafa (tira agudo). Direita afina (tira grave).</td></tr>
+    <tr><td>Crossfader</td><td>No meio os dois lados saem cheios. Curva e lado de cada deck em CONFIG → MIXER.</td></tr>
+    <tr><td><kbd>CUE</kbd> do canal</td><td>Manda o canal para o fone. <kbd>MASTER CUE</kbd>: manda o master para o fone.</td></tr>
+    <tr><td>MASTER / HEADPHONES LEVEL</td><td>Volume do master e do fone. Um limitador segura o master para não distorcer se a soma passar do teto.</td></tr>
+  </table></div>
+</section>
+
+<section id="pads">
+  <h2>Pads</h2>
+  <p>O botão de modo escolhe o que os 8 pads fazem. Com <kbd class="s">SHIFT</kbd> no botão de modo entra o segundo modo.</p>
+  <div class="scroll"><table class="t">
+    <tr><td><kbd>HOT CUE</kbd></td><td>Marca e pula para 8 pontos da música. <kbd class="s">SHIFT</kbd> + pad apaga.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>HOT CUE</kbd> · Beat jump</td><td>Pula 1, 2, 4 ou 8 batidas para trás ou para frente.</td></tr>
+    <tr><td><kbd>AUTO LOOP</kbd></td><td>Loop de 1/4 até 32 batidas, um tamanho por pad.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>AUTO LOOP</kbd> · Roll</td><td>Repete um pedacinho enquanto segura; ao soltar a música volta onde estaria.</td></tr>
+    <tr><td><kbd>TRACKING</kbd></td><td>Toca do cue em outras notas (0 a +12 semitons), para fazer melodia com um som.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>TRACKING</kbd> · Trans</td><td>Corta o som no ritmo enquanto segura.</td></tr>
+    <tr><td><kbd>SAMPLER</kbd></td><td>Toca os samples 1 a 8 da pasta <code>samples</code>.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>SAMPLER</kbd> · Scratch bank</td><td>Põe um som de scratch da pasta <code>scratch</code> no deck; com SHIFT devolve a música.</td></tr>
+  </table></div>
+</section>
+
+<section id="efeitos">
+  <h2>Efeitos</h2>
+  <p>Um efeito por deck. A alavanca liga enquanto está empurrada. <kbd>FX 1</kbd> troca o efeito, <kbd>FX 2</kbd> e <kbd>FX 3</kbd> diminuem e aumentam a divisão de batida, e o botão central é a força. Com a força no zero o som não muda.</p>
+  <div class="scroll"><table class="t">
+    <tr><td>ECHO</td><td>Repete o som na divisão de batida. Divisões bem curtas (1/32, 1/64) dão o eco robô. Continua soando depois de soltar.</td></tr>
+    <tr><td>PING PONG</td><td>Eco que pula de um lado para o outro.</td></tr>
+    <tr><td>REVERB</td><td>Som de salão. A cauda some sozinha depois de soltar.</td></tr>
+    <tr><td>FLANGER</td><td>O "jato" varrendo no ritmo.</td></tr>
+    <tr><td>PHASER</td><td>Varredura mais suave que o flanger.</td></tr>
+    <tr><td>WAHWAH</td><td>Filtro abrindo e fechando no ritmo.</td></tr>
+    <tr><td>NOISE</td><td>Chiado por cima da música, para subida. Mais força deixa mais alto e mais agudo.</td></tr>
+    <tr><td>CUT</td><td>Corta o som no ritmo da divisão.</td></tr>
+    <tr><td>ROLL</td><td>Grava a divisão de batida de quando você ligou e repete enquanto segura.</td></tr>
+    <tr><td>CRUSH</td><td>Suja o som (videogame, rádio velho).</td></tr>
+    <tr><td>BRAKE</td><td>O som freia até parar, como desligar o toca-discos.</td></tr>
+    <tr><td>BACKSPIN</td><td>O som volta para trás rápido e vai parando.</td></tr>
+  </table></div>
+</section>
+
+<section id="musicas">
+  <h2>Achar música</h2>
+  <div class="scroll"><table class="t">
+    <tr><td><kbd>BROWSE</kbd> girado</td><td>Anda pela lista. Toque curto: entra na pasta ou volta para as pastas.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>BROWSE</kbd></td><td>Abre e fecha a lista em tela cheia.</td></tr>
+    <tr><td><kbd>BROWSE</kbd> segurado</td><td>Abre a pesquisa com teclado na tela. Girar escolhe a letra, apertar digita, ENTER mostra o resultado.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>LOAD</kbd></td><td>Põe a música na fila "Preparar". <kbd class="s">SHIFT</kbd> + girar o <kbd>BROWSE</kbd> anda pela fila.</td></tr>
+    <tr><td>♪ Combina com o que toca</td><td>Pasta que lista só as músicas com BPM perto (até 6%) e tom compatível com o deck que está no ar.</td></tr>
+    <tr><td>☰ Playlists</td><td>As filas que você salvou e as playlists .m3u do pendrive (VirtualDJ, rekordbox).</td></tr>
+    <tr><td>Filtro da lista</td><td>Todas, não tocadas, BPM do que toca ou tom que combina. Troca na aba FUNÇÕES.</td></tr>
+  </table></div>
+</section>
+
+<section id="funcoes">
+  <h2>Aba Funções</h2>
+  <p>É a primeira aba das configurações (<kbd class="s">SHIFT</kbd> + <kbd>MASTER CUE</kbd>). Junta o que se usa no meio do set.</p>
+  <div class="scroll"><table class="t">
+    <tr><td>Automix</td><td>Toca a fila (ou a lista aberta, a partir da música escolhida) e mistura sozinho. Perto do fim de uma música ele carrega a próxima no outro deck, acerta o BPM se for parecido (até 8%) e cruza os faders em 16 batidas. Se você pausar, ele espera. Ao desligar, os decks que tocam ficam como estão.</td></tr>
+    <tr><td>Gravar o set</td><td>Grava o master num arquivo WAV na pasta <code>records</code>, no pendrive se houver. Cerca de 11 MB por minuto.</td></tr>
+    <tr><td>Filtro da lista de músicas</td><td>Troca o filtro do browser.</td></tr>
+    <tr><td>Salvar a fila como playlist</td><td>Guarda a fila "Preparar" como playlist para usar outro dia.</td></tr>
+    <tr><td>Casar o tom / voltar o tom</td><td>Sobe ou desce o tom do deck até combinar com o outro, sem mudar a velocidade. Apertar de novo volta ao tom original.</td></tr>
+    <tr><td>Tom +1 / Tom -1</td><td>Sobe ou desce meio tom, sem mudar a velocidade. Carregar outra música zera.</td></tr>
+    <tr><td>BPM × 1,5 · × 2/3 · × 2 · ÷ 2</td><td>Conserta o BPM lido errado. Funk de 130 que aparece em 86,66: use × 1,5.</td></tr>
+    <tr><td>Batida aqui</td><td>Acerta a grade: pare em cima do bumbo e acione. A marcação de batida passa a cair ali.</td></tr>
+    <tr><td>Reverse</td><td>Toca de trás para frente. No começo da música ele para e desliga.</td></tr>
+  </table></div>
+</section>
+
+<section id="config">
+  <h2>Configurações</h2>
+  <p>Abas à esquerda, itens à direita. Apertar o <kbd>BROWSE</kbd> num item troca o valor. Girar para cima no primeiro item volta para as abas.</p>
+
+  <h3>Áudio</h3>
+  <div class="scroll"><table class="t">
+    <tr><td>Ganho automático</td><td>Deixa as músicas no mesmo volume (desce até 12 dB, sobe até 3 dB). Vem ligado.</td></tr>
+    <tr><td>Folga do som</td><td>256, 512 ou 1024. Mais folga, menos risco de estalo com o computador ocupado. 512 é o normal.</td></tr>
+    <tr><td>Saída do som</td><td>Automática usa a controladora (master 1-2, fone 3-4). Dá para escolher outra placa.</td></tr>
+    <tr><td>Gravar em</td><td>Automático (pendrive, se houver), aparelho ou pendrive.</td></tr>
+  </table></div>
+
+  <h3>Mixer</h3>
+  <div class="scroll"><table class="t">
+    <tr><td>Modo do EQ</td><td>EQ (corta até -26 dB) ou isolador (corta tudo, como mixer de clube).</td></tr>
+    <tr><td>Curva do fader de canal</td><td>Lenta, normal ou rápida (corte).</td></tr>
+    <tr><td>Curva do crossfader</td><td>Suave, corte (scratch) ou potência constante.</td></tr>
+    <tr><td>Lado de cada deck</td><td>A, B ou THRU (o deck não passa pelo crossfader).</td></tr>
+    <tr><td>Fone</td><td>Estéreo, ou mono dividido (CUE num ouvido, master no outro).</td></tr>
+  </table></div>
+
+  <h3>Controladora</h3>
+  <div class="scroll"><table class="t">
+    <tr><td>Jog ao ligar</td><td>Vinil (scratch) ou CDJ (bend).</td></tr>
+    <tr><td>Faixa de pitch</td><td>±8, 16 ou 50%.</td></tr>
+    <tr><td>Keylock ao carregar <span class="off">desligado</span></td><td>Mexer no pitch muda a velocidade sem mudar o tom.</td></tr>
+    <tr><td>Slip <span class="off">desligado</span></td><td>Scratch, backspin e loop por cima da música; ao soltar, ela volta onde estaria.</td></tr>
+    <tr><td>Quantize <span class="off">desligado</span></td><td>Cue, hot cue e loop caem na batida, e pular para um hot cue tocando não perde o tempo. Para scratch, deixe desligado.</td></tr>
+    <tr><td>Play na batida <span class="off">desligado</span></td><td>Dar PLAY com o outro deck tocando já entra na batida dele (anda até meia batida).</td></tr>
+    <tr><td>Trava do LOAD</td><td>Com o deck no ar, o LOAD não troca a música. Vem ligada.</td></tr>
+    <tr><td>Aviso de fim da música</td><td>Desligado, 30, 45 ou 60 s antes.</td></tr>
+    <tr><td>Girar o BROWSE na tela principal</td><td>Abre o browser, ou dá zoom na onda.</td></tr>
+    <tr><td>Ensinar botões</td><td>Escolhe uma função e aperta um botão da controladora: aquele botão passa a fazer aquilo.</td></tr>
+  </table></div>
+
+  <h3>Caixa Bluetooth, Celular, Wi-Fi</h3>
+  <div class="scroll"><table class="t">
+    <tr><td>Caixa Bluetooth</td><td>A caixa pode tocar o master ou servir de retorno. "Atraso do master com fio" alinha as caixas com fio com a Bluetooth.</td></tr>
+    <tr><td>Celular</td><td>O aparelho vira uma caixa Bluetooth chamada "DJ OS". O som do celular entra no deck 3, no deck 4 ou direto no master como som ambiente.</td></tr>
+    <tr><td>Wi-Fi</td><td>Procura redes e conecta.</td></tr>
+  </table></div>
+
+  <h3>Tela e Sistema</h3>
+  <div class="scroll"><table class="t">
+    <tr><td>Tela</td><td>2 ou 4 decks embaixo, skin, cores da onda, tamanho, modo leve para placa de vídeo antiga, colunas e letra do browser.</td></tr>
+    <tr><td>Analisar todas as músicas</td><td>Mede BPM, tom e volume de tudo de uma vez. Esquenta o notebook; melhor fazer em casa, ou analisar no PC com o DJ OS Preparar.</td></tr>
+    <tr><td>Reiniciar / Desligar</td><td>Pedem um segundo toque para confirmar.</td></tr>
+  </table></div>
+</section>
+
+<section id="firmware">
+  <h2>Firmware</h2>
+  <ol class="check">
+    <li>Copie o arquivo <code>.djos</code> para o pendrive e espete no aparelho.</li>
+    <li>CONFIG → SISTEMA → "Atualizar firmware (pendrive)". Aparece a lista dos arquivos do pendrive.</li>
+    <li>Escolha o arquivo e aperte duas vezes para confirmar. O aparelho instala e reinicia.</li>
+    <li>Para voltar, faça o mesmo escolhendo o firmware anterior. Cues, hot cues e grades continuam.</li>
+  </ol>
+  <p class="note">O aparelho só aceita firmware assinado. Se a versão nova não ligar, ele volta sozinho para a anterior.</p>
+</section>
+
+<section id="problemas">
+  <h2>Se der problema</h2>
+  <div class="scroll"><table class="t">
+    <tr><td>Estalos ou chiado no som</td><td>CONFIG → ÁUDIO → Folga do som em 1024. Se continuar, traga os registros no pendrive: eles anotam quantas vezes o som atrasou e a temperatura.</td></tr>
+    <tr><td>Grave fraco</td><td>Caixa na tomada, FILTER do canal no centro, LOW no centro. Música gravada baixa: suba o TRIM.</td></tr>
+    <tr><td>BPM errado ou grade fora</td><td>Aba FUNÇÕES: BPM × 1,5 (ou × 2/3, × 2, ÷ 2) e "Batida aqui".</td></tr>
+    <tr><td>LOAD não carrega</td><td>O deck está no ar. Pare o deck, ou feche o fader ou o crossfader dele.</td></tr>
+    <tr><td>Hot cue ou PLAY caindo fora de onde apertei</td><td>Quantize ou Play na batida estão ligados. Desligue em CONFIG → CONTROLADORA.</td></tr>
+    <tr><td>Sem som no fone</td><td>CONFIG → ÁUDIO deve mostrar "master 1-2, fone 3-4". Se mostrar "FONE SEM SOM", desligue e ligue a REV1.</td></tr>
+    <tr><td>A tela travou ou fechou</td><td>O DJ OS reabre sozinho e as músicas voltam para os decks.</td></tr>
+    <tr><td>Algo estranho depois de atualizar</td><td>Volte para o firmware anterior pelo pendrive e toque com ele.</td></tr>
+  </table></div>
+</section>
+</div>
