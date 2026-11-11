@@ -23,6 +23,20 @@ da próxima:
 ## Funções inspiradas no VirtualDJ (pedido em 2026-11-08)
 Feito: automix, play na batida, tom (±6 e casar), "combina com o que toca", playlists .m3u e
 fila salva, filtro do browser, efeitos ROLL/CRUSH/BRAKE/BACKSPIN. Falta:
+- **Fila: tirar música e fechar** (pedido em 2026-11-11). Hoje a coluna "Fila" do browser aparece
+  enquanto tem música nela e não tem como tirar pela controladora: só some quando o automix toca
+  tudo ou ao reiniciar (a fila não é guardada). Fazer: SHIFT + LOAD numa música da fila tira ela;
+  "Limpar a fila" na aba FUNÇÕES; e um jeito de esconder a coluna sem apagar a fila.
+- **Autoplay com corte de intro e final** (pedido em 2026-11-11, como o automix do VirtualDJ).
+  O automix atual já toca a fila e mistura em 16 batidas, mas começa cada música do início e só
+  mistura no fim de verdade. Fazer uma opção na aba FUNÇÕES, desligada de fábrica, com modos:
+  - só tirar o silêncio (do começo e do fim);
+  - tirar a intro e o final (pela waveform: onde a batida entra e onde some; ou pelo primeiro e
+    último hot cue, se a música tiver);
+  - tocar uma porcentagem da música (ex.: 50%, 75%) e mixar a partir dali, para set corrido;
+  - tamanho da mixagem configurável (8, 16, 32 batidas).
+  Ponto de entrada e saída achados na análise (Preparar ou LOAD), não ao vivo: no notebook velho
+  não pode pesar enquanto toca.
 - **Stems (voz/instrumental)**: no notebook velho não dá para separar ao vivo. Plano (teste de
   2026-10-30 em `~/DJOS/stems-teste`): o Preparar separa no PC (Demucs/RoFormer) e grava só uma
   "receita" (máscara por faixa de frequência, comprimida) no pendrive; o aparelho aplica a receita
