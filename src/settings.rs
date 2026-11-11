@@ -469,26 +469,27 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Info("Automix: toca a fila (SHIFT + LOAD) ou a lista aberta a partir da música selecionada".into()));
             const NOMES: [&str; NUM_DECKS] = ["DECK 1", "DECK 2", "DECK 3", "DECK 4"];
             for &d in app.side.iter().filter(|d| **d < NUM_DECKS) {
+                // Os itens são sempre os mesmos e na mesma ordem, com ou sem música: o BROWSE escolhe
+                // pela posição, e uma música terminando de carregar não pode mudar o item debaixo dele.
                 v.push(Row::Header(NOMES[d]));
-                let Some(t) = app.decks[d].track.as_ref() else {
-                    v.push(Row::Info("Sem música neste deck".into()));
-                    continue;
-                };
+                let t = app.decks[d].track.as_ref();
                 let ds = &app.snap_tela.decks[d];
                 let shift = ds.key_shift as i32;
-                let tom = crate::key::from_raw(t.key).map_or("sem tom".to_string(), |k| crate::key::label(crate::key::transpor(k, shift)));
+                let tom = match t {
+                    Some(t) => crate::key::from_raw(t.key).map_or("sem tom".to_string(), |k| crate::key::label(crate::key::transpor(k, shift))),
+                    None => "sem música".to_string(),
+                };
                 let tom = if shift != 0 { format!("{tom} ({shift:+})") } else { tom };
                 let casar = if shift != 0 { ("Voltar ao tom original", crate::app::Tom::Zero) } else { ("Casar o tom com o outro deck", crate::app::Tom::Casar) };
                 v.push(Row::Item { label: casar.0.into(), value: tom.clone(), action: Action::TomDeck(d, casar.1) });
                 v.push(Row::Item { label: "Tom +1".into(), value: tom.clone(), action: Action::TomDeck(d, crate::app::Tom::Mais) });
                 v.push(Row::Item { label: "Tom -1".into(), value: tom, action: Action::TomDeck(d, crate::app::Tom::Menos) });
-                let bpm = t.bpm();
-                if bpm > 0.0 {
-                    for (i, (nome, r)) in GRADE_RAZOES.iter().enumerate() {
-                        v.push(Row::Item { label: format!("BPM {nome}"), value: format!("{bpm:.2} → {:.2}", bpm * r), action: Action::Grade(d, i) });
-                    }
-                    v.push(Row::Item { label: "Batida aqui (acerta a grade na posição de agora)".into(), value: String::new(), action: Action::Grade(d, GRADE_RAZOES.len()) });
+                let bpm = t.map_or(0.0, |t| t.bpm());
+                for (i, (nome, r)) in GRADE_RAZOES.iter().enumerate() {
+                    let value = if bpm > 0.0 { format!("{bpm:.2} → {:.2}", bpm * r) } else { "—".into() };
+                    v.push(Row::Item { label: format!("BPM {nome}"), value, action: Action::Grade(d, i) });
                 }
+                v.push(Row::Item { label: "Batida aqui (acerta a grade na posição de agora)".into(), value: String::new(), action: Action::Grade(d, GRADE_RAZOES.len()) });
                 v.push(Row::Item { label: "Reverse (toca de trás para frente)".into(), value: liga(ds.reverse), action: Action::Reverso(d) });
             }
             v.push(Row::Info("BPM errado (ex.: 86,66 num funk de 130): use ×1,5. Batida fora do lugar: pare em cima do bumbo e use \"Batida aqui\"".into()));
@@ -760,7 +761,10 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         }
         Action::Grade(d, i) => {
             let mut a = shared.lock();
-            let Some(t) = a.decks.get(d).and_then(|x| x.track.clone()) else { return };
+            let Some(t) = a.decks.get(d).and_then(|x| x.track.clone()).filter(|t| t.bpm() > 0.0) else {
+                a.toast(format!("Deck {}: sem música com batida para acertar", d + 1));
+                return;
+            };
             match GRADE_RAZOES.get(i) {
                 Some((_, r)) => crate::grid::set_bpm_ratio(&t, *r),
                 None => crate::grid::beat_here(&t, a.snap_tela.decks[d].pos),
@@ -1171,8 +1175,11 @@ mod tests {
         assert!(cmds.contains(&"KeyShift { deck: 0, semis: 1.0 }".to_string()), "{cmds:?}");
         assert!(cmds.contains(&"Reverse { deck: 0, on: true }".to_string()));
         assert!(!cmds.iter().any(|c| c.starts_with("Vinyl")), "as funções não reaplicam as configurações");
-        // Deck sem música: só o aviso.
-        assert!(rows(&app.lock()).iter().any(|r| matches!(r, Row::Info(t) if t.starts_with("Sem música"))));
+        // Os itens ficam no mesmo lugar com ou sem música (uma carga no meio não troca o item
+        // debaixo do BROWSE).
+        let antes = selectable(&rows(&app.lock())).len();
+        app.lock().decks[0].track = None;
+        assert_eq!(selectable(&rows(&app.lock())).len(), antes);
     }
 
     #[test]

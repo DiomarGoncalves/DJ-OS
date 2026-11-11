@@ -113,6 +113,8 @@ impl TrackEntry {
 pub struct Index {
     pub entries: Vec<(String, TrackEntry)>,
     pub scanning: bool,
+    /// Sobe cada vez que a lista é trocada (o "Combina com" refaz a dele).
+    pub versao: u64,
 }
 
 /// Minúsculas, sem acentos e só letras/números separados por espaço.
@@ -294,6 +296,7 @@ fn scan_index(index: Arc<Mutex<Index>>, roots: Vec<PathBuf>, gen: Arc<AtomicU64>
                 let mut ix = index.lock();
                 ix.entries = entries.clone();
                 ix.scanning = false;
+                ix.versao += 1;
             }
             // Depois (a pesquisa já funciona): BPM e tom de cada música, para o "Combina com".
             // Lê só o começo da memória de cada uma, devagar.
@@ -304,7 +307,9 @@ fn scan_index(index: Arc<Mutex<Index>>, roots: Vec<PathBuf>, gen: Arc<AtomicU64>
                 *t = t.clone().with_saved();
             }
             if gen.load(Ordering::Relaxed) == my_gen {
-                index.lock().entries = entries;
+                let mut ix = index.lock();
+                ix.entries = entries;
+                ix.versao += 1;
             }
         })
         .expect("thread do índice");
@@ -336,6 +341,11 @@ pub struct Library {
     /// "Combina com o deck N": a lista e o que ela usou como referência.
     pub combina: Vec<TrackEntry>,
     combina_ref: Option<Referencia>,
+    /// Quando e com qual versão do índice a lista do "Combina com" foi feita.
+    combina_em: Instant,
+    combina_ix: u64,
+    /// As músicas da pasta aberta antes do filtro (trocar o filtro não relê a pasta).
+    tracks_base: Vec<TrackEntry>,
     /// Filtro da lista de músicas (índice em FILTROS).
     pub filtro: usize,
 }
@@ -346,7 +356,7 @@ pub const FILTROS: [&str; 4] = ["TODAS", "NÃO TOCADAS", "BPM DO QUE TOCA", "TOM
 /// Playlists (.m3u, .m3u8) de uma pasta.
 fn list_m3u(p: &Path) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = std::fs::read_dir(p)
-        .map(|rd| rd.flatten().map(|e| e.path()).filter(|f| f.is_file() && !is_hidden(f) && f.extension().is_some_and(|e| matches!(e.to_string_lossy().to_lowercase().as_str(), "m3u" | "m3u8"))).collect())
+        .map(|rd| rd.flatten().map(|e| e.path()).filter(|f| f.extension().is_some_and(|e| matches!(e.to_string_lossy().to_lowercase().as_str(), "m3u" | "m3u8")) && !is_hidden(f) && f.is_file()).collect())
         .unwrap_or_default();
     v.sort_by_key(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()));
     v
@@ -397,9 +407,8 @@ pub struct Referencia {
 /// Músicas que combinam com a referência: BPM até 6% (ou metade/dobro) e tom compatível. Mesmo
 /// tom primeiro, depois os vizinhos na roda, depois as sem tom analisado; dentro de cada grupo,
 /// o BPM mais perto primeiro.
-pub fn combinam(entries: &[TrackEntry], r: &Referencia) -> Vec<TrackEntry> {
+pub fn combinam<'a>(entries: impl Iterator<Item = &'a TrackEntry>, r: &Referencia) -> Vec<TrackEntry> {
     let mut v: Vec<(u8, f64, &TrackEntry)> = entries
-        .iter()
         .filter(|t| t.path != r.path)
         .filter_map(|t| {
             let b = t.bpm.filter(|b| *b > 0.0)?;
@@ -443,6 +452,9 @@ impl Library {
             generation: 0,
             combina: Vec::new(),
             combina_ref: None,
+            combina_em: Instant::now(),
+            combina_ix: 0,
+            tracks_base: Vec::new(),
             filtro: 0,
         };
         lib.folders.push(Node { name: "♪ Combina com o que toca".into(), path: PathBuf::new(), depth: 0, kind: NodeKind::Combina, expanded: false, has_children: false });
@@ -510,7 +522,8 @@ impl Library {
         if self.tracks_for.as_ref() == Some(&key) {
             return;
         }
-        self.tracks = self.filtrar(self.node_tracks(n));
+        self.tracks_base = self.node_tracks(n);
+        self.tracks = self.filtrar(&self.tracks_base);
         self.track_sel = 0;
         self.tracks_for = Some(key);
     }
@@ -551,7 +564,7 @@ impl Library {
         let n = self.analyzed.load(Ordering::Relaxed);
         if n != self.analyzed_seen {
             self.analyzed_seen = n;
-            for t in self.tracks.iter_mut().filter(|t| t.bpm.is_none() || t.key.is_none()) {
+            for t in self.tracks.iter_mut().chain(self.tracks_base.iter_mut()).filter(|t| t.bpm.is_none() || t.key.is_none()) {
                 *t = t.clone().with_saved();
             }
         }
@@ -688,27 +701,32 @@ impl Library {
     }
 
     /// Aplica o filtro da lista (não tocadas, BPM ou tom do que toca no ar).
-    fn filtrar(&self, v: Vec<TrackEntry>) -> Vec<TrackEntry> {
+    fn filtrar(&self, v: &[TrackEntry]) -> Vec<TrackEntry> {
         let r = self.combina_ref.as_ref();
-        match self.filtro {
-            1 => v.into_iter().filter(|t| !self.played.contains(&t.path)).collect(),
-            2 => match r {
-                Some(r) => v.into_iter().filter(|t| t.bpm.is_some_and(|b| [1.0, 2.0, 0.5].iter().any(|m| (b * m / r.bpm - 1.0).abs() <= 0.06))).collect(),
-                None => v,
-            },
-            3 => match r.and_then(|r| r.key) {
-                Some(k) => v.into_iter().filter(|t| t.key.is_some_and(|x| crate::key::combina(x, k))).collect(),
-                None => v,
-            },
-            _ => v,
+        let passa = |t: &&TrackEntry| match (self.filtro, r) {
+            (1, _) => !self.played.contains(&t.path),
+            (2, Some(r)) => t.bpm.is_some_and(|b| [1.0, 2.0, 0.5].iter().any(|m| (b * m / r.bpm - 1.0).abs() <= 0.06)),
+            (3, Some(Referencia { key: Some(k), .. })) => t.key.is_some_and(|x| crate::key::combina(x, *k)),
+            _ => true,
+        };
+        v.iter().filter(passa).cloned().collect()
+    }
+
+    /// Refaz a lista mostrada (filtro ou "Combina com" mudou) sem reler a pasta e sem tirar a
+    /// seleção da música em que ela estava.
+    fn refiltrar(&mut self) {
+        let sel = self.tracks.get(self.track_sel).map(|t| t.path.clone());
+        if self.folders.get(self.folder_sel).is_some_and(|n| n.kind == NodeKind::Combina) {
+            self.tracks_base = self.combina.clone();
         }
+        self.tracks = self.filtrar(&self.tracks_base);
+        self.track_sel = sel.and_then(|p| self.tracks.iter().position(|t| t.path == p)).unwrap_or(0).min(self.tracks.len().saturating_sub(1));
     }
 
     /// Próximo filtro da lista; devolve o nome dele.
     pub fn proximo_filtro(&mut self) -> &'static str {
         self.filtro = (self.filtro + 1) % FILTROS.len();
-        self.tracks_for = None;
-        self.refresh_tracks();
+        self.refiltrar();
         FILTROS[self.filtro]
     }
 
@@ -737,15 +755,19 @@ impl Library {
             (None, None) => true,
             _ => false,
         };
-        if igual {
+        let ix_mudou = r.is_some() && self.index.lock().versao != self.combina_ix;
+        // No máximo uma vez por segundo: mexer no pitch, segurar o CUE ou um hot cue muda a
+        // referência várias vezes seguidas, e refazer a lista a cada uma atrasaria a controladora.
+        if (igual && !ix_mudou) || self.combina_em.elapsed() < Duration::from_secs(1) {
             return;
         }
+        self.combina_em = Instant::now();
         let (lista, nome) = match &r {
             Some(r) => {
+                // Filtra direto no índice (só as que combinam são copiadas).
                 let ix = self.index.lock();
-                let entries: Vec<TrackEntry> = ix.entries.iter().map(|(_, t)| t.clone()).collect();
-                drop(ix);
-                let l = combinam(&entries, r);
+                self.combina_ix = ix.versao;
+                let l = combinam(ix.entries.iter().map(|(_, t)| t), r);
                 let n = format!("♪ Combina com o deck {} ({})", r.deck + 1, l.len());
                 (l, n)
             }
@@ -753,17 +775,12 @@ impl Library {
         };
         self.combina = lista;
         self.combina_ref = r;
-        // Filtro pelo BPM/tom do que toca: a lista muda junto.
-        if self.filtro >= 2 {
-            self.tracks_for = None;
-            self.refresh_tracks();
-        }
         if let Some(n) = self.folders.iter_mut().find(|n| n.kind == NodeKind::Combina) {
             n.name = nome;
         }
-        if self.folders.get(self.folder_sel).is_some_and(|n| n.kind == NodeKind::Combina) {
-            self.tracks_for = None;
-            self.refresh_tracks();
+        // A pasta "Combina" aberta ou o filtro pelo BPM/tom do que toca: a lista muda junto.
+        if self.filtro >= 2 || self.folders.get(self.folder_sel).is_some_and(|n| n.kind == NodeKind::Combina) {
+            self.refiltrar();
         }
     }
 
@@ -921,7 +938,7 @@ mod tests {
             e("sem analise", None, None),
         ];
         let r = Referencia { deck: 0, path: PathBuf::from("/x/tocando.mp3"), bpm: 130.0, key: Some(am) };
-        let nomes: Vec<String> = combinam(&lista, &r).into_iter().map(|t| t.title).collect();
+        let nomes: Vec<String> = combinam(lista.iter(), &r).into_iter().map(|t| t.title).collect();
         assert_eq!(nomes, ["mesmo tom 130", "meia velocidade", "mesmo tom 128", "vizinho 9A", "sem tom"]);
     }
 
