@@ -23,7 +23,7 @@ da próxima:
 ## Funções inspiradas no VirtualDJ (pedido em 2026-11-08)
 Feito: automix, play na batida, tom (±6 e casar), "combina com o que toca", playlists .m3u e
 fila salva, filtro do browser, efeitos ROLL/CRUSH/BRAKE/BACKSPIN. Falta:
-- **Fila: tirar música e fechar** (pedido em 2026-11-11). Hoje a coluna "Fila" do browser aparece
+- ~~**Fila: tirar música e fechar**~~ (feito em 2026-11-11, firmware depois do 0733). Hoje a coluna "Fila" do browser aparece
   enquanto tem música nela e não tem como tirar pela controladora: só some quando o automix toca
   tudo ou ao reiniciar (a fila não é guardada). Ele quer as três opções, pela controladora:
   - **tirar uma música**: SHIFT + LOAD numa música da fila (com a fila em foco) tira ela;

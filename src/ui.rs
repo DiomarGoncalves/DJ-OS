@@ -226,8 +226,15 @@ impl DjOsApp {
         }
         ctx.input(|i| {
             let mut a = self.app.lock();
+            // Delete: na fila só tira a música dela (nunca apaga o arquivo); fora dela, apaga a
+            // música interna ou a gravação (com confirmação).
             if i.key_pressed(Key::Delete) {
-                a.delete_selected();
+                if a.lib.focus == crate::library::Focus::Prepare {
+                    let msg = crate::midi::mapa::fila_shift_load(&mut a);
+                    a.toast(msg);
+                } else {
+                    a.delete_selected();
+                }
             }
             if i.modifiers.ctrl && i.key_pressed(Key::S) {
                 if let Some(path) = a.lib.selected_path() {
@@ -611,11 +618,12 @@ impl DjOsApp {
     fn draw_library(&self, ui: &mut egui::Ui, p: &Painter, r: Rect) {
         let mut a = self.app.lock();
         let a_import = a.import.clone();
+        let mostrar_fila = a.settings.mostrar_fila;
         let lib = &mut a.lib;
         let row_h = 26.0;
         let gap = 8.0;
         let left_w = (r.width() * 0.27).round();
-        let prep_w = if lib.prepare.is_empty() && lib.focus != Focus::Prepare { 0.0 } else { (r.width() * 0.22).round() };
+        let prep_w = if !mostrar_fila || (lib.prepare.is_empty() && lib.focus != Focus::Prepare) { 0.0 } else { (r.width() * 0.22).round() };
         let folders = Rect::from_min_size(r.min, vec2(left_w, r.height()));
         let tracks = Rect::from_min_max(pos2(folders.right() + gap, r.top()), pos2(r.right() - if prep_w > 0.0 { prep_w + gap } else { 0.0 }, r.bottom()));
         let prep = Rect::from_min_max(pos2(tracks.right() + gap, r.top()), r.max);
@@ -1234,7 +1242,7 @@ impl eframe::App for DjOsApp {
                 if nav_on {
                     "Browser: setas cima/baixo andam · Tab pastas/músicas · Enter abre a pasta · 1-4 ou clicar no deck carrega · dois cliques abre/carrega · Ctrl+F pesquisa · B fecha"
                 } else {
-                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F filtro · Ctrl+P salva a fila · Ctrl+A automix · F10 configurações · +/- zoom · setas esq/dir crossfader"
+                    "Teclado: B browser · Ctrl+F pesquisa · 1-4 carregar · Z/M play · X/N cue · S/K sync · F1-F4 / F5-F8 efeito · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F filtro · Ctrl+P salva a fila · Delete tira da fila · Ctrl+A automix · F10 configurações · +/- zoom · setas esq/dir crossfader"
                 },
                 11.0,
                 DIM,

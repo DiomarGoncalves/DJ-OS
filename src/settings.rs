@@ -85,6 +85,8 @@ pub struct Settings {
     pub fim_aviso: usize,
     /// Play na batida (como o Smart Play do VirtualDJ).
     pub play_batida: bool,
+    /// Coluna da fila (SHIFT + LOAD) no browser. Oculta, a fila continua guardando as músicas.
+    pub mostrar_fila: bool,
 }
 
 impl Default for Settings {
@@ -124,6 +126,7 @@ impl Default for Settings {
             trava_load: true,
             fim_aviso: 1,
             play_batida: false,
+            mostrar_fila: true,
         }
     }
 }
@@ -185,6 +188,7 @@ impl Settings {
                 "trava_load" => s.trava_load = v != "nao",
                 "aviso_fim" => s.fim_aviso = num(FIM_AVISOS.len()).unwrap_or(1),
                 "play_na_batida" => s.play_batida = v == "sim",
+                "mostrar_fila" => s.mostrar_fila = v != "nao",
                 _ => {}
             }
         }
@@ -203,7 +207,7 @@ impl Settings {
              volume_ambiente={}\nabaixar_ambiente={}\nmodo_leve={}\ncelular_bt={}\nganho_automatico={}\ngravar_em={}\nquatro_decks={}\n\
              eq_isolador={}\ncurva_fader={}\nlado_crossfader={}\nfone_dividido={}\nslip={}\n\
              browser_novo={}\nbrowser_bpm={}\nbrowser_tom={}\nbrowser_letra={}\nbrowse_gira={}\nbuffer_som={}\nsaida_som={}\nsaida_som_nome={}\nskin={}\n\
-             quantize={}\ntrava_load={}\naviso_fim={}\nplay_na_batida={}\n",
+             quantize={}\ntrava_load={}\naviso_fim={}\nplay_na_batida={}\nmostrar_fila={}\n",
             yn(self.vinyl),
             self.pitch_range,
             self.xf_curve,
@@ -235,7 +239,8 @@ impl Settings {
             yn(self.quantize),
             yn(self.trava_load),
             self.fim_aviso,
-            yn(self.play_batida)
+            yn(self.play_batida),
+            yn(self.mostrar_fila)
         )
     }
 
@@ -323,6 +328,8 @@ pub enum Action {
     BrowserNovo,
     FiltroBrowser,
     SalvarFila,
+    LimparFila,
+    MostrarFila,
     BrowserBpm,
     BrowserKey,
     BrowserFont,
@@ -466,7 +473,10 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             });
             v.push(Row::Item { label: "Filtro da lista de músicas".into(), value: crate::library::FILTROS[app.lib.filtro].into(), action: Action::FiltroBrowser });
             v.push(Row::Item { label: "Salvar a fila como playlist".into(), value: format!("{} MÚSICA(S) NA FILA", app.lib.prepare.len()), action: Action::SalvarFila });
+            v.push(Row::Item { label: "Limpar a fila".into(), value: confirm(&Action::LimparFila, format!("{} MÚSICA(S)", app.lib.prepare.len())), action: Action::LimparFila });
+            v.push(Row::Item { label: "Mostrar a fila no browser".into(), value: if s.mostrar_fila { "SIM" } else { "NÃO (OCULTA)" }.into(), action: Action::MostrarFila });
             v.push(Row::Info("Automix: toca a fila (SHIFT + LOAD) ou a lista aberta a partir da música selecionada".into()));
+            v.push(Row::Info("Tirar uma música da fila: SHIFT + girar o BROWSE até ela e SHIFT + LOAD".into()));
             const NOMES: [&str; NUM_DECKS] = ["DECK 1", "DECK 2", "DECK 3", "DECK 4"];
             for &d in app.side.iter().filter(|d| **d < NUM_DECKS) {
                 // Os itens são sempre os mesmos e na mesma ordem, com ou sem música: o BROWSE escolhe
@@ -777,7 +787,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
     }
     let mut a = shared.lock();
     // Ações perigosas: só no segundo toque (em até 4 s).
-    if matches!(action, Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar) {
+    if matches!(action, Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar | Action::LimparFila) {
         let Some(u) = a.settings_ui.as_mut() else { return };
         let again = u.armed.as_ref().is_some_and(|(x, t)| *x == action && t.elapsed().as_secs() < 4);
         if !again {
@@ -793,6 +803,11 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
                     crate::midi::aprender::apagar(&nome);
                     shared.lock().toast("Botões ensinados apagados");
                 }
+            }
+            Action::LimparFila => {
+                let mut a = shared.lock();
+                let n = a.lib.limpar_fila();
+                a.toast(format!("Fila limpa ({n} música(s))"));
             }
             Action::Restart => crate::firmware::power(shared, "reiniciar"),
             _ => crate::firmware::power(shared, "desligar"),
@@ -832,6 +847,12 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
         Action::SalvarFila => {
             crate::midi::mapa::salvar_fila(&mut a);
             return;
+        }
+        Action::MostrarFila => {
+            a.settings.mostrar_fila = !a.settings.mostrar_fila;
+            if !a.settings.mostrar_fila {
+                a.lib.ocultar_fila();
+            }
         }
         Action::BrowserBpm => a.settings.browser_bpm = !a.settings.browser_bpm,
         Action::BrowserKey => a.settings.browser_key = !a.settings.browser_key,
@@ -915,7 +936,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
             crate::firmware::search(shared);
             return;
         }
-        Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar => return,
+        Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar | Action::LimparFila => return,
         Action::Gravar | Action::Automix | Action::TomDeck(..) | Action::Grade(..) | Action::Reverso(_) => return,
         Action::BtScan => {
             drop(a);
@@ -1094,6 +1115,7 @@ mod tests {
             trava_load: false,
             fim_aviso: 3,
             play_batida: true,
+            mostrar_fila: false,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(Settings::parse("lixo\nfaixa_pitch=99\n"), Settings::default(), "valores inválidos viram o padrão");
@@ -1180,6 +1202,60 @@ mod tests {
         let antes = selectable(&rows(&app.lock())).len();
         app.lock().decks[0].track = None;
         assert_eq!(selectable(&rows(&app.lock())).len(), antes);
+    }
+
+    #[test]
+    fn fila_pela_controladora_tirar_limpar_e_ocultar() {
+        let (tx, _rx) = rtrb::RingBuffer::new(256);
+        let cmd = CmdTx::new(tx);
+        let app = std::sync::Arc::new(parking_lot::Mutex::new(AppState::new()));
+        let musica = |n: &str| crate::library::TrackEntry::from_path(std::path::Path::new(&format!("/x/{n}.mp3")));
+        {
+            let mut a = app.lock();
+            a.side = [0, 1];
+            for n in ["Um", "Dois", "Tres"] {
+                a.lib.add_to_prepare(musica(n));
+            }
+            open(&mut a);
+            focus_tabs(&mut a, false);
+        }
+        // SHIFT + LOAD com a fila em foco tira a música selecionada; numa música da lista, põe.
+        {
+            let mut a = app.lock();
+            a.lib.focus_prepare();
+            a.lib.prepare_sel = 1;
+            assert!(crate::midi::mapa::fila_shift_load(&mut a).starts_with("Saiu da fila: Dois"));
+            let nomes: Vec<_> = a.lib.prepare.iter().map(|t| t.title.clone()).collect();
+            assert_eq!(nomes, ["Um", "Tres"]);
+        }
+        let aciona = |quer: Action| {
+            let idx = {
+                let a = app.lock();
+                let r = rows(&a);
+                selectable(&r).iter().position(|&i| matches!(&r[i], Row::Item { action, .. } if *action == quer)).unwrap()
+            };
+            let mut a = app.lock();
+            a.settings_ui.as_mut().unwrap().sel = 0;
+            scroll(&mut a, idx as i32);
+            drop(a);
+            activate(&app, &cmd);
+        };
+        // Limpar pede o segundo toque (não apaga sem querer).
+        aciona(Action::LimparFila);
+        assert_eq!(app.lock().lib.prepare.len(), 2, "o primeiro toque só pede confirmação");
+        aciona(Action::LimparFila);
+        assert!(app.lock().lib.prepare.is_empty());
+        assert_ne!(app.lock().lib.focus, crate::library::Focus::Prepare, "fila vazia: o foco sai dela");
+        // Ocultar: a fila continua guardando as músicas, mas o foco não fica nela.
+        app.lock().lib.add_to_prepare(musica("Quatro"));
+        app.lock().lib.focus_prepare();
+        aciona(Action::MostrarFila);
+        let a = app.lock();
+        assert!(!a.settings.mostrar_fila);
+        assert_eq!(a.lib.prepare.len(), 1);
+        assert_ne!(a.lib.focus, crate::library::Focus::Prepare);
+        assert!(Settings::parse(&a.settings.to_text()).mostrar_fila == false, "fica guardado");
+        assert!(Settings::parse("").mostrar_fila, "de fábrica a fila aparece");
     }
 
     #[test]

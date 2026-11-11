@@ -73,7 +73,7 @@ small { color: var(--muted); }
 <div class="wrap">
 <header>
   <h1>Guia do DJ OS</h1>
-  <p>O que cada função faz e como chamar pela DDJ-REV1, sem tocar na tela. Vale para o firmware 0.1.5 de 11/11/2026 (final 0733). O mapa botão por botão da controladora está no Guia DDJ-REV1.</p>
+  <p>O que cada função faz e como chamar pela DDJ-REV1, sem tocar na tela. Vale para o firmware 0.1.5 de 11/11/2026 (final 0733) e mais novos; a fila com tirar, limpar e ocultar entrou no firmware seguinte. O mapa botão por botão da controladora está no Guia DDJ-REV1.</p>
 </header>
 
 <nav aria-label="Seções">
@@ -178,7 +178,8 @@ small { color: var(--muted); }
     <tr><td><kbd>BROWSE</kbd> girado</td><td>Anda pela lista. Toque curto: entra na pasta ou volta para as pastas.</td></tr>
     <tr><td><kbd class="s">SHIFT</kbd> + <kbd>BROWSE</kbd></td><td>Abre e fecha a lista em tela cheia.</td></tr>
     <tr><td><kbd>BROWSE</kbd> segurado</td><td>Abre a pesquisa com teclado na tela. Girar escolhe a letra, apertar digita, ENTER mostra o resultado.</td></tr>
-    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>LOAD</kbd></td><td>Põe a música na fila "Preparar". <kbd class="s">SHIFT</kbd> + girar o <kbd>BROWSE</kbd> anda pela fila.</td></tr>
+    <tr><td><kbd class="s">SHIFT</kbd> + <kbd>LOAD</kbd></td><td>Põe a música na fila (coluna à direita do browser). <kbd class="s">SHIFT</kbd> + girar o <kbd>BROWSE</kbd> anda pela fila.</td></tr>
+    <tr><td>Tirar uma música da fila</td><td><kbd class="s">SHIFT</kbd> + girar o <kbd>BROWSE</kbd> até ela e <kbd class="s">SHIFT</kbd> + <kbd>LOAD</kbd>. Tirando a última, a coluna some.</td></tr>
     <tr><td>♪ Combina com o que toca</td><td>Pasta que lista só as músicas com BPM perto (até 6%) e tom compatível com o deck que está no ar.</td></tr>
     <tr><td>☰ Playlists</td><td>As filas que você salvou e as playlists .m3u do pendrive (VirtualDJ, rekordbox).</td></tr>
     <tr><td>Filtro da lista</td><td>Todas, não tocadas, BPM do que toca ou tom que combina. Troca na aba FUNÇÕES.</td></tr>
@@ -192,7 +193,9 @@ small { color: var(--muted); }
     <tr><td>Automix</td><td>Toca a fila (ou a lista aberta, a partir da música escolhida) e mistura sozinho. Perto do fim de uma música ele carrega a próxima no outro deck, acerta o BPM se for parecido (até 8%) e cruza os faders em 16 batidas. Se você pausar, ele espera. Ao desligar, os decks que tocam ficam como estão.</td></tr>
     <tr><td>Gravar o set</td><td>Grava o master num arquivo WAV na pasta <code>records</code>, no pendrive se houver. Cerca de 11 MB por minuto.</td></tr>
     <tr><td>Filtro da lista de músicas</td><td>Troca o filtro do browser.</td></tr>
-    <tr><td>Salvar a fila como playlist</td><td>Guarda a fila "Preparar" como playlist para usar outro dia.</td></tr>
+    <tr><td>Salvar a fila como playlist</td><td>Guarda a fila como playlist para usar outro dia.</td></tr>
+    <tr><td>Limpar a fila</td><td>Tira todas as músicas da fila. Pede um segundo toque para confirmar.</td></tr>
+    <tr><td>Mostrar a fila no browser</td><td>SIM ou NÃO. Oculta, a coluna some do browser, mas a fila continua guardando as músicas e o automix continua tocando por ela.</td></tr>
     <tr><td>Casar o tom / voltar o tom</td><td>Sobe ou desce o tom do deck até combinar com o outro, sem mudar a velocidade. Apertar de novo volta ao tom original.</td></tr>
     <tr><td>Tom +1 / Tom -1</td><td>Sobe ou desce meio tom, sem mudar a velocidade. Carregar outra música zera.</td></tr>
     <tr><td>BPM × 1,5 · × 2/3 · × 2 · ÷ 2</td><td>Conserta o BPM lido errado. Funk de 130 que aparece em 86,66: use × 1,5.</td></tr>

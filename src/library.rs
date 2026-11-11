@@ -819,6 +819,38 @@ impl Library {
         self.add_to_prepare(t)
     }
 
+    /// Tira da fila a música selecionada nela; devolve o nome. Fila vazia: o foco volta para as
+    /// músicas (a coluna da fila some).
+    pub fn tirar_da_fila(&mut self) -> Option<String> {
+        if self.focus != Focus::Prepare || self.prepare_sel >= self.prepare.len() {
+            return None;
+        }
+        let t = self.prepare.remove(self.prepare_sel);
+        self.prepare_sel = self.prepare_sel.min(self.prepare.len().saturating_sub(1));
+        if self.prepare.is_empty() {
+            self.focus = Focus::Tracks;
+        }
+        Some(t.title)
+    }
+
+    /// Esvazia a fila; devolve quantas músicas saíram.
+    pub fn limpar_fila(&mut self) -> usize {
+        let n = self.prepare.len();
+        self.prepare.clear();
+        self.prepare_sel = 0;
+        if self.focus == Focus::Prepare {
+            self.focus = Focus::Tracks;
+        }
+        n
+    }
+
+    /// Fila oculta: o foco não pode ficar nela (a coluna não aparece).
+    pub fn ocultar_fila(&mut self) {
+        if self.focus == Focus::Prepare {
+            self.focus = Focus::Tracks;
+        }
+    }
+
     /// Coloca a música na fila ("Preparar"), se ainda não estiver; devolve o nome.
     pub fn add_to_prepare(&mut self, t: TrackEntry) -> Option<String> {
         if self.prepare.iter().any(|p| p.path == t.path) {

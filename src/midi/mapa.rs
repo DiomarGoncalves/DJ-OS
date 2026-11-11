@@ -107,6 +107,8 @@ pub enum Acao {
     Quantize,
     FiltroBrowser,
     SalvarFila,
+    Fila,
+    MostrarFila,
     Automix,
 }
 
@@ -143,6 +145,8 @@ impl Acao {
             "quantize" => Quantize,
             "filtro_browser" => FiltroBrowser,
             "salvar_fila" => SalvarFila,
+            "fila" => Fila,
+            "mostrar_fila" => MostrarFila,
             "automix" => Automix,
             "faixa_pitch" => FaixaPitch,
             "volume" => Volume,
@@ -181,7 +185,7 @@ impl Acao {
 
     /// Ação que precisa saber o deck.
     fn de_deck(self) -> bool {
-        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config | Acao::Quantize | Acao::FiltroBrowser | Acao::SalvarFila | Acao::Automix)
+        !matches!(self, Acao::Shift | Acao::Crossfader | Acao::Master | Acao::FoneVolume | Acao::FoneMix | Acao::BrowseGira | Acao::BrowseAperta | Acao::Browser | Acao::Config | Acao::Quantize | Acao::FiltroBrowser | Acao::SalvarFila | Acao::Fila | Acao::MostrarFila | Acao::Automix)
     }
 
     /// Como o valor costuma chegar para esta ação (o arquivo pode trocar com `valor=`).
@@ -586,6 +590,23 @@ impl Mapeado {
                 a.toast(format!("Filtro: {f}"));
             }
             SalvarFila if down => salvar_fila(&mut self.app.lock()),
+            Fila if down => {
+                let mut a = self.app.lock();
+                let msg = fila_shift_load(&mut a);
+                if !msg.is_empty() {
+                    a.toast(msg);
+                }
+            }
+            MostrarFila if down => {
+                let mut a = self.app.lock();
+                a.settings.mostrar_fila = !a.settings.mostrar_fila;
+                if !a.settings.mostrar_fila {
+                    a.lib.ocultar_fila();
+                }
+                a.settings.save();
+                let msg = if a.settings.mostrar_fila { "Fila aparecendo no browser" } else { "Fila oculta (as músicas continuam nela)" };
+                a.toast(msg);
+            }
             Automix if down => {
                 let mut a = self.app.lock();
                 let msg = crate::automix::alternar(&mut a, &self.cmd);
@@ -716,6 +737,22 @@ pub fn browse_aperta(app: &SharedApp, cmd: &CmdTx, down: bool) {
         } else {
             a.browse_released();
         }
+    }
+}
+
+/// SHIFT + LOAD numa música: na fila, tira ela; na lista, põe na fila. Devolve o aviso da tela.
+pub fn fila_shift_load(a: &mut crate::app::AppState) -> String {
+    if a.lib.focus == crate::library::Focus::Prepare {
+        return match a.lib.tirar_da_fila() {
+            Some(nome) => format!("Saiu da fila: {nome} ({} na fila)", a.lib.prepare.len()),
+            None => "Fila vazia".into(),
+        };
+    }
+    match a.lib.add_selected_to_prepare() {
+        Some(nome) if a.settings.mostrar_fila => format!("Na fila: {nome}"),
+        Some(nome) => format!("Na fila (oculta): {nome}"),
+        None if a.lib.selected_track().is_some() => "Essa música já está na fila".into(),
+        None => String::new(),
     }
 }
 

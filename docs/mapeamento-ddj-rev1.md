@@ -69,7 +69,7 @@ ligado): é o que faz o knob central mandar a força. **Conferir com a REV1 na m
 | BROWSE segurado 0,5 s | 96 41 | Abre a pesquisa com teclado na tela |
 | SHIFT + BROWSE | 96 42 | Abre/fecha a lista em tela cheia |
 | LOAD esquerdo / direito | 96 46 (deck 1), 47 (deck 2), 48 (deck 3), 49 (deck 4) | Carrega a música e volta para a tela principal. Numa pasta: abre/fecha as subpastas. Dois toques rápidos: clona o deck do outro lado |
-| SHIFT + LOAD | 96 58, 59, 60, 61 | Põe a música na lista "Preparar" |
+| SHIFT + LOAD | 96 58, 59, 60, 61 | Põe a música na lista "Preparar" (a fila). Com a fila em foco (SHIFT + BROWSE girado), tira a música selecionada dela |
 
 Com o teclado da pesquisa aberto: girar o BROWSE escolhe a tecla, apertar digita, e os pads viram
 1 ↑, 2 ↓, 3 ←, 4 →, 5 confirma, 6 apaga, 7 espaço, 8 fecha. ENTER mostra os resultados na lista.
@@ -95,7 +95,8 @@ Abas à esquerda (Funções, Áudio, Mixer, Caixa Bluetooth, Celular, Wi-Fi, Con
 Sistema), itens à direita.
 
 A aba **FUNÇÕES** é a primeira e junta o que se usa no meio do set, sem precisar de toque:
-automix, gravar o set, filtro da lista, salvar a fila como playlist e, para cada deck da frente,
+automix, gravar o set, filtro da lista, salvar a fila como playlist, limpar a fila, mostrar ou
+ocultar a fila e, para cada deck da frente,
 casar o tom, tom +1/-1, consertar o BPM da grade (× 1,5, × 2/3, × 2, ÷ 2), "batida aqui" e reverse.
 
 | Ação | Função |
@@ -119,5 +120,5 @@ casar o tom, tom +1/-1, consertar o BPM da grade (× 1,5, × 2/3, × 2, ÷ 2), "
 ## Teclado do computador (para testar sem a REV1)
 
 B browser · Ctrl+F pesquisa · Ctrl+R grava o set · setas navegam · Tab pastas/músicas · Enter abre pasta · 1-4 carregam ·
-Z/M play · X/N cue · S/K sync · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F1/F5 alavanca · F2-F3/F6-F7 batida · F4/F8 troca efeito · +/- zoom ·
+Delete tira da fila (com a fila em foco) · Z/M play · X/N cue · S/K sync · Q/P keylock · C/J reverse · V/H freio · Ctrl+U quantize · F1/F5 alavanca · F2-F3/F6-F7 batida · F4/F8 troca efeito · +/- zoom ·
 setas esq/dir crossfader.

@@ -71,11 +71,12 @@ impl DjOsApp {
         let tree_w = (mid.width() * 0.3).clamp(260.0, 420.0);
         let tree = Rect::from_min_size(mid.min, vec2(tree_w, mid.height()));
         // Fila (SHIFT + LOAD) à direita, só quando tem música nela, como no browser de árvore.
-        let (has_queue, queue_focus) = {
+        // Oculta em FUNÇÕES → "Mostrar a fila": não aparece (a fila continua guardada).
+        let (has_queue, queue_focus, mostrar) = {
             let a = self.app.lock();
-            (!a.lib.prepare.is_empty(), a.lib.focus == Focus::Prepare)
+            (!a.lib.prepare.is_empty(), a.lib.focus == Focus::Prepare, a.settings.mostrar_fila)
         };
-        let queue_w = if has_queue || queue_focus { (mid.width() * 0.22).clamp(220.0, 360.0) } else { 0.0 };
+        let queue_w = if mostrar && (has_queue || queue_focus) { (mid.width() * 0.22).clamp(220.0, 360.0) } else { 0.0 };
         let list = Rect::from_min_max(pos2(tree.right() + 2.0, mid.top()), pos2(mid.right() - if queue_w > 0.0 { queue_w + 2.0 } else { 0.0 }, mid.bottom()));
         let queue = Rect::from_min_max(pos2(list.right() + 2.0, mid.top()), mid.max);
         let mut clicks = Vec::new();

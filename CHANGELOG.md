@@ -60,6 +60,13 @@ para diferenciar firmwares de teste da mesma versão.
   - **Filtro do browser** (tocar em FILTRO no canto, tecla F ou botão ensinado): todas, não
     tocadas, BPM do que toca, tom que combina.
   - **Efeitos novos**: ROLL, CRUSH, BRAKE e BACKSPIN (WAVs para ouvir com `dj-os --demo-efeitos`).
+- **Fila do browser (SHIFT + LOAD): tirar música, limpar e ocultar**, tudo pela controladora:
+  - com a fila em foco (SHIFT + girar o BROWSE), SHIFT + LOAD tira a música selecionada;
+  - aba FUNÇÕES: "Limpar a fila" (com segundo toque) e "Mostrar a fila no browser" (SIM/NÃO;
+    oculta, a fila continua guardando as músicas e o automix continua usando ela);
+  - no PC, Delete com a fila em foco só tira a música da fila (antes apagaria o arquivo, se
+    fosse uma música interna);
+  - mapeamento por arquivo e MIDI learn: ações `fila` e `mostrar_fila`.
 
 ### Corrigido
 - **Som sem prioridade (chiado e estalos, principalmente com música longa):** o som disputava o

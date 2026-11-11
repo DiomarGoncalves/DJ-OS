@@ -139,6 +139,8 @@ led nota 1     0x0B    tocando       deck=1
 | `quantize` | QUANTIZE liga/desliga (vale para os 4 decks) |
 | `filtro_browser` | troca o filtro da lista: todas, não tocadas, BPM do que toca, tom que combina |
 | `salvar_fila` | salva a fila (SHIFT + LOAD) como playlist em ☰ Playlists |
+| `fila` | põe a música selecionada na fila; com a fila em foco, tira a música dela (o SHIFT + LOAD da REV1) |
+| `mostrar_fila` | mostra / oculta a coluna da fila no browser (a fila continua guardada) |
 | `automix` | automix liga/desliga (toca a fila ou a lista aberta e mistura sozinho) |
 
 ## LEDs

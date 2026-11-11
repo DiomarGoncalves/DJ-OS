@@ -67,6 +67,8 @@ pub const FUNCOES: &[(&str, &str, bool)] = &[
     ("QUANTIZE", "quantize", false),
     ("FILTRO DO BROWSER", "filtro_browser", false),
     ("SALVAR A FILA COMO PLAYLIST", "salvar_fila", false),
+    ("PÕE NA FILA / TIRA DA FILA", "fila", false),
+    ("MOSTRAR / OCULTAR A FILA", "mostrar_fila", false),
     ("AUTOMIX LIGA/DESLIGA", "automix", false),
 ];
 

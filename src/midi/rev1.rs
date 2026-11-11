@@ -326,8 +326,11 @@ impl Rev1 {
                         let msg = crate::import::start(&self.app, p);
                         self.app.lock().toast(msg);
                     }
-                } else if let Some(name) = a.lib.add_selected_to_prepare() {
-                    a.toast(format!("Em Preparar: {name}"));
+                } else {
+                    let msg = crate::midi::mapa::fila_shift_load(&mut a);
+                    if !msg.is_empty() {
+                        a.toast(msg);
+                    }
                 }
             }
             0x63 if down => self.master_cue(),
@@ -401,6 +404,10 @@ impl Rev1 {
             }
             0x64 => {
                 let mut a = self.app.lock();
+                if !a.settings.mostrar_fila {
+                    a.toast("A fila está oculta: FUNÇÕES → Mostrar a fila");
+                    return;
+                }
                 a.lib.focus_prepare();
                 a.lib.scroll(enc_delta(v));
             }
