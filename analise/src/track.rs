@@ -2,7 +2,8 @@
 
 use crate::dsp::{Biquad, Coefs};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error as SymErr;
@@ -46,6 +47,17 @@ pub struct Track {
     pub loudness: f32,
     /// Identificador único desta carga.
     pub gen: u64,
+    /// Música ainda sendo aberta enquanto já toca (LOAD rápido): as amostras chegam aos poucos aqui
+    /// e `data` fica vazio.
+    parcial: Option<Parcial>,
+}
+
+/// Amostras de uma música aberta aos poucos. Atômicas: a thread que abre escreve depois de
+/// `pronto` enquanto o som lê antes dele (no x86 a leitura é uma leitura comum, sem custo).
+struct Parcial {
+    buf: Box<[AtomicU32]>,
+    /// Quadros já abertos.
+    pronto: AtomicUsize,
 }
 
 impl std::fmt::Debug for Track {
@@ -59,6 +71,13 @@ impl Track {
     fn frame(&self, i: isize) -> (f32, f32) {
         if i < 0 || i as usize >= self.frames {
             (0.0, 0.0)
+        } else if let Some(p) = &self.parcial {
+            // Trecho ainda não aberto (pulou para longe logo depois do LOAD): silêncio.
+            if i as usize >= p.pronto.load(Ordering::Acquire) {
+                return (0.0, 0.0);
+            }
+            let j = i as usize * 2;
+            (f32::from_bits(p.buf[j].load(Ordering::Relaxed)), f32::from_bits(p.buf[j + 1].load(Ordering::Relaxed)))
         } else {
             let j = i as usize * 2;
             (self.data[j], self.data[j + 1])
@@ -212,64 +231,73 @@ fn read_tags(rev: &MetadataRevision, title: &mut String, artist: &mut String) {
 /// Um set de uma hora leva mais de um minuto num computador antigo: a tela mostra o andamento.
 pub static ABRINDO_PCT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-fn decode(path: &Path) -> Result<(Vec<f32>, f64, String, String), String> {
-    ABRINDO_PCT.store(0, Ordering::Relaxed);
-    let file = std::fs::File::open(path).map_err(|e| format!("não abriu o arquivo: {e}"))?;
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
-    let mut hint = Hint::new();
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        hint.with_extension(ext);
-    }
-    let mut probed = symphonia::default::get_probe()
-        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
-        .map_err(|e| format!("formato não suportado: {e}"))?;
+/// Arquivo de áudio aberto, entregando as amostras pacote a pacote.
+struct Abridor {
+    format: Box<dyn symphonia::core::formats::FormatReader>,
+    decoder: Box<dyn symphonia::core::codecs::Decoder>,
+    track_id: u32,
+    sr: f64,
+    /// Quadros que o arquivo diz ter (nem todo formato diz).
+    total: Option<u64>,
+    title: String,
+    artist: String,
+}
 
-    let (mut title, mut artist) = (String::new(), String::new());
-    if let Some(md) = probed.metadata.get() {
-        if let Some(rev) = md.current() {
+impl Abridor {
+    fn new(path: &Path) -> Result<Self, String> {
+        let file = std::fs::File::open(path).map_err(|e| format!("não abriu o arquivo: {e}"))?;
+        let mss = MediaSourceStream::new(Box::new(file), Default::default());
+        let mut hint = Hint::new();
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            hint.with_extension(ext);
+        }
+        let mut probed = symphonia::default::get_probe()
+            .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+            .map_err(|e| format!("formato não suportado: {e}"))?;
+
+        let (mut title, mut artist) = (String::new(), String::new());
+        if let Some(md) = probed.metadata.get() {
+            if let Some(rev) = md.current() {
+                read_tags(rev, &mut title, &mut artist);
+            }
+        }
+        let mut format = probed.format;
+        if let Some(rev) = format.metadata().current() {
             read_tags(rev, &mut title, &mut artist);
         }
-    }
-    let mut format = probed.format;
-    if let Some(rev) = format.metadata().current() {
-        read_tags(rev, &mut title, &mut artist);
+
+        let track = format
+            .tracks()
+            .iter()
+            .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+            .ok_or("o arquivo não tem áudio")?;
+        let track_id = track.id;
+        let sr = track.codec_params.sample_rate.unwrap_or(44100) as f64;
+        let decoder = symphonia::default::get_codecs()
+            .make(&track.codec_params, &DecoderOptions::default())
+            .map_err(|e| format!("codec não suportado: {e}"))?;
+        let total = track.codec_params.n_frames.filter(|n| *n > 0);
+        Ok(Self { format, decoder, track_id, sr, total, title, artist })
     }
 
-    let track = format
-        .tracks()
-        .iter()
-        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
-        .ok_or("o arquivo não tem áudio")?;
-    let track_id = track.id;
-    let sr = track.codec_params.sample_rate.unwrap_or(44100) as f64;
-    let mut decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &DecoderOptions::default())
-        .map_err(|e| format!("codec não suportado: {e}"))?;
-    let mut data: Vec<f32> = Vec::new();
-    let total = track.codec_params.n_frames.filter(|n| *n > 0);
-    if let Some(n) = total {
-        data.reserve(n as usize * 2);
-    }
-
-    loop {
-        let packet = match format.next_packet() {
+    /// Abre o próximo pacote e entrega cada quadro (L, R) a `out`. `Ok(false)`: acabou o arquivo.
+    /// `vazio`: ainda não saiu nenhuma amostra (um erro logo no começo é erro de leitura).
+    fn proximo(&mut self, vazio: bool, out: &mut impl FnMut(f32, f32)) -> Result<bool, String> {
+        let packet = match self.format.next_packet() {
             Ok(p) => p,
-            Err(SymErr::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(SymErr::ResetRequired) => break,
+            Err(SymErr::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(false),
+            Err(SymErr::ResetRequired) => return Ok(false),
             Err(e) => {
-                if data.is_empty() {
+                if vazio {
                     return Err(format!("erro de leitura: {e}"));
                 }
-                break;
+                return Ok(false);
             }
         };
-        if packet.track_id() != track_id {
-            continue;
+        if packet.track_id() != self.track_id {
+            return Ok(true);
         }
-        if let Some(n) = total {
-            ABRINDO_PCT.store(((data.len() as u64 / 2 * 100) / n).min(99) as u8, Ordering::Relaxed);
-        }
-        match decoder.decode(&packet) {
+        match self.decoder.decode(&packet) {
             Ok(decoded) => {
                 let spec = *decoded.spec();
                 let ch = spec.channels.count().max(1);
@@ -278,25 +306,153 @@ fn decode(path: &Path) -> Result<(Vec<f32>, f64, String, String), String> {
                 let s = buf.samples();
                 if ch == 1 {
                     for &v in s {
-                        data.push(v);
-                        data.push(v);
+                        out(v, v);
                     }
                 } else {
                     for f in s.chunks_exact(ch) {
-                        data.push(f[0]);
-                        data.push(f[1]);
+                        out(f[0], f[1]);
                     }
                 }
+                Ok(true)
             }
-            Err(SymErr::DecodeError(_)) => continue,
-            Err(e) => return Err(format!("erro ao decodificar: {e}")),
+            Err(SymErr::DecodeError(_)) => Ok(true),
+            Err(e) => Err(format!("erro ao decodificar: {e}")),
+        }
+    }
+}
+
+fn decode(path: &Path) -> Result<(Vec<f32>, f64, String, String), String> {
+    ABRINDO_PCT.store(0, Ordering::Relaxed);
+    let mut a = Abridor::new(path)?;
+    let mut data: Vec<f32> = Vec::new();
+    if let Some(n) = a.total {
+        data.reserve(n as usize * 2);
+    }
+    loop {
+        if let Some(n) = a.total {
+            ABRINDO_PCT.store(((data.len() as u64 / 2 * 100) / n).min(99) as u8, Ordering::Relaxed);
+        }
+        let vazio = data.is_empty();
+        if !a.proximo(vazio, &mut |l, r| {
+            data.push(l);
+            data.push(r);
+        })? {
+            break;
         }
     }
     if data.is_empty() {
         return Err("o arquivo está vazio".into());
     }
     ABRINDO_PCT.store(100, Ordering::Relaxed);
-    Ok((data, sr, title, artist))
+    Ok((data, a.sr, a.title, a.artist))
+}
+
+/// LOAD rápido (como nas CDJs) de uma música já analisada: abre só até o quadro `ate` (o cue) mais
+/// 8 segundos, devolve a música pronta para tocar e continua abrindo o resto numa thread
+/// (com a prioridade de quem chamou). Pular para um trecho ainda não aberto dá silêncio até ele
+/// abrir (no notebook antigo a música inteira abre em poucos segundos).
+///
+/// `depois` roda nessa thread quando a música termina de abrir, com as amostras (para medir de
+/// novo o BPM de uma análise antiga); não roda se a música foi trocada antes.
+///
+/// Só funciona com formatos que dizem o tamanho (MP3 com cabeçalho, FLAC, M4A, WAV...); nos
+/// outros devolve erro e quem chamou abre do jeito normal.
+pub fn abrir_aos_poucos(path: &Path, cached: Cached, ate: f64, depois: Option<Box<dyn FnOnce(&Arc<Track>, Vec<f32>) + Send>>) -> Result<Arc<Track>, String> {
+    let mut a = Abridor::new(path)?;
+    let n = a.total.ok_or("o arquivo não diz o tamanho")? as usize;
+    // Zerado pelo sistema (calloc): reservar 1 GB de um set longo não custa nada.
+    let buf: Box<[AtomicU32]> = {
+        let v = vec![0u32; n * 2].into_boxed_slice();
+        let len = v.len();
+        let p = Box::into_raw(v) as *mut AtomicU32;
+        // SAFETY: AtomicU32 tem a mesma representação na memória que u32.
+        unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(p, len)) }
+    };
+    let (ft, fa) = names_from_path(path);
+    let title = if a.title.is_empty() { ft } else { std::mem::take(&mut a.title) };
+    let artist = if a.artist.is_empty() { fa } else { std::mem::take(&mut a.artist) };
+    let (wave, bpm, first_beat, key, loudness) = cached;
+    let t = Arc::new(Track {
+        path: path.to_path_buf(),
+        title,
+        artist,
+        sr: a.sr,
+        frames: n,
+        data: Vec::new(),
+        wave,
+        bpm: AtomicU64::new(bpm.to_bits()),
+        first_beat: AtomicU64::new(first_beat.to_bits()),
+        key,
+        loudness,
+        gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
+        parcial: Some(Parcial { buf, pronto: AtomicUsize::new(0) }),
+    });
+    let p = t.parcial.as_ref().expect("parcial");
+    let mut w = 0usize;
+    // Escreve um quadro; os que passam do tamanho anunciado ficam de fora.
+    fn escreve(p: &Parcial, w: &mut usize, l: f32, r: f32) {
+        if *w * 2 + 1 < p.buf.len() {
+            p.buf[*w * 2].store(l.to_bits(), Ordering::Relaxed);
+            p.buf[*w * 2 + 1].store(r.to_bits(), Ordering::Relaxed);
+            *w += 1;
+        }
+    }
+    let alvo = ((ate.max(0.0) + 8.0 * a.sr) as usize).min(n);
+    ABRINDO_PCT.store(0, Ordering::Relaxed);
+    let mut acabou = false;
+    while w < alvo {
+        ABRINDO_PCT.store((w * 100 / alvo.max(1)).min(99) as u8, Ordering::Relaxed);
+        let vazio = w == 0;
+        if !a.proximo(vazio, &mut |l, r| escreve(p, &mut w, l, r))? {
+            acabou = true;
+            break;
+        }
+    }
+    if w == 0 {
+        return Err("o arquivo está vazio".into());
+    }
+    p.pronto.store(w, Ordering::Release);
+    ABRINDO_PCT.store(100, Ordering::Relaxed);
+    if acabou && depois.is_none() {
+        return Ok(t);
+    }
+    let t2 = t.clone();
+    std::thread::Builder::new()
+        .name("abrindo".into())
+        .spawn(move || {
+            let p = t2.parcial.as_ref().expect("parcial");
+            let mut w = w;
+            let mut passo = 0usize;
+            while !acabou {
+                match a.proximo(false, &mut |l, r| escreve(p, &mut w, l, r)) {
+                    Ok(true) => {}
+                    _ => acabou = true,
+                }
+                passo += 1;
+                if passo % 16 == 0 || acabou {
+                    p.pronto.store(w, Ordering::Release);
+                    // A música foi trocada (só esta thread segura ela): para de abrir.
+                    if Arc::strong_count(&t2) == 1 {
+                        return;
+                    }
+                }
+            }
+            p.pronto.store(w, Ordering::Release);
+            if let Some(f) = depois {
+                // Até 10 min (a cópia de um set longo pesaria na memória do notebook antigo).
+                if Arc::strong_count(&t2) > 1 && (w as f64) < 600.0 * t2.sr {
+                    let data: Vec<f32> = p.buf[..w * 2].iter().map(|x| f32::from_bits(x.load(Ordering::Relaxed))).collect();
+                    f(&t2, data);
+                }
+            }
+        })
+        .map_err(|e| format!("thread: {e}"))?;
+    Ok(t)
+}
+
+/// Mede de novo o BPM e a primeira batida (para a análise feita pelo detector antigo).
+pub fn medir_bpm(data: &[f32], sr: f64) -> (f64, f64) {
+    detect_bpm(&waveform(data, sr).1, sr)
 }
 
 /// Carrega e analisa uma música. `analyze = false` pula a detecção de BPM (samples curtos).
@@ -363,6 +519,7 @@ pub fn load_cached(path: &Path, analyze: bool, cached: Option<Cached>) -> Result
         key,
         loudness,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
+        parcial: None,
     })
 }
 
@@ -518,6 +675,7 @@ pub fn synthetic(secs: f64, sr: f64, bpm: f64, first_beat_secs: f64) -> Track {
         key: crate::key::RAW_UNKNOWN,
         loudness: f32::NAN,
         gen: NEXT_GEN.fetch_add(1, Ordering::Relaxed),
+        parcial: None,
     }
 }
 
@@ -537,4 +695,76 @@ mod tests {
         assert_eq!(t, "DJ", "ano com 4 dígitos não é número de faixa");
         assert_eq!(compose_accents("Sa\u{0303}o Joa\u{0303}o c\u{0327}"), "São João ç");
     }
+    /// Compara a música aberta aos poucos com a aberta inteira, quadro a quadro, esperando a
+    /// thread terminar.
+    fn confere_aos_poucos(f: &Path) -> (usize, f64, f64) {
+        let t0 = std::time::Instant::now();
+        let inteira = load(f, false).unwrap();
+        let t_inteira = t0.elapsed().as_secs_f64();
+        let w = Waveform { low: vec![1], mid: vec![1], high: vec![1] };
+        let t1 = std::time::Instant::now();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let t = abrir_aos_poucos(f, (w, 120.0, 0.0, 1, -9.0), 0.0, Some(Box::new(move |_t: &Arc<Track>, d: Vec<f32>| tx.send(d.len()).unwrap()))).unwrap();
+        let t_rapido = t1.elapsed().as_secs_f64();
+        let _ = rx.recv_timeout(std::time::Duration::from_secs(60));
+        assert_eq!(t.frames, inteira.frames, "tamanho diferente");
+        for i in 0..t.frames as isize {
+            assert_eq!(t.frame(i), inteira.frame(i), "quadro {i} diferente");
+        }
+        (t.frames, t_inteira, t_rapido)
+    }
+
+    #[test]
+    fn aos_poucos_igual_a_inteira() {
+        let dir = std::env::temp_dir().join(format!("djos-aos-poucos-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("teste.wav");
+        let (sr, n) = (44100u32, 44100u32 * 20);
+        let mut b = Vec::new();
+        b.extend_from_slice(b"RIFF");
+        b.extend_from_slice(&(36 + n * 4).to_le_bytes());
+        b.extend_from_slice(b"WAVEfmt ");
+        b.extend_from_slice(&16u32.to_le_bytes());
+        b.extend_from_slice(&1u16.to_le_bytes());
+        b.extend_from_slice(&2u16.to_le_bytes());
+        b.extend_from_slice(&sr.to_le_bytes());
+        b.extend_from_slice(&(sr * 4).to_le_bytes());
+        b.extend_from_slice(&4u16.to_le_bytes());
+        b.extend_from_slice(&16u16.to_le_bytes());
+        b.extend_from_slice(b"data");
+        b.extend_from_slice(&(n * 4).to_le_bytes());
+        for i in 0..n {
+            let v = ((i as f32 * 0.05).sin() * 12000.0) as i16;
+            b.extend_from_slice(&v.to_le_bytes());
+            b.extend_from_slice(&(-v).to_le_bytes());
+        }
+        std::fs::write(&f, b).unwrap();
+        let (frames, _, _) = confere_aos_poucos(&f);
+        assert_eq!(frames, n as usize);
+        // Logo depois do LOAD: o começo está aberto (cue + 8 s).
+        let w = Waveform { low: vec![1], mid: vec![1], high: vec![1] };
+        let t = abrir_aos_poucos(&f, (w, 120.0, 0.0, 1, -9.0), 0.0, None).unwrap();
+        assert!(t.frame(44100 * 7).0 != 0.0 || t.frame(44100 * 7 + 1).0 != 0.0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Músicas de verdade: `DJOS_PASTA=<pasta> cargo test -p dj-os-analise aos_poucos_musicas -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn aos_poucos_musicas() {
+        let Some(d) = std::env::var_os("DJOS_PASTA") else { return };
+        let mut fs: Vec<PathBuf> = std::fs::read_dir(d).unwrap().flatten().map(|e| e.path()).filter(|p| p.is_file()).collect();
+        fs.sort();
+        for f in fs.iter().take(12) {
+            match Abridor::new(f).map(|a| a.total) {
+                Ok(Some(_)) => {
+                    let (n, ti, tr) = confere_aos_poucos(f);
+                    println!("OK  {:5.0} s  inteira {ti:5.2} s  rápido {tr:5.3} s  {}", n as f64 / 44100.0, f.display());
+                }
+                Ok(None) => println!("SEM TAMANHO (abre inteira)  {}", f.display()),
+                Err(e) => println!("ERRO {e}  {}", f.display()),
+            }
+        }
+    }
 }
+

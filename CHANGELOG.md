@@ -7,6 +7,8 @@ para diferenciar firmwares de teste da mesma versão.
 ## [Não lançado]
 
 ### Novo
+- `ferramentas/lento.sh <comando>`: roda o DJ OS ou um teste como se fosse no notebook antigo
+  (um núcleo com 30% da força), para achar travadas antes do DJ.
 - **DJ OS para PC (Linux e Windows):** o DJ OS como programa de computador, com a controladora no
   USB. No PC ele não mexe em Wi-Fi, Bluetooth, firmware nem desliga o computador (essas partes
   somem); janela normal, maximizada. Nas Releases: `DJ-OS-PC-….AppImage` e `DJ-OS-PC-….exe`.
@@ -69,6 +71,19 @@ para diferenciar firmwares de teste da mesma versão.
   - mapeamento por arquivo e MIDI learn: ações `fila` e `mostrar_fila`.
 
 ### Corrigido
+- **LOAD na hora (como nas CDJs):** música já analisada (waveform, tom e volume guardados) abre
+  só o começo (até o cue mais 8 s) e já fica pronta para tocar; o resto abre por trás, com
+  prioridade baixa. Antes abria a música inteira antes de tocar: 0,6 a 2,8 s por música no
+  notebook antigo (medido imitando ele), agora 0,04 a 0,07 s. As amostras são as mesmas, quadro a
+  quadro (conferido em MP3, M4A e WAV). Pular para longe logo depois do LOAD fica mudo até o
+  trecho abrir.
+  - Análise com o BPM do detector antigo: toca com a grade guardada e mede de novo por trás,
+    depois de abrir tudo (antes media no LOAD, a "pré-análise"); a grade só muda se for o
+    conserto do funk (2/3), e um cue marcado nesse meio tempo não se perde.
+- **Browser travando ao abrir pasta com muitas músicas:** a lista lia a memória de cada música
+  (umas 10 leituras de disco por música) antes de aparecer, e relia a lista toda a cada música
+  analisada pela análise automática. Agora a lista aparece na hora e o BPM e o tom chegam por trás.
+  A pesquisa também não lê mais a memória das 500 músicas na hora.
 - **Som pocando e cortando depois de um tempo tocando (festa de 2026-11-13):** depois da
   primeira mixagem, o deck que saía ficava parado com o EQ, o filtro e os efeitos indo para o
   silêncio, e os números das contas ficavam minúsculos ("denormais"). Processador antigo faz essas

@@ -75,11 +75,19 @@ impl Saved {
     /// o certo, como o funk em 86,66): qualquer outra diferença fica como estava, porque a grade
     /// guardada pode ter sido acertada à mão ou vindo do rekordbox. Devolve o que gravar.
     pub fn com_bpm_remedido(&self, t: &crate::track::Track) -> Saved {
-        let conserto = self.bpm <= 0.0 || [1.5, 2.0 / 3.0].iter().any(|x| (t.bpm() / self.bpm / x - 1.0).abs() < 0.02);
+        let (novo, conserto) = self.com_bpm_medido(t.bpm(), t.first_beat());
         if !conserto {
             t.set_grid(self.bpm, self.first_beat);
         }
-        Saved { key: t.key, loudness: t.loudness, bpm: t.bpm(), first_beat: t.first_beat(), bpm_v: crate::track::BPM_V, ..self.clone() }
+        Saved { key: t.key, loudness: t.loudness, ..novo }
+    }
+
+    /// Como `com_bpm_remedido`, com o BPM e a primeira batida medidos de novo: o que gravar e se
+    /// é o conserto (só aí a grade muda).
+    pub fn com_bpm_medido(&self, bpm: f64, first_beat: f64) -> (Saved, bool) {
+        let conserto = self.bpm <= 0.0 || [1.5, 2.0 / 3.0].iter().any(|x| (bpm / self.bpm / x - 1.0).abs() < 0.02);
+        let (bpm, first_beat) = if conserto { (bpm, first_beat) } else { (self.bpm, self.first_beat) };
+        (Saved { bpm, first_beat, bpm_v: crate::track::BPM_V, ..self.clone() }, conserto)
     }
 }
 

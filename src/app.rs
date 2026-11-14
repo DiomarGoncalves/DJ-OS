@@ -374,9 +374,56 @@ impl Loader {
 
 }
 
+/// LOAD rápido de uma música já analisada (waveform, tom e volume guardados): abre só o começo
+/// e o resto por trás, sem analisar nada. Análise com o BPM do detector antigo: toca com a grade
+/// guardada e mede de novo depois de abrir tudo (só troca a grade se for o conserto do 2/3).
+fn abrir_rapido(path: &std::path::Path, s: &crate::store::Saved) -> Option<Arc<Track>> {
+    if s.key == crate::key::RAW_UNKNOWN || s.loudness.is_nan() || s.low.is_empty() || crate::store::formato_de_teste(path) {
+        return None;
+    }
+    let cached = (track::Waveform { low: s.low.clone(), mid: s.mid.clone(), high: s.high.clone() }, s.bpm, s.first_beat, s.key, s.loudness);
+    let depois: Option<Box<dyn FnOnce(&Arc<Track>, Vec<f32>) + Send>> = (!s.bpm_atual()).then(|| {
+        let p = path.to_path_buf();
+        Box::new(move |t: &Arc<Track>, data: Vec<f32>| {
+            let (bpm, fb) = track::medir_bpm(&data, t.sr);
+            drop(data);
+            // Lê de novo: um cue marcado enquanto abria não se perde.
+            let Some(atual) = crate::store::load(&p) else { return };
+            if atual.bpm_atual() {
+                return;
+            }
+            let (novo, conserto) = atual.com_bpm_medido(bpm, fb);
+            if conserto {
+                t.set_grid(novo.bpm, novo.first_beat);
+                eprintln!("[djos] BPM consertado: {:.2} → {:.2} ({})", atual.bpm, novo.bpm, t.display_name());
+            }
+            crate::store::save(&p, &novo);
+        }) as Box<dyn FnOnce(&Arc<Track>, Vec<f32>) + Send>
+    });
+    match track::abrir_aos_poucos(path, cached, s.cue.unwrap_or(s.first_beat), depois) {
+        Ok(t) => Some(t),
+        Err(e) => {
+            eprintln!("[djos] LOAD rápido não deu ({e}): abrindo inteira");
+            None
+        }
+    }
+}
+
 fn load_deck(app: &SharedApp, cmd: &CmdTx, deck: usize, path: &std::path::Path, resume: Option<f64>) {
     let started = Instant::now();
     let mut saved = crate::store::load(path);
+    // Voltando de um travamento abre inteira (a posição pode estar longe do começo).
+    if let Some(t) = saved.as_ref().filter(|_| resume.is_none()).and_then(|s| abrir_rapido(path, s)) {
+        eprintln!("[djos] deck {}: {} ({:.1} BPM, {:.0} ms, rápido)", deck + 1, t.display_name(), t.bpm(), started.elapsed().as_secs_f64() * 1000.0);
+        let s = saved.expect("saved");
+        let mut a = app.lock();
+        a.decks[deck].track = Some(t.clone());
+        a.decks[deck].loading = None;
+        a.scratch_saved[deck] = None;
+        cmd.send(Cmd::Load { deck, track: t });
+        cmd.send(Cmd::RestoreCues { deck, cue: s.cue, hotcues: s.hotcues, loop_: s.loop_ });
+        return;
+    }
     // Primeira vez de uma música de pendrive do rekordbox: grade, tom e cues dele.
     let loaded = match saved.is_none().then(|| crate::rekordbox::load_track(path)).flatten() {
         Some(r) => r.map(|(t, s)| {

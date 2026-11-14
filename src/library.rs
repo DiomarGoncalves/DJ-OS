@@ -157,7 +157,9 @@ fn is_hidden(p: &Path) -> bool {
 
 fn list_dirs(p: &Path) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = std::fs::read_dir(p)
-        .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir() && !is_hidden(p)).collect())
+        // O tipo vem junto com a lista da pasta (sem consultar o disco de novo para cada uma);
+        // atalho (link) é seguido para ver se é pasta.
+        .map(|rd| rd.flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir() || (t.is_symlink() && e.path().is_dir()))).map(|e| e.path()).filter(|p| !is_hidden(p)).collect())
         .unwrap_or_default();
     v.sort_by_key(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()));
     v
@@ -172,9 +174,11 @@ fn list_tracks(p: &Path) -> Vec<TrackEntry> {
             rd.flatten()
                 .map(|e| e.path())
                 .filter(|p| is_audio(p))
+                // BPM e tom guardados: lidos depois, por trás (`pedir_bpm`), para a lista aparecer
+                // na hora mesmo com milhares de músicas.
                 .map(|p| match rb.as_ref().and_then(|l| l.by_path(&p)) {
-                    Some(t) => TrackEntry::from_rekordbox(t).with_saved(),
-                    None => TrackEntry::from_path(&p).with_saved(),
+                    Some(t) => TrackEntry::from_rekordbox(t),
+                    None => TrackEntry::from_path(&p),
                 })
                 .collect()
         })
@@ -194,7 +198,7 @@ fn rb_tracks(root: &Path, kind: NodeKind) -> Vec<TrackEntry> {
             v
         }
         NodeKind::RbPlaylist(id) => match lib.node(id) {
-            Some(crate::rekordbox::Node::Playlist { tracks, .. }) => tracks.iter().filter_map(|t| lib.tracks.get(t)).map(|t| TrackEntry::from_rekordbox(t).with_saved()).collect(),
+            Some(crate::rekordbox::Node::Playlist { tracks, .. }) => tracks.iter().filter_map(|t| lib.tracks.get(t)).map(TrackEntry::from_rekordbox).collect(),
             _ => Vec::new(),
         },
         _ => Vec::new(),
@@ -348,6 +352,12 @@ pub struct Library {
     tracks_base: Vec<TrackEntry>,
     /// Filtro da lista de músicas (índice em FILTROS).
     pub filtro: usize,
+    /// BPM e tom das músicas da lista, lidos por trás: (caminho, BPM, tom guardado).
+    bpm_rx: Option<std::sync::mpsc::Receiver<Vec<(PathBuf, f64, u8)>>>,
+    /// Sobe a cada lista nova (a leitura da lista anterior para).
+    bpm_gen: Arc<AtomicU64>,
+    /// Última vez que a análise automática pediu para reler o BPM da lista.
+    bpm_relido: Instant,
 }
 
 /// Filtros da lista de músicas.
@@ -456,6 +466,9 @@ impl Library {
             combina_ix: 0,
             tracks_base: Vec::new(),
             filtro: 0,
+            bpm_rx: None,
+            bpm_gen: Arc::new(AtomicU64::new(0)),
+            bpm_relido: Instant::now(),
         };
         lib.folders.push(Node { name: "♪ Combina com o que toca".into(), path: PathBuf::new(), depth: 0, kind: NodeKind::Combina, expanded: false, has_children: false });
         lib.reload_sources();
@@ -526,6 +539,72 @@ impl Library {
         self.tracks = self.filtrar(&self.tracks_base);
         self.track_sel = 0;
         self.tracks_for = Some(key);
+        self.pedir_bpm(false);
+    }
+
+    /// Lê por trás (prioridade baixa) o BPM e o tom guardados das músicas da lista; o `tick`
+    /// preenche a lista conforme chegam. `so_faltando`: só as que ainda não têm.
+    fn pedir_bpm(&mut self, so_faltando: bool) {
+        let my = self.bpm_gen.fetch_add(1, Ordering::Relaxed) + 1;
+        let paths: Vec<PathBuf> = self.tracks_base.iter().filter(|t| !so_faltando || t.bpm.is_none() || t.key.is_none()).map(|t| t.path.clone()).collect();
+        if paths.is_empty() {
+            self.bpm_rx = None;
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.bpm_rx = Some(rx);
+        let gen = self.bpm_gen.clone();
+        let _ = std::thread::Builder::new().name("bpm-da-lista".into()).spawn(move || {
+            crate::import::low_priority();
+            let mut lote = Vec::new();
+            let mut enviado = Instant::now();
+            for p in paths {
+                if gen.load(Ordering::Relaxed) != my {
+                    return;
+                }
+                if let Some(k) = crate::store::peek(&p) {
+                    lote.push((p, k.bpm, k.key));
+                }
+                if !lote.is_empty() && (lote.len() >= 200 || enviado.elapsed() > Duration::from_millis(150)) {
+                    if tx.send(std::mem::take(&mut lote)).is_err() {
+                        return;
+                    }
+                    enviado = Instant::now();
+                }
+            }
+            if !lote.is_empty() {
+                let _ = tx.send(lote);
+            }
+        });
+    }
+
+    /// Preenche o BPM e o tom que chegaram da leitura por trás.
+    fn receber_bpm(&mut self) {
+        let Some(rx) = &self.bpm_rx else { return };
+        let mut chegou: std::collections::HashMap<PathBuf, (f64, u8)> = Default::default();
+        loop {
+            match rx.try_recv() {
+                Ok(v) => chegou.extend(v.into_iter().map(|(p, b, k)| (p, (b, k)))),
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.bpm_rx = None;
+                    break;
+                }
+            }
+        }
+        if chegou.is_empty() {
+            return;
+        }
+        for t in self.tracks_base.iter_mut().chain(self.tracks.iter_mut()) {
+            if let Some(&(b, k)) = chegou.get(&t.path) {
+                t.bpm = Some(b);
+                t.key = crate::key::from_raw(k);
+            }
+        }
+        // Filtro por BPM ou tom: as que chegaram agora podem entrar na lista.
+        if self.filtro >= 2 {
+            self.refiltrar();
+        }
     }
 
     /// Músicas de um item da árvore (pasta, pesquisa, histórico ou item do rekordbox).
@@ -535,7 +614,7 @@ impl Library {
             // A mais recente em cima.
             NodeKind::History => self.history.iter().rev().cloned().collect(),
             NodeKind::Combina => self.combina.clone(),
-            NodeKind::M3u => ler_m3u(&n.path).iter().map(|p| TrackEntry::from_path(p).with_saved()).collect(),
+            NodeKind::M3u => ler_m3u(&n.path).iter().map(|p| TrackEntry::from_path(p)).collect(),
             NodeKind::RbRoot | NodeKind::RbFolder(_) | NodeKind::RbPlaylist(_) => rb_tracks(&n.path, n.kind),
             _ => list_tracks(&n.path),
         }
@@ -561,13 +640,15 @@ impl Library {
     /// Chamado periodicamente: percebe pendrive/SSD conectado ou removido.
     pub fn tick(&mut self) {
         // Análise automática avançou: atualiza o BPM das músicas da lista.
+        // Lido por trás e no máximo a cada 3 s (antes relia a lista inteira na hora, travando a
+        // tela a cada música analisada).
         let n = self.analyzed.load(Ordering::Relaxed);
-        if n != self.analyzed_seen {
+        if n != self.analyzed_seen && self.bpm_relido.elapsed() > Duration::from_secs(3) {
             self.analyzed_seen = n;
-            for t in self.tracks.iter_mut().chain(self.tracks_base.iter_mut()).filter(|t| t.bpm.is_none() || t.key.is_none()) {
-                *t = t.clone().with_saved();
-            }
+            self.bpm_relido = Instant::now();
+            self.pedir_bpm(true);
         }
+        self.receber_bpm();
         if self.last_check.elapsed() < Duration::from_secs(2) {
             return;
         }
@@ -872,7 +953,7 @@ impl Library {
     pub fn search(&mut self, query: &str) -> usize {
         let words = query_words(query);
         let found: Vec<TrackEntry> =
-            self.index.lock().entries.iter().filter(|(k, _)| matches(k, &words)).take(MAX_RESULTS).map(|(_, t)| t.clone().with_saved()).collect();
+            self.index.lock().entries.iter().filter(|(k, _)| matches(k, &words)).take(MAX_RESULTS).map(|(_, t)| t.clone()).collect();
         let n = found.len();
         self.results = Some((query.trim().to_string(), found));
         self.folders.retain(|f| f.kind != NodeKind::Search);
@@ -1071,5 +1152,32 @@ mod tests {
         assert_eq!(n.depth, 2);
         assert!(lib.folders.iter().any(|f| f.name == "Funk" && f.expanded), "abriu os pais");
         assert_eq!(lib.tracks.len(), 1, "já mostra as músicas da pasta");
+    }
+    /// A lista da pasta aparece na hora (sem ler a memória de cada música) e o BPM e o tom chegam
+    /// por trás.
+    #[test]
+    fn lista_aparece_na_hora_e_bpm_chega_depois() {
+        let base = fixture("bpm-por-tras");
+        let funk = base.join("Funk");
+        let a = funk.join("MC Kevin O Chris - Évoluiu.mp3");
+        let mut saved = crate::store::Saved::from_track(&crate::track::synthetic(1.0, 44100.0, 130.0, 0.0));
+        saved.key = 5;
+        crate::store::save(&a, &saved);
+        let mut lib = Library::new();
+        lib.tracks_base = list_tracks(&funk);
+        assert_eq!(lib.tracks_base.len(), 2);
+        assert!(lib.tracks_base.iter().all(|t| t.bpm.is_none()), "não lê a memória na hora");
+        lib.tracks = lib.tracks_base.clone();
+        lib.pedir_bpm(false);
+        let t0 = Instant::now();
+        while lib.tracks.iter().all(|t| t.bpm.is_none()) && t0.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(10));
+            lib.receber_bpm();
+        }
+        let ta = lib.tracks.iter().find(|t| t.path == a).unwrap();
+        assert!(ta.bpm.is_some_and(|b| (b - 130.0).abs() < 0.01), "{:?}", ta.bpm);
+        assert_eq!(ta.key, crate::key::from_raw(5));
+        assert!(lib.tracks.iter().find(|t| t.path != a).unwrap().bpm.is_none());
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
