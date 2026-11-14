@@ -205,6 +205,7 @@ struct Ctx {
 
 unsafe extern "C" fn on_process(data: *mut c_void) {
     let ctx = &mut *(data as *mut Ctx);
+    crate::engine::sem_denormais();
     let Ok(l) = lib() else { return };
     let b = (l.dequeue)(ctx.stream);
     if b.is_null() {

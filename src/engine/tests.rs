@@ -1326,3 +1326,55 @@ fn medir_grave_musica() {
         println!("   limitador: abaixou mais de 0,5 dB em {:.0}% dos blocos; pior {:.1} dB; pico da saída {:.3}", 100.0 * lim_n as f64 / blocos as f64, 20.0 * lim_min.log10(), out.iter().fold(0.0f32, |a, v| a.max(v.abs())));
     }
 }
+
+/// Mede o tempo de cada bloco do motor tocando e depois com os decks parados (cauda de filtros e
+/// efeitos indo para o silêncio). `cargo test medir_tempo_bloco -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn medir_tempo_bloco() {
+    let mut r = rig();
+    for d in 0..2 {
+        r.send(Cmd::Load { deck: d, track: track(128.0) });
+        r.send(Cmd::Fader { deck: d, v: 1.0 });
+        r.send(Cmd::Eq { deck: d, band: 0, v: 0.3 });
+        r.send(Cmd::Eq { deck: d, band: 2, v: 0.7 });
+        r.send(Cmd::Filter { deck: d, v: 0.3 });
+        r.send(Cmd::FxKind { deck: d, slot: 0, kind: FxKind::Echo });
+        r.send(Cmd::FxActive { deck: d, slot: 0, on: true });
+        r.send(Cmd::FxLevel { deck: d, slot: 0, v: 0.5 });
+        r.send(Cmd::Play(d));
+    }
+    let mut buf = vec![0.0f32; 512 * 4];
+    let mut medir = |r: &mut Rig, nome: &str, blocos: usize| {
+        let t0 = std::time::Instant::now();
+        let mut pior = 0.0f64;
+        for _ in 0..blocos {
+            let t = std::time::Instant::now();
+            r.engine.process(&mut buf, 4);
+            pior = pior.max(t.elapsed().as_secs_f64());
+        }
+        let media = t0.elapsed().as_secs_f64() / blocos as f64;
+        println!("{nome:28} média {:6.3} ms  pior {:6.3} ms  (bloco = 10,7 ms)", media * 1e3, pior * 1e3);
+    };
+    medir(&mut r, "tocando", 500);
+    r.send(Cmd::FxActive { deck: 0, slot: 0, on: false });
+    r.send(Cmd::FxActive { deck: 1, slot: 0, on: false });
+    medir(&mut r, "tocando sem efeito", 500);
+    r.send(Cmd::PlayToggle(0));
+    r.send(Cmd::PlayToggle(1));
+    for s in 0..8 {
+        medir(&mut r, &format!("parado {}-{} s", s * 10, s * 10 + 10), 940);
+    }
+}
+
+/// O motor liga o modo que zera números minúsculos (denormais): sem ele, deck parado com a cauda do
+/// EQ, do filtro ou do eco deixava o processador antigo até 30× mais lento e o som pocava.
+#[test]
+fn motor_zera_denormais() {
+    let mut r = rig();
+    r.run(512);
+    let x = std::hint::black_box(1e-30f32) * std::hint::black_box(1e-10f32);
+    #[cfg(target_arch = "x86_64")]
+    assert_eq!(x, 0.0, "denormal não foi zerado");
+    let _ = x;
+}

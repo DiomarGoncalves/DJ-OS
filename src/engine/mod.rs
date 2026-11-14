@@ -397,6 +397,7 @@ impl Engine {
     }
 
     pub fn process(&mut self, out: &mut [f32], channels: usize) {
+        sem_denormais();
         self.commands();
         let frames = out.len() / channels.max(1);
         let mut done = 0;
@@ -541,6 +542,24 @@ impl Engine {
             *s = snap;
             self.master_peak = [0.0; 2];
             self.lim_master.min_gain = 1.0;
+        }
+    }
+}
+
+/// Liga no processador o modo que zera números minúsculos ("denormais", FTZ + DAZ) na thread que
+/// chamou. Quando um filtro, o EQ ou a cauda de um efeito vai morrendo até o silêncio (deck parado,
+/// fim da música), os números ficam tão pequenos que um processador antigo faz a conta até 100
+/// vezes mais devagar: o som atrasa e "poca" depois de um tempo tocando. Zerar não muda nada que dê
+/// para ouvir (fica abaixo de -700 dB). Custa duas instruções por bloco.
+#[inline]
+pub fn sem_denormais() {
+    #[cfg(target_arch = "x86_64")]
+    #[allow(deprecated)]
+    unsafe {
+        use std::arch::x86_64::{_mm_getcsr, _mm_setcsr};
+        let csr = _mm_getcsr();
+        if csr & 0x8040 != 0x8040 {
+            _mm_setcsr(csr | 0x8040);
         }
     }
 }

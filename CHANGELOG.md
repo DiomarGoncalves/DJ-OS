@@ -69,6 +69,13 @@ para diferenciar firmwares de teste da mesma versão.
   - mapeamento por arquivo e MIDI learn: ações `fila` e `mostrar_fila`.
 
 ### Corrigido
+- **Som pocando e cortando depois de um tempo tocando (festa de 2026-11-13):** depois da
+  primeira mixagem, o deck que saía ficava parado com o EQ, o filtro e os efeitos indo para o
+  silêncio, e os números das contas ficavam minúsculos ("denormais"). Processador antigo faz essas
+  contas até 100× mais devagar: medido no motor, deck parado custava 16× mais que tocando
+  (1,65 ms contra 0,10 ms por bloco de 10,7 ms); no i5-2430M passava do tempo do bloco e o som
+  falhava. Agora o motor liga no processador o modo que zera esses números (FTZ/DAZ): parado custa
+  0,05 ms. Não muda nada que dê para ouvir (teste do grave igual).
 - **Som sem prioridade (chiado e estalos, principalmente com música longa):** o som disputava o
   processador de igual para igual com a tela, a análise e o pendrive. Quanto mais longa a
   música, mais tempo abrindo e analisando, e mais estalo. Eram dois defeitos:
