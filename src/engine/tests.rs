@@ -1367,6 +1367,75 @@ fn medir_tempo_bloco() {
     }
 }
 
+/// Tempo médio por bloco (512 quadros) de cada situação do show, do jeito que o notebook velho sofre.
+/// Cada item: (situação, segundos por bloco, quantas vezes pode pesar mais que tocar sem efeito).
+fn tempos_do_show(r: &mut Rig) -> Vec<(&'static str, f64, f64)> {
+    let mut buf = vec![0.0f32; 512 * 4];
+    let mut medir = |r: &mut Rig, blocos: usize| {
+        let t0 = std::time::Instant::now();
+        for _ in 0..blocos {
+            r.engine.process(&mut buf, 4);
+        }
+        t0.elapsed().as_secs_f64() / blocos as f64
+    };
+    let mut res = Vec::new();
+    for d in 0..2 {
+        r.send(Cmd::Load { deck: d, track: track(128.0) });
+        r.send(Cmd::Fader { deck: d, v: 1.0 });
+        r.send(Cmd::Play(d));
+    }
+    medir(r, 50); // aquece
+    res.push(("tocando sem efeito", medir(r, 400), 1.0));
+    for d in 0..2 {
+        r.send(Cmd::Eq { deck: d, band: 0, v: 0.3 });
+        r.send(Cmd::Eq { deck: d, band: 2, v: 0.7 });
+        r.send(Cmd::Filter { deck: d, v: 0.3 });
+        r.send(Cmd::FxKind { deck: d, slot: 0, kind: if d == 0 { FxKind::Echo } else { FxKind::Reverb } });
+        r.send(Cmd::FxActive { deck: d, slot: 0, on: true });
+        r.send(Cmd::FxLevel { deck: d, slot: 0, v: 0.6 });
+    }
+    res.push(("tocando com EQ, filtro e efeito", medir(r, 400), 8.0));
+    for d in 0..2 {
+        r.send(Cmd::Keylock { deck: d, on: true });
+        r.send(Cmd::Tempo { deck: d, v: 0.8 });
+    }
+    res.push(("keylock com pitch", medir(r, 400), 40.0));
+    for d in 0..2 {
+        r.send(Cmd::Keylock { deck: d, on: false });
+        r.send(Cmd::FxActive { deck: d, slot: 0, on: false });
+        r.send(Cmd::PlayToggle(d));
+    }
+    // Parado com a cauda do EQ, do filtro e dos efeitos indo para o silêncio: onde os denormais
+    // aparecem (o poco do show de 13/11 vinha daqui). 80 s de som.
+    medir(r, 940);
+    res.push(("parado 10-80 s depois", medir(r, 6580), 4.0));
+    res
+}
+
+/// Teste de regressão do som: nenhuma situação do show pode ficar muito mais pesada que tocar
+/// normal. Uma mudança no motor que volte a deixar o deck parado lento (como os denormais, que
+/// deixavam 30× mais lento) ou que pese demais no keylock/efeitos quebra aqui.
+#[test]
+fn som_aguenta_o_show() {
+    let mut r = rig();
+    let t = tempos_do_show(&mut r);
+    let base = t[0].1.max(1e-6);
+    for (nome, s, _) in &t {
+        println!("{nome:34} {:6.3} ms por bloco ({:4.1}× tocando sem efeito)", s * 1e3, s / base);
+    }
+    for (nome, s, limite) in t.iter().skip(1) {
+        assert!(s / base < *limite, "{nome}: {:.1}× mais pesado que tocar sem efeito (limite {limite}×)", s / base);
+        // O bloco tem 10,7 ms e o notebook velho é umas 5× mais lento que este PC: aqui cada
+        // situação precisa caber em 1,5 ms; imitando o notebook (ferramentas/lento.sh), na metade
+        // do bloco. No modo de teste sem otimização o tempo não vale.
+        #[cfg(not(debug_assertions))]
+        {
+            let limite = if std::env::var_os("DJOS_LENTO").is_some() { 5.0 } else { 1.5 };
+            assert!(s * 1e3 < limite, "{nome}: {:.2} ms por bloco (limite {limite} ms)", s * 1e3);
+        }
+    }
+}
+
 /// O motor liga o modo que zera números minúsculos (denormais): sem ele, deck parado com a cauda do
 /// EQ, do filtro ou do eco deixava o processador antigo até 30× mais lento e o som pocava.
 #[test]
