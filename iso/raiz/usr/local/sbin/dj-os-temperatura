@@ -30,7 +30,15 @@ while true; do
     vel=""
     [ -r /sys/devices/system/cpu/intel_pstate/max_perf_pct ] && vel=" limite=$(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct)%"
     f=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null) && vel="$vel $((f / 1000))MHz"
-    linha="temperatura:${t:- ?} | carga $(cut -d' ' -f1-3 /proc/loadavg) |${vel:- velocidade ?} | memória livre ${mem} MB |${energia:- energia ?}"
+    # Quantas vezes o processador se freou sozinho por calor desde que ligou (sobe = esquentou
+    # demais e perdeu velocidade, mesmo com o controle de calor do DJ OS).
+    freio=0
+    for f in /sys/devices/system/cpu/cpu*/thermal_throttle/core_throttle_count /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count; do
+        v=$(cat "$f" 2>/dev/null)
+        case "$v" in ''|*[!0-9]*) continue ;; esac
+        freio=$((freio + v))
+    done
+    linha="temperatura:${t:- ?} | freio por calor $freio | carga $(cut -d' ' -f1-3 /proc/loadavg) |${vel:- velocidade ?} | memória livre ${mem} MB |${energia:- energia ?}"
     echo "$linha"
     # Também num arquivo na parte DADOS, gravado no disco na hora (sobrevive a um corte de energia).
     if [ -d /dados/sistema ]; then

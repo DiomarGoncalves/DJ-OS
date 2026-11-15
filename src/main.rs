@@ -23,6 +23,7 @@ mod midi;
 mod navegador;
 mod phone;
 mod record;
+mod registro;
 mod resume;
 mod pw_out;
 mod search;
@@ -102,6 +103,7 @@ fn main() -> eframe::Result<()> {
     let (trash_prod, trash_cons) = rtrb::RingBuffer::new(64);
     let cmd = CmdTx::new(cmd_prod);
     let app = Arc::new(Mutex::new(app::AppState::new()));
+    registro::iniciar(app.clone(), snap.clone());
 
     // O áudio abre em segundo plano: se o driver demorar ou travar, a tela aparece mesmo assim
     // e mostra "ÁUDIO PARADO". A thread guarda a saída aberta enquanto o programa roda.

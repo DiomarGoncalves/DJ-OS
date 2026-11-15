@@ -13,7 +13,7 @@ use crate::shared::{Cmd, SharedSnap};
 use crate::track::Track;
 use std::ffi::{c_char, c_int, c_void, CString};
 use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -414,6 +414,9 @@ static ATRASOS: AtomicU32 = AtomicU32::new(0);
 static LENTOS: AtomicU32 = AtomicU32::new(0);
 static PIOR_US: AtomicU32 = AtomicU32::new(0);
 static BLOCO_US: AtomicU32 = AtomicU32::new(0);
+/// Soma do trabalho (µs) e blocos feitos no último minuto: a carga média do som.
+static SOMA_US: AtomicU64 = AtomicU64::new(0);
+static BLOCOS: AtomicU32 = AtomicU32::new(0);
 
 /// Pede prioridade de tempo real para a thread do som. No PipeWire até a versão 1.0 (a do
 /// aparelho e do Ubuntu 24.04) um programa comum abre com `client.conf`, que não pede essa
@@ -461,7 +464,7 @@ fn registrar_prioridade(vista: &mut i32) {
 }
 
 /// Temperatura mais alta dos sensores (°C) e a velocidade do processador agora (MHz).
-fn temperatura_e_mhz() -> (Option<i64>, Option<i64>) {
+pub fn temperatura_e_mhz() -> (Option<i64>, Option<i64>) {
     let mut t = None;
     if let Ok(rd) = std::fs::read_dir("/sys/class/thermal") {
         for z in rd.flatten() {
@@ -474,19 +477,21 @@ fn temperatura_e_mhz() -> (Option<i64>, Option<i64>) {
     (t, mhz)
 }
 
-/// Registro de um minuto: só escreve se o som atrasou ou chegou perto de atrasar.
+/// Registro de um minuto do som, sempre (mesmo sem atraso): atrasos, blocos lentos, o pior bloco
+/// e a carga média (quanto do tempo de cada bloco o motor usou, como o medidor do Mixxx).
 fn registrar_atrasos() {
     let (a, l, pior, bloco) = (ATRASOS.swap(0, Ordering::Relaxed), LENTOS.swap(0, Ordering::Relaxed), PIOR_US.swap(0, Ordering::Relaxed), BLOCO_US.load(Ordering::Relaxed));
-    if a == 0 && l == 0 {
+    let (soma, n) = (SOMA_US.swap(0, Ordering::Relaxed), BLOCOS.swap(0, Ordering::Relaxed));
+    if n == 0 {
+        eprintln!("[djos] som: nenhum bloco no último minuto (saída fechada ou parada)");
         return;
     }
-    let (t, mhz) = temperatura_e_mhz();
+    let carga = if bloco > 0 { soma as f64 / n as f64 / bloco as f64 * 100.0 } else { 0.0 };
+    let aviso = if a > 0 { " · ATRASOU (estalo)" } else if l > 0 { " · QUASE ATRASOU" } else { "" };
     eprintln!(
-        "[djos] som: {a} atraso(s) e {l} bloco(s) lento(s) no último minuto (pior bloco {:.1} ms de {:.1} ms) · {} · {}",
+        "[djos] som: {a} atraso(s), {l} bloco(s) lento(s) · carga média {carga:.1}% · pior bloco {:.2} ms de {:.1} ms{aviso}",
         pior as f64 / 1000.0,
         bloco as f64 / 1000.0,
-        t.map_or("temperatura ?".into(), |t| format!("{t} °C")),
-        mhz.map_or("? MHz".into(), |m| format!("{m} MHz"))
     );
 }
 
@@ -723,6 +728,8 @@ fn open_main(slot: &EngineSlot, sink: Option<&Sink>) -> Result<(Stream, String),
             LENTOS.fetch_add(1, Ordering::Relaxed);
         }
         PIOR_US.fetch_max(trabalho.as_micros() as u32, Ordering::Relaxed);
+        SOMA_US.fetch_add(trabalho.as_micros() as u64, Ordering::Relaxed);
+        BLOCOS.fetch_add(1, Ordering::Relaxed);
         BLOCO_US.store(bloco.as_micros() as u32, Ordering::Relaxed);
     });
     let target = sink.map(|s| s.name.as_str());

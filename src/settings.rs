@@ -350,6 +350,7 @@ pub enum Action {
     FourDecks,
     AnalyzeAll,
     MidiLog,
+    CopiarRegistros,
 }
 
 pub enum Row {
@@ -475,6 +476,7 @@ pub fn rows_for(app: &AppState, tab: Tab) -> Vec<Row> {
             v.push(Row::Item { label: "Salvar a fila como playlist".into(), value: format!("{} MÚSICA(S) NA FILA", app.lib.prepare.len()), action: Action::SalvarFila });
             v.push(Row::Item { label: "Limpar a fila".into(), value: confirm(&Action::LimparFila, format!("{} MÚSICA(S)", app.lib.prepare.len())), action: Action::LimparFila });
             v.push(Row::Item { label: "Mostrar a fila no browser".into(), value: if s.mostrar_fila { "SIM" } else { "NÃO (OCULTA)" }.into(), action: Action::MostrarFila });
+            v.push(Row::Item { label: "Copiar registros para o pendrive".into(), value: "PASTA DJOS-registros".into(), action: Action::CopiarRegistros });
             v.push(Row::Info("Automix: toca a fila (SHIFT + LOAD) ou a lista aberta a partir da música selecionada".into()));
             v.push(Row::Info("Tirar uma música da fila: SHIFT + girar o BROWSE até ela e SHIFT + LOAD".into()));
             const NOMES: [&str; NUM_DECKS] = ["DECK 1", "DECK 2", "DECK 3", "DECK 4"];
@@ -752,6 +754,10 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
             crate::record::toggle(shared, cmd, rate);
             return;
         }
+        Action::CopiarRegistros => {
+            crate::registro::copiar_para_pendrive(shared);
+            return;
+        }
         Action::Automix => {
             let mut a = shared.lock();
             let msg = crate::automix::alternar(&mut a, cmd);
@@ -937,7 +943,7 @@ pub fn activate(shared: &SharedApp, cmd: &CmdTx) {
             return;
         }
         Action::FwInstall(_) | Action::Restart | Action::PowerOff | Action::AprenderApagar | Action::LimparFila => return,
-        Action::Gravar | Action::Automix | Action::TomDeck(..) | Action::Grade(..) | Action::Reverso(_) => return,
+        Action::Gravar | Action::Automix | Action::TomDeck(..) | Action::Grade(..) | Action::Reverso(_) | Action::CopiarRegistros => return,
         Action::BtScan => {
             drop(a);
             bt_scan(shared);

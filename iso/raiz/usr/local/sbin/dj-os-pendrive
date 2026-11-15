@@ -5,6 +5,7 @@
 #   dj-os-pendrive liberar <pendrive>              escrita liberada (início da gravação no pendrive)
 #   dj-os-pendrive travar <pendrive>               volta a só leitura (fim da gravação)
 #   dj-os-pendrive copiar <gravação> <pendrive>    copia uma gravação do aparelho para "records"
+#   dj-os-pendrive registros <pendrive>            copia todos os registros para "DJOS-registros"
 set -u
 falha() { echo "ERRO $*"; exit 1; }
 drive_ok() {
@@ -35,5 +36,26 @@ copiar)
     sync
     echo "OK"
     ;;
-*) sed -n '2,8p' "$0"; exit 1 ;;
+registros)
+    # Registro do programa (sessão), da temperatura, do sistema (últimos 4 boots), a
+    # configuração e as informações da máquina, numa pasta com a data e a hora.
+    drive_ok "${2:-}"
+    mount -o remount,rw "$drive" 2>/dev/null || falha "este pendrive não aceita gravação (ex.: o do Ventoy)"
+    trap 'sync; mount -o remount,ro "$drive"' EXIT
+    rel="DJOS-registros/$(date +%Y-%m-%d_%H%M%S)"
+    d="$drive/$rel"
+    mkdir -p "$d" || falha "não criou a pasta no pendrive"
+    cp /home/dj/DJOS/sessao.log* /home/dj/DJOS/config.txt /dados/sistema/temperatura.log* "$d/" 2>/dev/null
+    journalctl --list-boots --no-pager >"$d/boots.txt" 2>&1
+    for b in 0 -1 -2 -3; do
+        journalctl -b "$b" --no-pager -o short-iso >"$d/sistema-boot$b.txt" 2>/dev/null || rm -f "$d/sistema-boot$b.txt"
+    done
+    # shellcheck source=/usr/local/lib/dj-os/pendrive.sh
+    . /usr/local/lib/dj-os/pendrive.sh
+    info_maquina >"$d/maquina.txt" 2>&1
+    sync
+    [ -s "$d/maquina.txt" ] || falha "pendrive cheio ou retirado"
+    echo "OK $rel"
+    ;;
+*) sed -n '2,9p' "$0"; exit 1 ;;
 esac

@@ -7,6 +7,16 @@ para diferenciar firmwares de teste da mesma versão.
 ## [Não lançado]
 
 ### Novo
+- **Copiar registros para o pendrive** (aba FUNÇÕES): leva para `DJOS-registros/<data e hora>`
+  no pendrive o registro do programa, da temperatura, do sistema (últimos 4 boots), a
+  configuração e as informações da máquina, sem precisar do menu da ISO.
+- **Caixa preta**: a cada minuto o registro anota o processador (total e quanto cada parte do
+  DJ OS gastou), a memória, a temperatura, a controladora, a saída de som e o que cada deck está
+  fazendo (tocando, no ar, BPM, pitch, keylock, efeito, loop). A linha do som sai todo minuto,
+  com a carga média (quanto do tempo de cada bloco o motor usou), e não só quando atrasa. O
+  registro da temperatura anota também quantas vezes o processador se freou sozinho por calor.
+- Teste `som_aguenta_o_show`: mede o motor de som em cada situação do show e falha se alguma
+  pesar demais (regra em `CLAUDE.md`: mudou o motor, testa o som).
 - `ferramentas/lento.sh <comando>`: roda o DJ OS ou um teste como se fosse no notebook antigo
   (um núcleo com 30% da força), para achar travadas antes do DJ.
 - **DJ OS para PC (Linux e Windows):** o DJ OS como programa de computador, com a controladora no

@@ -209,7 +209,7 @@ fn stop_from_writer(app: &SharedApp, cmd: &CmdTx) {
 }
 
 /// Pendrive para onde copiar (o primeiro montado).
-fn first_pendrive() -> Option<PathBuf> {
+pub fn first_pendrive() -> Option<PathBuf> {
     crate::library::sources().into_iter().map(|(_, p)| p).find(|p| p.starts_with("/media") || p.starts_with("/run/media"))
 }
 
